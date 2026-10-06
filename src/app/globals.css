@@ -1,0 +1,284 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  :root {
+    color-scheme: dark;
+    --font-poppins: "Poppins", system-ui, -apple-system, "Segoe UI", sans-serif;
+    --font-mono: "Space Mono", ui-monospace, "SFMono-Regular", Menlo, "Noto Sans", monospace;
+  }
+  html,
+  body {
+    height: 100%;
+  }
+  body {
+    @apply bg-ink text-cream font-display antialiased;
+    margin: 0;
+    overscroll-behavior: none;
+    -webkit-tap-highlight-color: transparent;
+  }
+  :focus-visible {
+    outline: 2px solid #ff4d00;
+    outline-offset: 2px;
+    border-radius: 2px;
+  }
+  input,
+  select,
+  textarea {
+    @apply bg-ink-3 border border-line rounded text-cream px-3 py-2.5 w-full;
+    font-size: 16px; /* stops iOS Safari zooming the page on focus */
+  }
+  ::placeholder {
+    @apply text-dim;
+  }
+}
+
+@layer components {
+  .btn {
+    @apply inline-flex items-center justify-center gap-2 bg-orange text-cream font-display font-black
+           text-xs tracking-wide px-4 py-3 rounded shadow-chunk active:translate-y-0.5
+           active:shadow-chunk-sm disabled:bg-ink-3 disabled:text-dim disabled:shadow-none
+           disabled:active:translate-y-0 transition-[transform,box-shadow] duration-75;
+  }
+  .btn-ghost {
+    @apply bg-transparent border border-line shadow-none text-cream active:translate-y-0;
+  }
+  .card {
+    @apply bg-ink-2 border border-line rounded-md p-4;
+  }
+  .tag {
+    @apply font-mono text-[8.5px] font-bold tracking-[0.1em] uppercase border border-line
+           text-dim px-1.5 py-[3px] rounded-sm whitespace-nowrap;
+  }
+  .tag-o {
+    @apply border-orange text-orange;
+  }
+  .tag-v {
+    @apply border-violet text-[#A98CFF];
+  }
+  .label {
+    @apply block font-mono text-[9px] font-bold tracking-[0.14em] text-dim uppercase mb-1.5;
+  }
+  .seclabel {
+    @apply font-mono text-[9px] font-bold tracking-[0.18em] text-dim uppercase;
+  }
+  .hint {
+    @apply font-mono text-[11px] leading-relaxed text-dim;
+  }
+  /* Safe areas: the map runs edge to edge, the chrome stays clear of the bars */
+  .pad-top {
+    padding-top: calc(0.75rem + env(safe-area-inset-top, 0px));
+  }
+  .pad-bottom {
+    padding-bottom: calc(0.75rem + env(safe-area-inset-bottom, 0px));
+  }
+}
+
+/* MapLibre: strip the light default chrome, keep attribution legible */
+.maplibregl-ctrl-attrib {
+  background: rgba(14, 11, 10, 0.78) !important;
+  color: #8a7c73 !important;
+  font-family: var(--font-mono), monospace !important;
+  font-size: 9px !important;
+}
+.maplibregl-ctrl-attrib a {
+  color: #a89588 !important;
+}
+.maplibregl-ctrl-group {
+  background: #17110f !important;
+  border: 1px solid #2e211c !important;
+}
+.maplibregl-ctrl-group button + button {
+  border-top: 1px solid #2e211c !important;
+}
+.maplibregl-ctrl-group button span {
+  filter: invert(1) brightness(1.4);
+}
+.maplibregl-canvas:focus {
+  outline: none;
+}
+
+/* ------------------------------------------------- title sequence ----- */
+/* Timings: START 0.5s, PAN 9s. Keep in step with TitleSequence.tsx. */
+.ts-cam {
+  animation: ts-pan 9s cubic-bezier(0.37, 0, 0.63, 1) 0.5s both;
+}
+.ts-cam-back {
+  animation: ts-pan-back 9s cubic-bezier(0.37, 0, 0.63, 1) 0.5s both;
+}
+.ts-rise {
+  transform-box: fill-box;
+  transform-origin: 50% 100%;
+  animation: ts-rise 0.55s cubic-bezier(0.34, 1.56, 0.64, 1) var(--d) both;
+}
+.ts-pop {
+  transform-box: fill-box;
+  transform-origin: 50% 100%;
+  animation: ts-pop 0.45s cubic-bezier(0.34, 1.8, 0.64, 1) var(--d) both;
+}
+/* A rooftop sign that flips to another name, like the logos in the show */
+.ts-pop.ts-flip-out {
+  animation:
+    ts-pop 0.45s cubic-bezier(0.34, 1.8, 0.64, 1) var(--d) both,
+    ts-flip 0.2s ease-in var(--d2) forwards;
+}
+.ts-draw {
+  stroke-dasharray: 1;
+  stroke-dashoffset: 1;
+  animation: ts-draw 0.8s ease-out var(--d) forwards;
+}
+.ts-bus {
+  animation: ts-drive 3.6s cubic-bezier(0.3, 0, 0.7, 1) var(--d) both;
+}
+.ts-blimp {
+  animation: ts-drift 7s ease-in-out both;
+}
+.ts-twinkle {
+  animation: pulse2 1.6s ease-in-out infinite;
+}
+@keyframes ts-pan {
+  to {
+    transform: translateX(var(--pan));
+  }
+}
+@keyframes ts-pan-back {
+  to {
+    transform: translateX(var(--pan-back));
+  }
+}
+@keyframes ts-rise {
+  from {
+    transform: scaleY(0);
+  }
+  to {
+    transform: scaleY(1);
+  }
+}
+@keyframes ts-pop {
+  from {
+    transform: scale(0);
+  }
+  to {
+    transform: scale(1);
+  }
+}
+@keyframes ts-flip {
+  to {
+    transform: scaleY(0);
+  }
+}
+@keyframes ts-draw {
+  to {
+    stroke-dashoffset: 0;
+  }
+}
+@keyframes ts-drive {
+  from {
+    transform: translateX(0);
+  }
+  to {
+    transform: translateX(900px);
+  }
+}
+@keyframes ts-drift {
+  from {
+    transform: translate(-60px, 8px);
+  }
+  to {
+    transform: translate(80px, -6px);
+  }
+}
+@keyframes ts-stamp {
+  from {
+    opacity: 0;
+    transform: scale(1.8) rotate(-6deg);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+/* ------------------------------------------------------- map signs ---- */
+/* Event billboards on the night map pop up the way the intro's signs do */
+.hz-sign {
+  cursor: pointer;
+}
+.hz-sign-board {
+  display: block;
+  transform-origin: 50% 100%;
+  animation: ts-pop 0.45s cubic-bezier(0.34, 1.8, 0.64, 1) var(--d, 0s) both;
+}
+.hz-sign .hz-full,
+.hz-sign .hz-tag {
+  background: #f5ebdd;
+  color: #0e0b0a;
+}
+.hz-sign .hz-meta {
+  color: #b83600;
+}
+.hz-sign.hz-on .hz-full,
+.hz-sign.hz-on .hz-tag {
+  background: #ff4d00;
+  color: #f5ebdd;
+}
+.hz-sign.hz-on .hz-meta {
+  color: #0e0b0a;
+}
+/* Outside your radius: still there, still priced, just quieter */
+.hz-sign.hz-far {
+  opacity: 0.55;
+}
+.hz-sign[data-mode="full"] .hz-tag,
+.hz-sign[data-mode="tag"] .hz-full {
+  display: none;
+}
+.hz-sign[data-mode="off"] {
+  visibility: hidden;
+}
+.hz-sign.hz-on {
+  visibility: visible;
+}
+
+/* Desktop hover card over an event */
+.hz-peek .maplibregl-popup-content {
+  background: #17110f;
+  border: 1px solid #2e211c;
+  border-radius: 6px;
+  padding: 10px 12px;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.5);
+}
+.hz-peek.maplibregl-popup-anchor-bottom .maplibregl-popup-tip {
+  border-top-color: #2e211c;
+}
+.hz-peek.maplibregl-popup-anchor-top .maplibregl-popup-tip {
+  border-bottom-color: #2e211c;
+}
+
+/* The Hop bus: its own marker, bobs while it is between stops */
+.hz-bus {
+  cursor: pointer;
+}
+.hz-bus-moving .hz-bus-body {
+  animation: hz-bob 0.9s ease-in-out infinite;
+}
+@keyframes hz-bob {
+  0%,
+  100% {
+    transform: translateY(0);
+  }
+  50% {
+    transform: translateY(-3px);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+}

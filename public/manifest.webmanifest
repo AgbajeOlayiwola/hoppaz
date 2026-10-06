@@ -1,0 +1,13 @@
+{
+  "name": "Hoppaz",
+  "short_name": "Hoppaz",
+  "description": "What is happening in Lagos tonight, on one map.",
+  "start_url": "/",
+  "display": "standalone",
+  "orientation": "portrait",
+  "background_color": "#0E0B0A",
+  "theme_color": "#0E0B0A",
+  "icons": [
+    { "src": "/icon.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "any maskable" }
+  ]
+}
