@@ -32,6 +32,8 @@ type Props = {
   selectedId: string | null;
   onSelect: (id: string) => void;
   onHopSelect: () => void;
+  /** Changes when the filters change: the camera frames whatever now matches. */
+  fitKey: string;
   /** A tap on empty map: close whatever card is open. */
   onClear: () => void;
 };
@@ -104,6 +106,7 @@ export default function NightMap({
   onSelect,
   onHopSelect,
   onClear,
+  fitKey,
 }: Props) {
   const holder = useRef<HTMLDivElement>(null);
   const map = useRef<MLMap | null>(null);
@@ -643,6 +646,21 @@ export default function NightMap({
     else m.once("hoppaz:ready", place);
     // eslint-disable-next-line react-hooks/exhaustive-deps -- showPeek/hidePeek read refs
   }, [loaded, events, fix, radiusKm, selectedId, at, live]);
+
+  /* --------------------------------------- frame the filtered events ---- */
+  const lastFit = useRef(fitKey);
+  useEffect(() => {
+    const m = map.current;
+    if (!m || !ready.current || fitKey === lastFit.current) return;
+    lastFit.current = fitKey;
+    if (!events.length) return;
+    const b = new maplibregl.LngLatBounds();
+    events.forEach((e) => b.extend([e.lng, e.lat]));
+    // Room for the top bar + billboards above, and the bottom HUD below.
+    m.fitBounds(b, { padding: { top: 150, bottom: 260, left: 40, right: 40 }, maxZoom: 14, duration: 900 });
+    // events is read at the moment the filter changes, on purpose.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [loaded, fitKey]);
 
   /* ------------------------------------------- fly to the picked venue -- */
   // Down into the street so the venue's lot stands up in 3D, nudged up so the

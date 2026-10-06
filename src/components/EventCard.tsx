@@ -199,7 +199,7 @@ export default function EventCard({
           <div className="mt-1.5">
             {chat.map((m) => (
               <p key={m.id} className="border-b border-line py-2 text-[13px] leading-snug last:border-0">
-                <b className="font-display font-black text-orange">{m.author}</b>{" "}
+                <b className="font-display font-black text-orange">{m.author_name ?? "A Hopper"}</b>{" "}
                 <span className="text-cream/90">{m.body}</span>
                 <span className="ml-1.5 font-mono text-[9px] text-dim">{clockShort(m.created_at)}</span>
               </p>

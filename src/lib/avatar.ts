@@ -265,25 +265,39 @@ export function normalizeLook(raw: unknown): Look {
   };
 }
 
-const any = <T,>(xs: ReadonlyArray<T>) => xs[Math.floor(Math.random() * xs.length)];
-
-export function randomLook(): Look {
+export function randomLook(rand: () => number = Math.random): Look {
+  const any = <T,>(xs: ReadonlyArray<T>) => xs[Math.floor(rand() * xs.length)];
   const of = (slot: Slot) => WARDROBE.filter((i) => i.slot === slot).map((i) => i.id);
   return {
     v: 1,
-    skin: Math.floor(Math.random() * SKINS.length),
-    hairColor: Math.random() < 0.7 ? 0 : Math.floor(Math.random() * HAIR_COLORS.length),
+    skin: Math.floor(rand() * SKINS.length),
+    hairColor: rand() < 0.7 ? 0 : Math.floor(rand() * HAIR_COLORS.length),
     body: any(BODIES)[0],
     hair: any(HAIR)[0],
     eyes: any(EYES)[0],
     mouth: any(MOUTHS)[0],
-    beard: Math.random() < 0.6 ? "none" : any(BEARDS)[0],
-    glasses: Math.random() < 0.6 ? "none" : any(GLASSES)[0],
+    beard: rand() < 0.6 ? "none" : any(BEARDS)[0],
+    glasses: rand() < 0.6 ? "none" : any(GLASSES)[0],
     ears: any(EARS)[0],
     neck: any(NECKS)[0],
-    head: Math.random() < 0.6 ? null : any(of("head")),
+    head: rand() < 0.6 ? null : any(of("head")),
     top: any(of("top")),
     bottom: any(of("bottom")),
     shoes: any(of("shoes")),
   };
+}
+
+/**
+ * The face shown for an anonymous alias. Seeded by the alias, so "Suya Rider 4F"
+ * always looks the same, and unrelated to the person's real avatar, which is on
+ * the leaderboard and would give them away.
+ */
+export function anonLook(alias: string): Look {
+  let h = 2166136261;
+  for (let i = 0; i < alias.length; i++) h = Math.imul(h ^ alias.charCodeAt(i), 16777619);
+  let s = (h >>> 0) || 1;
+  return randomLook(() => {
+    s = (s * 16807) % 2147483647;
+    return (s - 1) / 2147483646;
+  });
 }

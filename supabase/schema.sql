@@ -391,11 +391,7 @@ drop policy if exists crew_rw_own on public.crew;
 create policy crew_rw_own on public.crew for all
   using (user_id = auth.uid()) with check (user_id = auth.uid());
 
-drop policy if exists messages_read on public.messages;
-create policy messages_read on public.messages for select using (true);
-drop policy if exists messages_insert_own on public.messages;
-create policy messages_insert_own on public.messages for insert to authenticated
-  with check (user_id = auth.uid());
+-- messages: policies live in the chat section below, after the tables they use.
 
 drop policy if exists riders_read on public.hop_riders;
 create policy riders_read on public.hop_riders for select using (true);
@@ -444,6 +440,456 @@ drop policy if exists event_photos_remove_own on storage.objects;
 create policy event_photos_remove_own on storage.objects for delete to authenticated
   using (bucket_id = 'event-photos' and (storage.foldername(name))[1] = auth.uid()::text);
 
+-- ========================================================== chat ==========
+-- Rooms (base, each event, each Hop), waves between people who have met, DMs
+-- that open only when a wave is accepted, anonymous aliases with a mutual
+-- reveal, blocks and reports.
+--
+-- The rule that holds it together: no user id ever reaches a browser through
+-- chat. Room messages carry an opaque per-room identity key; DMs say "from a"
+-- or "from b". Only security-definer functions (and admins via the service
+-- role) can map a key back to a person, which is what keeps anonymous mode
+-- honest and still lets abuse be traced.
+
+-- ---- identities: one random key per person per room, named and anon apart
+create table if not exists public.room_identities (
+  id         uuid primary key default gen_random_uuid(),
+  user_id    uuid not null references public.profiles(id) on delete cascade,
+  channel    text not null,
+  anon       boolean not null,
+  alias      text not null,
+  created_at timestamptz not null default now(),
+  -- separate keys for named and anonymous posting, so one never unmasks the other
+  unique (user_id, channel, anon)
+);
+alter table public.room_identities enable row level security;
+-- deliberately no policies: nobody reads this table except definer functions
+
+create or replace function public.make_alias()
+returns text language sql volatile as $$
+  select (array['Jollof','Danfo','Suya','Agbada','Gele','Okada','Keke','Molue','Owambe','Zobo',
+                'Shayo','Bridge','Yaba','Lekki','Ankara','Chapman','Puff-puff','Asun'])[1 + floor(random() * 18)::int]
+      || ' ' || (array['Hopper','Rider','Raver','Stepper','Vibe','Spark','Groove','Wave'])[1 + floor(random() * 8)::int]
+      || ' ' || upper(substr(md5(random()::text), 1, 2));
+$$;
+
+create or replace function public.identity_for(p_user uuid, p_channel text, p_anon boolean)
+returns public.room_identities
+language plpgsql security definer set search_path = public as $$
+declare r public.room_identities;
+begin
+  select * into r from room_identities where user_id = p_user and channel = p_channel and anon = p_anon;
+  if found then return r; end if;
+  insert into room_identities (user_id, channel, anon, alias)
+  values (p_user, p_channel, p_anon, make_alias())
+  on conflict (user_id, channel, anon) do nothing;
+  select * into r from room_identities where user_id = p_user and channel = p_channel and anon = p_anon;
+  return r;
+end $$;
+-- Internal only: called with any user id it would map people to their aliases.
+revoke all on function public.identity_for(uuid, text, boolean) from public, anon, authenticated;
+
+-- ---- blocks and reports
+create table if not exists public.blocks (
+  id         uuid primary key default gen_random_uuid(),
+  blocker    uuid not null references public.profiles(id) on delete cascade,
+  blocked    uuid not null references public.profiles(id) on delete cascade,
+  label      text not null, -- what the blocker saw (an alias or a name), for the unblock list
+  created_at timestamptz not null default now(),
+  unique (blocker, blocked),
+  check (blocker <> blocked)
+);
+alter table public.blocks enable row level security;
+-- no policies: reading "blocked" would hand over the id behind an alias
+
+create table if not exists public.reports (
+  id          uuid primary key default gen_random_uuid(),
+  reporter    uuid not null references public.profiles(id) on delete cascade,
+  target      uuid references public.profiles(id) on delete set null,
+  kind        text not null check (kind in ('room', 'dm', 'person')),
+  ref_id      uuid,
+  excerpt     text,
+  reason      text not null check (char_length(reason) between 1 and 300),
+  created_at  timestamptz not null default now()
+);
+alter table public.reports enable row level security;
+-- no policies: admins read reports with the service role
+
+create or replace function public.is_blocked(a uuid, b uuid)
+returns boolean language sql stable security definer set search_path = public as $$
+  select exists (select 1 from blocks where (blocker = a and blocked = b) or (blocker = b and blocked = a));
+$$;
+revoke all on function public.is_blocked(uuid, uuid) from public, anon, authenticated;
+
+-- ---- room messages: authorship moves off the row
+alter table public.messages add column if not exists author_key  uuid references public.room_identities(id) on delete set null;
+alter table public.messages add column if not exists author_name text;
+alter table public.messages add column if not exists author_look jsonb;
+alter table public.messages add column if not exists anon        boolean not null default false;
+
+do $$
+begin
+  -- One-time move: old messages carried user_id in the clear. Give each author
+  -- a named room identity, copy their name and look, then drop the column.
+  if exists (select 1 from information_schema.columns
+             where table_schema = 'public' and table_name = 'messages' and column_name = 'user_id') then
+    drop policy if exists messages_insert_own on public.messages;
+    insert into public.room_identities (user_id, channel, anon, alias)
+      select distinct on (m.user_id, m.channel) m.user_id, m.channel, false, public.make_alias()
+      from public.messages m
+      on conflict (user_id, channel, anon) do nothing;
+    update public.messages m
+       set author_key = ri.id, author_name = coalesce(p.display_name, 'A Hopper'), author_look = p.avatar
+      from public.room_identities ri, public.profiles p
+     where ri.user_id = m.user_id and ri.channel = m.channel and ri.anon = false and p.id = m.user_id;
+    alter table public.messages drop column user_id;
+  end if;
+end $$;
+
+-- The server fills in who posted. Whatever the client sends for author fields is overwritten.
+create or replace function public.stamp_message()
+returns trigger language plpgsql security definer set search_path = public as $$
+declare
+  me uuid := auth.uid();
+  r  room_identities;
+  p  profiles;
+  n  int;
+begin
+  if me is null then raise exception 'no_session'; end if;
+  select count(*) into n
+    from messages m join room_identities ri on ri.id = m.author_key
+   where ri.user_id = me and m.created_at > now() - interval '30 seconds';
+  if n >= 8 then raise exception 'slow_down'; end if;
+
+  r := identity_for(me, new.channel, coalesce(new.anon, false));
+  select * into p from profiles where id = me;
+  new.anon        := coalesce(new.anon, false);
+  new.author_key  := r.id;
+  new.author_name := case when new.anon then r.alias else coalesce(p.display_name, 'A Hopper') end;
+  new.author_look := case when new.anon then null else p.avatar end;
+  new.created_at  := now();
+  return new;
+end $$;
+
+drop trigger if exists messages_stamp on public.messages;
+create trigger messages_stamp before insert on public.messages
+  for each row execute function public.stamp_message();
+
+-- Hidden: rooms of events that ended over a day ago, and anyone you blocked (or who blocked you).
+create or replace function public.message_visible(p_channel text, p_key uuid)
+returns boolean language sql stable security definer set search_path = public as $$
+  select not exists (
+           select 1 from events e
+            where e.id::text = p_channel
+              and coalesce(e.ends_at, e.starts_at + interval '8 hours') + interval '24 hours' < now())
+     and not exists (
+           select 1 from room_identities ri
+            where ri.id = p_key and auth.uid() is not null and is_blocked(auth.uid(), ri.user_id));
+$$;
+
+drop policy if exists messages_read on public.messages;
+create policy messages_read on public.messages for select
+  using (public.message_visible(channel, author_key));
+drop policy if exists messages_insert on public.messages;
+create policy messages_insert on public.messages for insert to authenticated
+  with check (auth.uid() is not null);
+
+-- Event rooms clear the day after. The read policy already hides them; this
+-- deletes them for real. Schedule it if pg_cron is on:
+--   select cron.schedule('hoppaz-purge-rooms', '15 * * * *', 'select public.purge_expired_rooms()');
+create or replace function public.purge_expired_rooms()
+returns int language sql security definer set search_path = public as $$
+  with gone as (
+    delete from messages m using events e
+     where e.id::text = m.channel
+       and coalesce(e.ends_at, e.starts_at + interval '8 hours') + interval '24 hours' < now()
+    returning 1)
+  select count(*)::int from gone;
+$$;
+revoke all on function public.purge_expired_rooms() from public, anon, authenticated;
+
+-- Your own keys in a room, so the client can tell which messages are yours.
+create or replace function public.my_room_keys(p_channel text)
+returns table (key uuid, anon boolean, alias text)
+language sql stable security definer set search_path = public as $$
+  select id, anon, alias from room_identities where user_id = auth.uid() and channel = p_channel;
+$$;
+
+-- What you would be called if you posted anonymously here (creates it on first ask).
+create or replace function public.my_alias(p_channel text)
+returns text language plpgsql security definer set search_path = public as $$
+begin
+  if auth.uid() is null then return null; end if;
+  return (identity_for(auth.uid(), p_channel, true)).alias;
+end $$;
+
+-- ---- "met": checked in at the same event, or rode the same Hop
+create or replace function public.have_met(a uuid, b uuid)
+returns boolean language sql stable security definer set search_path = public as $$
+  select exists (select 1 from checkins c1 join checkins c2 on c2.event_id = c1.event_id
+                  where c1.user_id = a and c2.user_id = b)
+      or exists (select 1 from hop_riders h1 join hop_riders h2 on h2.hop_id = h1.hop_id
+                  where h1.user_id = a and h2.user_id = b);
+$$;
+revoke all on function public.have_met(uuid, uuid) from public, anon, authenticated;
+
+-- ---- who's here: only for people checked in at the same event
+create or replace function public.whos_here(p_event uuid)
+returns table (key uuid, alias text, waved boolean)
+language plpgsql security definer set search_path = public as $$
+declare me uuid := auth.uid();
+begin
+  if me is null or not exists (select 1 from checkins where event_id = p_event and user_id = me) then
+    return; -- not there yourself: you do not get to see who is
+  end if;
+  return query
+    select (identity_for(c.user_id, p_event::text, true)).id,
+           (identity_for(c.user_id, p_event::text, true)).alias,
+           exists (select 1 from waves w where w.from_user = me and w.to_user = c.user_id)
+      from checkins c
+     where c.event_id = p_event
+       and c.user_id <> me
+       and c.created_at > now() - interval '6 hours'
+       and not is_blocked(me, c.user_id)
+     order by c.created_at desc
+     limit 60;
+end $$;
+
+-- ---- waves and DMs
+create table if not exists public.waves (
+  id           uuid primary key default gen_random_uuid(),
+  from_user    uuid not null references public.profiles(id) on delete cascade,
+  to_user      uuid not null references public.profiles(id) on delete cascade,
+  event_id     uuid references public.events(id) on delete set null,
+  from_alias   text not null,
+  to_alias     text not null,
+  status       text not null default 'pending' check (status in ('pending', 'accepted', 'declined')),
+  created_at   timestamptz not null default now(),
+  responded_at timestamptz,
+  unique (from_user, to_user),
+  check (from_user <> to_user)
+);
+alter table public.waves enable row level security; -- RPC only
+
+create table if not exists public.dms (
+  id         uuid primary key default gen_random_uuid(),
+  a          uuid not null references public.profiles(id) on delete cascade,
+  b          uuid not null references public.profiles(id) on delete cascade,
+  a_alias    text not null,
+  b_alias    text not null,
+  a_revealed boolean not null default false,
+  b_revealed boolean not null default false,
+  event_id   uuid references public.events(id) on delete set null,
+  created_at timestamptz not null default now(),
+  check (a <> b)
+);
+create unique index if not exists dms_pair_idx on public.dms (least(a, b), greatest(a, b));
+alter table public.dms enable row level security; -- RPC only
+
+create table if not exists public.dm_messages (
+  id         uuid primary key default gen_random_uuid(),
+  dm_id      uuid not null references public.dms(id) on delete cascade,
+  from_a     boolean not null, -- not a user id: the other side never learns yours from a message
+  body       text not null check (char_length(body) between 1 and 1000),
+  created_at timestamptz not null default now()
+);
+create index if not exists dm_messages_dm_idx on public.dm_messages (dm_id, created_at desc);
+alter table public.dm_messages enable row level security;
+
+create or replace function public.is_dm_member(p_dm uuid)
+returns boolean language sql stable security definer set search_path = public as $$
+  select exists (select 1 from dms d
+                  where d.id = p_dm and auth.uid() in (d.a, d.b) and not is_blocked(d.a, d.b));
+$$;
+
+drop policy if exists dm_messages_read on public.dm_messages;
+create policy dm_messages_read on public.dm_messages for select using (public.is_dm_member(dm_id));
+-- no insert policy: messages go through send_dm()
+
+create or replace function public.open_dm(p_wave public.waves)
+returns uuid language plpgsql security definer set search_path = public as $$
+declare d uuid;
+begin
+  insert into dms (a, b, a_alias, b_alias, event_id)
+  values (p_wave.from_user, p_wave.to_user, p_wave.from_alias, p_wave.to_alias, p_wave.event_id)
+  on conflict do nothing
+  returning id into d;
+  if d is null then
+    select id into d from dms
+     where least(a, b) = least(p_wave.from_user, p_wave.to_user)
+       and greatest(a, b) = greatest(p_wave.from_user, p_wave.to_user);
+  end if;
+  return d;
+end $$;
+revoke all on function public.open_dm(public.waves) from public, anon, authenticated;
+
+-- Wave at someone by the key on their message or in "who's here".
+-- Returns: sent | matched:<dm id> | already | not_met | blocked | slow_down | self | gone | no_session
+create or replace function public.send_wave(p_key uuid)
+returns text language plpgsql security definer set search_path = public as $$
+declare
+  me    uuid := auth.uid();
+  them  uuid;
+  ch    text;
+  ev    uuid;
+  back  waves;
+  w     waves;
+  n     int;
+begin
+  if me is null then return 'no_session'; end if;
+  select user_id, channel into them, ch from room_identities where id = p_key;
+  if them is null then return 'gone'; end if;
+  if them = me then return 'self'; end if;
+  if exists (select 1 from blocks where blocker = me and blocked = them) then return 'blocked'; end if;
+  -- Blocked by them: say nothing that tells you so.
+  if exists (select 1 from blocks where blocker = them and blocked = me) then return 'sent'; end if;
+  if not have_met(me, them) then return 'not_met'; end if;
+
+  -- They already waved at you: that is a match, open the DM.
+  select * into back from waves where from_user = them and to_user = me;
+  if found then
+    if back.status = 'pending' then
+      update waves set status = 'accepted', responded_at = now() where id = back.id returning * into back;
+    end if;
+    if back.status = 'accepted' then return 'matched:' || open_dm(back)::text; end if;
+    return 'already';
+  end if;
+  if exists (select 1 from waves where from_user = me and to_user = them) then return 'already'; end if;
+
+  select count(*) into n from waves where from_user = me and created_at > now() - interval '1 day';
+  if n >= 30 then return 'slow_down'; end if;
+
+  select id into ev from events where id::text = ch;
+  insert into waves (from_user, to_user, event_id, from_alias, to_alias)
+  values (me, them, ev,
+          (identity_for(me, ch, true)).alias,
+          (identity_for(them, ch, true)).alias)
+  returning * into w;
+  return 'sent';
+end $$;
+
+create or replace function public.my_waves()
+returns table (id uuid, from_alias text, event_title text, created_at timestamptz)
+language sql stable security definer set search_path = public as $$
+  select w.id, w.from_alias, e.title, w.created_at
+    from waves w left join events e on e.id = w.event_id
+   where w.to_user = auth.uid() and w.status = 'pending' and not is_blocked(w.from_user, w.to_user)
+   order by w.created_at desc;
+$$;
+
+-- Accept opens the DM and returns its id; decline returns null.
+create or replace function public.respond_wave(p_wave uuid, p_accept boolean)
+returns uuid language plpgsql security definer set search_path = public as $$
+declare w waves;
+begin
+  update waves set status = case when p_accept then 'accepted' else 'declined' end, responded_at = now()
+   where id = p_wave and to_user = auth.uid() and status = 'pending'
+  returning * into w;
+  if not found or not p_accept then return null; end if;
+  return open_dm(w);
+end $$;
+
+create or replace function public.my_dms()
+returns table (
+  id uuid, i_am_a boolean, other_name text, other_look jsonb, revealed boolean,
+  me_revealed boolean, them_revealed boolean, my_alias text, event_title text,
+  last_body text, last_at timestamptz
+)
+language sql stable security definer set search_path = public as $$
+  select d.id,
+         d.a = auth.uid(),
+         case when d.a_revealed and d.b_revealed then coalesce(p.display_name, 'A Hopper')
+              when d.a = auth.uid() then d.b_alias else d.a_alias end,
+         case when d.a_revealed and d.b_revealed then p.avatar end,
+         d.a_revealed and d.b_revealed,
+         case when d.a = auth.uid() then d.a_revealed else d.b_revealed end,
+         case when d.a = auth.uid() then d.b_revealed else d.a_revealed end,
+         case when d.a = auth.uid() then d.a_alias else d.b_alias end,
+         e.title,
+         l.body,
+         coalesce(l.created_at, d.created_at)
+    from dms d
+    join profiles p on p.id = case when d.a = auth.uid() then d.b else d.a end
+    left join events e on e.id = d.event_id
+    left join lateral (select body, created_at from dm_messages where dm_id = d.id
+                        order by created_at desc limit 1) l on true
+   where auth.uid() in (d.a, d.b) and not is_blocked(d.a, d.b)
+   order by coalesce(l.created_at, d.created_at) desc;
+$$;
+
+create or replace function public.send_dm(p_dm uuid, p_body text)
+returns uuid language plpgsql security definer set search_path = public as $$
+declare d dms; n int; out_id uuid;
+begin
+  select * into d from dms where id = p_dm and auth.uid() in (a, b);
+  if not found or is_blocked(d.a, d.b) then raise exception 'not_in_dm'; end if;
+  select count(*) into n from dm_messages
+   where dm_id = p_dm and from_a = (d.a = auth.uid()) and created_at > now() - interval '30 seconds';
+  if n >= 10 then raise exception 'slow_down'; end if;
+  insert into dm_messages (dm_id, from_a, body) values (p_dm, d.a = auth.uid(), btrim(p_body))
+  returning id into out_id;
+  return out_id;
+end $$;
+
+-- Names show only once both sides have tapped reveal. There is no un-reveal.
+create or replace function public.reveal_dm(p_dm uuid)
+returns void language sql security definer set search_path = public as $$
+  update dms set a_revealed = a_revealed or a = auth.uid(),
+                 b_revealed = b_revealed or b = auth.uid()
+   where id = p_dm and auth.uid() in (a, b);
+$$;
+
+-- Block by a room key, or by DM. Works on aliases without exposing who they are.
+create or replace function public.block_person(p_key uuid default null, p_dm uuid default null, p_label text default 'A Hopper')
+returns boolean language plpgsql security definer set search_path = public as $$
+declare me uuid := auth.uid(); them uuid;
+begin
+  if me is null then return false; end if;
+  if p_key is not null then select user_id into them from room_identities where id = p_key; end if;
+  if p_dm is not null then
+    select case when a = me then b else a end into them from dms where id = p_dm and me in (a, b);
+  end if;
+  if them is null or them = me then return false; end if;
+  insert into blocks (blocker, blocked, label) values (me, them, left(coalesce(p_label, 'A Hopper'), 60))
+  on conflict (blocker, blocked) do nothing;
+  update waves set status = 'declined', responded_at = now()
+   where status = 'pending' and ((from_user = me and to_user = them) or (from_user = them and to_user = me));
+  return true;
+end $$;
+
+create or replace function public.my_blocks()
+returns table (id uuid, label text, created_at timestamptz)
+language sql stable security definer set search_path = public as $$
+  select id, label, created_at from blocks where blocker = auth.uid() order by created_at desc;
+$$;
+
+create or replace function public.unblock(p_block uuid)
+returns void language sql security definer set search_path = public as $$
+  delete from blocks where id = p_block and blocker = auth.uid();
+$$;
+
+-- Report a room message, a DM message, or a person. The server resolves who.
+create or replace function public.report(p_kind text, p_ref uuid, p_reason text)
+returns boolean language plpgsql security definer set search_path = public as $$
+declare me uuid := auth.uid(); them uuid; ex text;
+begin
+  if me is null then return false; end if;
+  if p_kind = 'room' then
+    select ri.user_id, m.body into them, ex
+      from messages m join room_identities ri on ri.id = m.author_key where m.id = p_ref;
+  elsif p_kind = 'dm' then
+    select case when x.from_a then d.a else d.b end, x.body into them, ex
+      from dm_messages x join dms d on d.id = x.dm_id
+     where x.id = p_ref and me in (d.a, d.b);
+  elsif p_kind = 'person' then
+    select user_id into them from room_identities where id = p_ref;
+  end if;
+  if them is null or them = me then return false; end if;
+  insert into reports (reporter, target, kind, ref_id, excerpt, reason)
+  values (me, them, p_kind, p_ref, left(ex, 400), left(p_reason, 300));
+  return true;
+end $$;
+
 -- ======================================================= realtime ==========
 -- Live chat and live heat on the map.
 do $$
@@ -451,5 +897,6 @@ begin
   if exists (select 1 from pg_publication where pubname = 'supabase_realtime') then
     begin alter publication supabase_realtime add table public.messages; exception when duplicate_object then null; end;
     begin alter publication supabase_realtime add table public.checkins; exception when duplicate_object then null; end;
+    begin alter publication supabase_realtime add table public.dm_messages; exception when duplicate_object then null; end;
   end if;
 end $$;

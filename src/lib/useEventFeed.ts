@@ -20,7 +20,7 @@ async function shrink(file: File, max = 1280): Promise<Blob> {
 /** What the event card scrolls through: photos from the night and the latest chat. */
 export function useEventFeed(eventId: string | null, userId: string | null) {
   const [photos, setPhotos] = useState<EventPhoto[]>([]);
-  const [chat, setChat] = useState<(Message & { author: string })[]>([]);
+  const [chat, setChat] = useState<Message[]>([]);
   const [loading, setLoading] = useState(false);
   const [uploading, setUploading] = useState(false);
 
@@ -34,7 +34,7 @@ export function useEventFeed(eventId: string | null, userId: string | null) {
       sb.from("event_photos").select("*").eq("event_id", eventId).order("created_at", { ascending: false }).limit(30),
       sb
         .from("messages")
-        .select("*, profiles(display_name)")
+        .select("id, channel, body, created_at, author_key, author_name, author_look, anon")
         .eq("channel", eventId)
         .order("created_at", { ascending: false })
         .limit(6),
@@ -46,12 +46,7 @@ export function useEventFeed(eventId: string | null, userId: string | null) {
         url: sb.storage.from(BUCKET).getPublicUrl(r.path).data.publicUrl,
       }))
     );
-    setChat(
-      ((m.data ?? []) as (Message & { profiles: { display_name: string | null } | null })[]).map((r) => ({
-        ...r,
-        author: r.profiles?.display_name || "A Hopper",
-      }))
-    );
+    setChat((m.data ?? []) as Message[]);
   }, [eventId]);
 
   useEffect(() => {

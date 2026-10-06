@@ -60,14 +60,39 @@ export type Hop = {
   stops: HopStop[];
 };
 
+/**
+ * A room message. There is no user id on purpose: author_key is an opaque
+ * per-room identity the server maps back to a person. Named and anonymous
+ * posts by the same person carry different keys.
+ */
 export type Message = {
   id: string;
   channel: string;
-  user_id: string;
   body: string;
   created_at: string;
-  author?: string | null;
+  author_key: string | null;
+  author_name: string | null;
+  author_look: unknown;
+  anon: boolean;
 };
+
+export type DmThread = {
+  id: string;
+  i_am_a: boolean;
+  other_name: string;
+  other_look: unknown;
+  revealed: boolean;
+  me_revealed: boolean;
+  them_revealed: boolean;
+  my_alias: string;
+  event_title: string | null;
+  last_body: string | null;
+  last_at: string;
+};
+
+export type DmMessage = { id: string; dm_id: string; from_a: boolean; body: string; created_at: string };
+
+export type Wave = { id: string; from_alias: string; event_title: string | null; created_at: string };
 
 export type CheckinClaim =
   | { ok: true; xp: number; distance_m: number; badges: string[] }

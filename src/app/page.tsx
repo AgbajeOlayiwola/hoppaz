@@ -3,13 +3,15 @@
 import dynamic from "next/dynamic";
 import Link from "next/link";
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { Bus, Plus, Users } from "lucide-react";
+import { Bus, Plus, SlidersHorizontal, Users, X } from "lucide-react";
 import clsx from "clsx";
 import Wordmark from "@/components/Wordmark";
 import AreaPicker from "@/components/AreaPicker";
 import EventCard from "@/components/EventCard";
 import HopSheet from "@/components/HopSheet";
 import TitleSequence from "@/components/TitleSequence";
+import FilterCard from "@/components/FilterCard";
+import { ANY_DATE, describeFilter, matchesDate, matchesType } from "@/lib/filters";
 import { useHoppaz } from "@/lib/store";
 import { useSession } from "@/lib/useSession";
 import { useEvents, useHop } from "@/lib/useEvents";
@@ -33,9 +35,10 @@ const NightMap = dynamic(() => import("@/components/map/NightMap"), {
 export default function MapPage() {
   const {
     fix, radiusKm, setRadius, showCrew, toggleCrew, seenIntro, markIntroSeen, seenTitle, setSeenTitle, look,
+    dateFilter, setDateFilter, types, setTypes,
   } = useHoppaz();
   const { userId, profile, refresh } = useSession();
-  const { events, demo } = useEvents(fix, radiusKm);
+  const { events: allEvents, demo } = useEvents(fix, radiusKm);
   const hop = useHop();
   const { crew } = useCrew(userId);
   const { done, busy, checkIn } = useCheckin(userId, refresh);
@@ -43,6 +46,18 @@ export default function MapPage() {
   const [picking, setPicking] = useState(false);
   const [selected, setSelected] = useState<string | null>(null);
   const [hopOpen, setHopOpen] = useState(false);
+  const [filtering, setFiltering] = useState(false);
+
+  // Everything on the map (pins, billboards, heat, the time strip) works off the filtered list.
+  const events = useMemo(
+    () => allEvents.filter((e) => matchesDate(e, dateFilter) && matchesType(e, types)),
+    [allEvents, dateFilter, types]
+  );
+  const filtered = dateFilter.kind !== "any" || types.length > 0;
+  const clearFilters = () => {
+    setDateFilter(ANY_DATE);
+    setTypes([]);
+  };
 
   // The bus moves on the schedule, so re-place it every half minute.
   const [now, setNow] = useState(() => Date.now());
@@ -68,8 +83,8 @@ export default function MapPage() {
   useEffect(() => setMounted(true), []);
   const titles = mounted && !seenTitle;
   const signNames = useMemo(
-    () => [...events].sort((a, b) => b.heat - a.heat).slice(0, 12).map((e) => e.title),
-    [events]
+    () => [...allEvents].sort((a, b) => b.heat - a.heat).slice(0, 12).map((e) => e.title),
+    [allEvents]
   );
 
   // First open with no location: ask once, do not nag. Not over the titles.
@@ -85,7 +100,7 @@ export default function MapPage() {
   }, [mounted, seenTitle, fix, seenIntro, markIntroSeen]);
 
   const closeCard = useCallback(() => setSelected(null), []);
-  const event = useMemo(() => events.find((e) => e.id === selected) ?? null, [events, selected]);
+  const event = useMemo(() => allEvents.find((e) => e.id === selected) ?? null, [allEvents, selected]);
   const inRange = useMemo(
     () => (fix ? events.filter((e) => e.distance_m / 1000 <= radiusKm) : events),
     [events, fix, radiusKm]
@@ -112,6 +127,7 @@ export default function MapPage() {
         at={slot.at}
         live={slot.live}
         onClear={() => setSelected(null)}
+        fitKey={`${JSON.stringify(dateFilter)}|${types.join(",")}`}
         play={mounted && seenTitle}
         selectedId={selected}
         onSelect={setSelected}
@@ -141,6 +157,19 @@ export default function MapPage() {
           </span>
         </Link>
         <div className="flex-1" />
+        <button
+          onClick={() => {
+            setSelected(null);
+            setFiltering(true);
+          }}
+          aria-label={filtered ? `Filters on: ${describeFilter(dateFilter, types).toLowerCase()}` : "Filter events"}
+          className={clsx(
+            "pointer-events-auto relative grid h-9 w-9 place-items-center rounded border backdrop-blur",
+            filtered ? "border-orange bg-orange text-ink" : "border-line bg-ink-2/92 text-cream"
+          )}
+        >
+          <SlidersHorizontal size={15} />
+        </button>
         {bus && (
           <button
             onClick={() => setBusFocus((n) => n + 1)}
@@ -165,6 +194,28 @@ export default function MapPage() {
           <Users size={15} />
         </button>
       </div>
+
+      {filtered && (
+        <div className="pointer-events-none absolute inset-x-0 top-[calc(3.75rem+env(safe-area-inset-top,0px))] z-20 flex justify-center px-3.5">
+          <div className="pointer-events-auto flex max-w-full items-center gap-2 rounded-full border border-orange bg-ink-2/94 py-1 pl-3 pr-1 backdrop-blur">
+            <button onClick={() => setFiltering(true)} className="min-w-0 truncate font-mono text-[10px] font-bold tracking-[0.08em] text-orange">
+              {describeFilter(dateFilter, types)} · {events.length}
+            </button>
+            <button onClick={clearFilters} aria-label="Clear filters" className="grid h-6 w-6 flex-none place-items-center rounded-full text-cream">
+              <X size={13} />
+            </button>
+          </div>
+        </div>
+      )}
+
+      {filtered && events.length === 0 && !filtering && (
+        <div className="pointer-events-none absolute inset-x-0 top-[38%] z-20 flex justify-center px-6">
+          <p className="pointer-events-auto rounded border border-line bg-ink-2/94 px-4 py-3 text-center backdrop-blur">
+            <span className="block font-display text-sm font-black">Nothing on for that.</span>
+            <span className="hint">Try another night or fewer types.</span>
+          </p>
+        </div>
+      )}
 
       {/* ---------------------------------------------------- bottom HUD -- */}
       <div className="pointer-events-none absolute inset-x-0 bottom-2.5 z-20 flex flex-col gap-2 px-3.5">
@@ -255,6 +306,17 @@ export default function MapPage() {
           onCheckIn={() => checkIn(event, fix)}
           onClose={closeCard}
           isHopStop={isHopStop}
+        />
+      )}
+      {filtering && (
+        <FilterCard
+          date={dateFilter}
+          types={types}
+          count={events.length}
+          onDate={setDateFilter}
+          onTypes={setTypes}
+          onClear={clearFilters}
+          onClose={() => setFiltering(false)}
         />
       )}
       {hopOpen && <HopSheet hop={hop} fix={fix} onClose={() => setHopOpen(false)} />}

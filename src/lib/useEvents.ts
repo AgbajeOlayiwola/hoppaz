@@ -35,6 +35,9 @@ export function useEvents(fix: Fix, radiusKm: number) {
       p_lng: from.lng,
       // Always pull a wide net; the radius only decides what is revealed.
       p_radius_m: Math.max(radiusKm, 45) * 1000,
+      // A week ahead, so the date filter has something to filter. The map
+      // narrows it down; the default 36h window would hide next weekend.
+      p_to: new Date(Date.now() + 8 * 24 * 3.6e6).toISOString(),
     });
     setLoading(false);
     if (error || !data) {
