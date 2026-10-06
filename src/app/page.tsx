@@ -2,12 +2,12 @@
 
 import dynamic from "next/dynamic";
 import Link from "next/link";
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { Bus, Plus, Users } from "lucide-react";
 import clsx from "clsx";
 import Wordmark from "@/components/Wordmark";
 import AreaPicker from "@/components/AreaPicker";
-import EventSheet from "@/components/EventSheet";
+import EventCard from "@/components/EventCard";
 import HopSheet from "@/components/HopSheet";
 import TitleSequence from "@/components/TitleSequence";
 import { useHoppaz } from "@/lib/store";
@@ -18,6 +18,7 @@ import { useCrew } from "@/lib/useCrew";
 import { levelFor } from "@/lib/brand";
 import { haversineKm } from "@/lib/geo";
 import { busPosition } from "@/lib/busPosition";
+import { crowdAt, timeSlots } from "@/lib/crowd";
 
 // MapLibre touches window on import, so it stays out of the server bundle.
 const NightMap = dynamic(() => import("@/components/map/NightMap"), {
@@ -52,6 +53,15 @@ export default function MapPage() {
   const bus = useMemo(() => busPosition(hop, new Date(now)), [hop, now]);
   const [busFocus, setBusFocus] = useState(0);
 
+  // The heat map's clock: NOW is live check-ins, the other slots are expected.
+  const slots = useMemo(() => timeSlots(events, now), [events, now]);
+  const [slotIdx, setSlotIdx] = useState(0);
+  const slot = slots[Math.min(slotIdx, slots.length - 1)];
+  const popping = useMemo(
+    () => events.filter((e) => crowdAt(e, slot.at, slot.live) >= 60).length,
+    [events, slot]
+  );
+
   // The store rehydrates from localStorage on the client only, so wait a tick
   // before deciding whether the titles play, or the server HTML would disagree.
   const [mounted, setMounted] = useState(false);
@@ -74,6 +84,7 @@ export default function MapPage() {
     }
   }, [mounted, seenTitle, fix, seenIntro, markIntroSeen]);
 
+  const closeCard = useCallback(() => setSelected(null), []);
   const event = useMemo(() => events.find((e) => e.id === selected) ?? null, [events, selected]);
   const inRange = useMemo(
     () => (fix ? events.filter((e) => e.distance_m / 1000 <= radiusKm) : events),
@@ -98,6 +109,9 @@ export default function MapPage() {
         myLook={profile?.avatar ?? look}
         bus={bus}
         busFocus={busFocus}
+        at={slot.at}
+        live={slot.live}
+        onClear={() => setSelected(null)}
         play={mounted && seenTitle}
         selectedId={selected}
         onSelect={setSelected}
@@ -160,6 +174,31 @@ export default function MapPage() {
           </p>
         )}
 
+        <div className="pointer-events-auto rounded border border-line bg-ink-2/94 px-3 py-2 backdrop-blur">
+          <div className="flex items-center justify-between gap-2">
+            <span className="label mb-0">Heat · {slot.live ? "live from check-ins" : "expected"}</span>
+            <span className="font-mono text-[10px] font-bold text-orange">
+              {popping ? `${popping} POPPING` : slot.live ? "QUIET RIGHT NOW" : "NOTHING PEAKING"}
+            </span>
+          </div>
+          <div role="radiogroup" aria-label="Heat map time" className="-mx-1 mt-1.5 flex gap-1 overflow-x-auto px-1">
+            {slots.map((s, i) => (
+              <button
+                key={s.at + s.label}
+                role="radio"
+                aria-checked={slot === s}
+                onClick={() => setSlotIdx(i)}
+                className={clsx(
+                  "flex-none rounded-sm border px-2 py-1 font-mono text-[9px] font-bold tracking-[0.08em]",
+                  slot === s ? "border-orange bg-orange text-ink" : "border-line text-dim"
+                )}
+              >
+                {s.label}
+              </button>
+            ))}
+          </div>
+        </div>
+
         <div className="pointer-events-auto flex items-center gap-2.5 rounded border border-line bg-ink-2/94 px-3 py-2 backdrop-blur">
           <label htmlFor="rad" className="label mb-0 whitespace-nowrap">
             Radius
@@ -197,7 +236,7 @@ export default function MapPage() {
       <Link
         href="/drop"
         aria-label="Drop a flyer on the map"
-        className="absolute bottom-[104px] right-3.5 z-20 grid h-12 w-12 place-items-center rounded-full
+        className="absolute bottom-[178px] right-3.5 z-20 grid h-12 w-12 place-items-center rounded-full
                    bg-orange text-cream shadow-chunk active:translate-y-0.5 active:shadow-chunk-sm"
       >
         <Plus size={22} strokeWidth={3} />
@@ -205,16 +244,19 @@ export default function MapPage() {
 
       {/* --------------------------------------------------------- sheets -- */}
       <AreaPicker open={picking} onClose={() => setPicking(false)} />
-      <EventSheet
-        event={event}
-        fix={fix}
-        radiusKm={radiusKm}
-        checkedIn={!!event && done.has(event.id)}
-        busy={busy === event?.id}
-        onCheckIn={() => event && checkIn(event, fix)}
-        onClose={() => setSelected(null)}
-        isHopStop={isHopStop}
-      />
+      {event && (
+        <EventCard
+          event={event}
+          fix={fix}
+          radiusKm={radiusKm}
+          userId={userId}
+          checkedIn={done.has(event.id)}
+          busy={busy === event.id}
+          onCheckIn={() => checkIn(event, fix)}
+          onClose={closeCard}
+          isHopStop={isHopStop}
+        />
+      )}
       {hopOpen && <HopSheet hop={hop} fix={fix} onClose={() => setHopOpen(false)} />}
       {titles && <TitleSequence signs={signNames} onDone={() => setSeenTitle(true)} />}
     </div>

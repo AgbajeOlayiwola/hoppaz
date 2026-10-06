@@ -7,14 +7,19 @@ import { FALLBACK_STYLE, addCityLayer, loadBrandStyle, riseCity } from "@/lib/ma
 import { normalizeLook } from "@/lib/avatar";
 import { avatarSvg } from "@/lib/avatarSvg";
 import type { BusFix } from "@/lib/busPosition";
-import { LAGOS_BOUNDS, LAGOS_CENTER, clockShort, dayLagos, naira, nairaShort } from "@/lib/geo";
+import { LAGOS_BOUNDS, LAGOS_CENTER, areaByName, clockShort, dayLagos, naira, nairaShort, travelEstimate } from "@/lib/geo";
+import { crowdAt, crowdLevel, TONE_HEX } from "@/lib/crowd";
+import { lotFeatures } from "@/lib/eventLots";
 import type { EventRow, HopStop } from "@/lib/types";
 
 type Props = {
   events: EventRow[];
   hopStops: HopStop[];
-  fix: { lat: number; lng: number } | null;
+  fix: { lat: number; lng: number; area?: string | null } | null;
   radiusKm: number;
+  /** The moment the heat map shows: now (live) or a slot later in the night (expected). */
+  at: number;
+  live: boolean;
   crew: { id: string; lat: number; lng: number; initial: string; avatar?: unknown }[];
   /** The Hopper's own look, drawn as their pin. */
   myLook: unknown;
@@ -27,6 +32,8 @@ type Props = {
   selectedId: string | null;
   onSelect: (id: string) => void;
   onHopSelect: () => void;
+  /** A tap on empty map: close whatever card is open. */
+  onClear: () => void;
 };
 
 type Sign = {
@@ -39,11 +46,14 @@ type Sign = {
 
 /** Room left between two billboards, px. */
 const SIGN_GAP = 4;
+/** From here in, venues are 3D lots: dots fade and signs float over the roofs. */
+const STREET_ZOOM = 14.6;
 
 const SRC = {
   heat: "hoppaz-heat",
   pins: "hoppaz-pins",
   hop: "hoppaz-hop",
+  lots: "hoppaz-lots",
 } as const;
 
 /** A Hopper's face in a ring with a little pointer, as a map marker element. */
@@ -83,6 +93,8 @@ export default function NightMap({
   hopStops,
   fix,
   radiusKm,
+  at,
+  live,
   crew,
   myLook,
   bus,
@@ -91,14 +103,15 @@ export default function NightMap({
   selectedId,
   onSelect,
   onHopSelect,
+  onClear,
 }: Props) {
   const holder = useRef<HTMLDivElement>(null);
   const map = useRef<MLMap | null>(null);
   const ready = useRef(false);
   // Map creation is async; this re-runs the effects below once it exists.
   const [loaded, setLoaded] = useState(false);
-  const cbs = useRef({ onSelect, onHopSelect });
-  cbs.current = { onSelect, onHopSelect };
+  const cbs = useRef({ onSelect, onHopSelect, onClear });
+  cbs.current = { onSelect, onHopSelect, onClear };
 
   /* ---------------------------------------------------------------- init -- */
   useEffect(() => {
@@ -161,6 +174,25 @@ export default function NightMap({
           m.on("moveend", grow);
         }
 
+        /* ---- venues as Sims lots: walls, stepped roof, a floating diamond ---- */
+        m.addSource(SRC.lots, { type: "geojson", data: fc([]) });
+        m.addLayer(
+          {
+            id: "lots",
+            type: "fill-extrusion",
+            source: SRC.lots,
+            minzoom: 13,
+            paint: {
+              "fill-extrusion-color": ["get", "color"],
+              "fill-extrusion-base": ["get", "base"],
+              "fill-extrusion-height": ["get", "top"],
+              "fill-extrusion-vertical-gradient": false,
+              "fill-extrusion-opacity": ["interpolate", ["linear"], ["zoom"], 13, 0, 13.6, 1],
+            },
+          },
+          firstSymbol
+        );
+
         /* ---- heat: the first thing you see, before any individual pin ---- */
         m.addSource(SRC.heat, { type: "geojson", data: fc([]) });
         m.addLayer({
@@ -169,7 +201,7 @@ export default function NightMap({
           source: SRC.heat,
           maxzoom: 16,
           paint: {
-            "heatmap-weight": ["interpolate", ["linear"], ["get", "heat"], 0, 0.08, 100, 1],
+            "heatmap-weight": ["interpolate", ["linear"], ["get", "crowd"], 0, 0, 100, 1],
             "heatmap-intensity": ["interpolate", ["linear"], ["zoom"], 9, 0.9, 15, 2.4],
             "heatmap-radius": ["interpolate", ["linear"], ["zoom"], 9, 22, 13, 48, 16, 90],
             "heatmap-opacity": ["interpolate", ["linear"], ["zoom"], 9, 0.75, 15.5, 0.35, 16, 0],
@@ -252,7 +284,7 @@ export default function NightMap({
           paint: {
             "circle-radius": ["interpolate", ["linear"], ["get", "heat"], 55, 18, 100, 30],
             "circle-color": BRAND.orange,
-            "circle-opacity": 0.14,
+            "circle-opacity": ["interpolate", ["linear"], ["zoom"], STREET_ZOOM - 0.6, 0.14, STREET_ZOOM, 0],
           },
         });
         m.addLayer({
@@ -274,6 +306,9 @@ export default function NightMap({
             ],
             "circle-stroke-color": ["case", ["get", "selected"], BRAND.cream, BRAND.ink],
             "circle-stroke-width": 2,
+            // The lot takes over as the venue marker up close.
+            "circle-opacity": ["interpolate", ["linear"], ["zoom"], STREET_ZOOM - 0.6, 1, STREET_ZOOM, 0],
+            "circle-stroke-opacity": ["interpolate", ["linear"], ["zoom"], STREET_ZOOM - 0.6, 1, STREET_ZOOM, 0],
           },
         });
         // Event names, crew and "me" are HTML markers (see below), so they
@@ -299,6 +334,12 @@ export default function NightMap({
         });
         m.on("mouseleave", "pins", () => peek.current.hide());
         hit("hop-stops", () => cbs.current.onHopSelect());
+        hit("lots", (f) => cbs.current.onSelect(String(f.properties?.id)));
+        // Tap on nothing: close the card. Markers stop their own clicks.
+        m.on("click", (e) => {
+          const hits = m!.queryRenderedFeatures(e.point, { layers: ["pins", "hop-stops", "lots"] });
+          if (!hits.length) cbs.current.onClear();
+        });
 
         ready.current = true;
         m.resize();
@@ -339,8 +380,17 @@ export default function NightMap({
           events.map((e) => ({
             type: "Feature",
             geometry: { type: "Point", coordinates: [e.lng, e.lat] },
-            properties: { heat: e.heat },
+            properties: { crowd: crowdAt(e, at, live) },
           }))
+        )
+      );
+
+      (m.getSource(SRC.lots) as GeoJSONSource).setData(
+        fc(
+          events.flatMap((e) => {
+            const tone = crowdLevel(e, at, crowdAt(e, at, live)).tone;
+            return lotFeatures(e, tone, e.id === selectedId);
+          })
         )
       );
 
@@ -402,7 +452,7 @@ export default function NightMap({
 
     if (ready.current) paint();
     else m.once("hoppaz:ready", paint);
-  }, [loaded, events, hopStops, fix, radiusKm, selectedId]);
+  }, [loaded, events, hopStops, fix, radiusKm, selectedId, at, live]);
 
   /* -------------------------------------------------- event billboards -- */
   // Every event stands on the map as a rooftop sign with its price and start
@@ -417,6 +467,22 @@ export default function NightMap({
     const m = map.current;
     if (!m) return;
     const taken: Array<[number, number, number, number]> = [];
+    // Up close the venue's lot stands under the sign, so the sign floats above its roof.
+    const street = m.getZoom() >= STREET_ZOOM;
+    holder.current?.classList.toggle("hz-street", street);
+    // The lot (with its diamond) is ~95 m tall; lift the sign just past that on screen.
+    const mpp = (156543.03 * Math.cos((m.getCenter().lat * Math.PI) / 180)) / 2 ** m.getZoom();
+    const lift = street ? Math.round(18 + (95 / mpp) * Math.sin((m.getPitch() * Math.PI) / 180)) : 10;
+    holder.current?.style.setProperty("--hz-lift", `${lift - 10}px`);
+    // Your face sits above your point and the bus hangs below its own: keep both clear.
+    if (fixRef.current) {
+      const p = m.project([fixRef.current.lng, fixRef.current.lat]);
+      taken.push([p.x - 20, p.y - 46, p.x + 20, p.y]);
+    }
+    if (busRef.current) {
+      const p = m.project([busRef.current.lng, busRef.current.lat]);
+      taken.push([p.x - 40, p.y, p.x + 40, p.y + 56]);
+    }
     const free = (x0: number, y0: number, x1: number, y1: number) =>
       !taken.some(([a0, b0, a1, b1]) => x0 < a1 + SIGN_GAP && x1 + SIGN_GAP > a0 && y0 < b1 + SIGN_GAP && y1 + SIGN_GAP > b0);
     [...signs.current.values()]
@@ -426,7 +492,7 @@ export default function NightMap({
         const p = m.project(sg.mk.getLngLat());
         let mode = "off";
         for (const [name, [w, h]] of [["full", sg.full], ["tag", sg.tag]] as const) {
-          const box: [number, number, number, number] = [p.x - w / 2, p.y - 10 - h, p.x + w / 2, p.y - 10];
+          const box: [number, number, number, number] = [p.x - w / 2, p.y - lift - h, p.x + w / 2, p.y - lift];
           if (free(...box)) {
             taken.push(box);
             mode = name;
@@ -457,10 +523,15 @@ export default function NightMap({
       `${naira(e.price_naira)} · ${dayLagos(e.starts_at)} ${clockShort(e.starts_at)} · ${e.vibe.toUpperCase()}`
     );
     if (fixRef.current) {
-      line("mt-0.5 font-mono text-[10px] text-dim", `${km.toFixed(1)} km away${km > radiusRef.current ? " · outside your radius" : ""}`);
+      const f = fixRef.current;
+      const trip = travelEstimate({ ...f, side: areaByName(f.area ?? null)?.side }, { lat: e.lat, lng: e.lng, side: areaByName(e.area)?.side });
+      line(
+        "mt-0.5 font-mono text-[10px] text-dim",
+        `~${trip.minutes} min · ${km.toFixed(1)} km${trip.crossesBridge ? " · over the bridge" : ""}${km > radiusRef.current ? " · outside your radius" : ""}`
+      );
     }
     hover.current?.remove();
-    hover.current = new maplibregl.Popup({ closeButton: false, closeOnClick: false, offset: 16, className: "hz-peek", maxWidth: "240px" })
+    hover.current = new maplibregl.Popup({ closeButton: false, closeOnClick: false, offset: 14, anchor: "top", className: "hz-peek", maxWidth: "240px" })
       .setLngLat([e.lng, e.lat])
       .setDOMContent(box)
       .addTo(m);
@@ -469,6 +540,8 @@ export default function NightMap({
     hover.current?.remove();
     hover.current = null;
   };
+  const busRef = useRef(bus);
+  busRef.current = bus;
   const fixRef = useRef(fix);
   fixRef.current = fix;
   const radiusRef = useRef(radiusKm);
@@ -509,9 +582,14 @@ export default function NightMap({
           const title = document.createElement("b");
           title.className = "block font-display text-[10px] font-black";
           title.textContent = e.title.toUpperCase(); // textContent: titles come from Hoppers
+          // Second line: crowd diamond, price, start, and how long to get there.
           const meta = document.createElement("span");
-          meta.className = "hz-meta mt-0.5 block font-mono text-[9px] font-bold";
-          meta.textContent = `${nairaShort(e.price_naira)} · ${clockShort(e.starts_at)}`;
+          meta.className = "mt-0.5 flex items-center justify-center gap-1 font-mono text-[9px] font-bold";
+          const gem = document.createElement("i");
+          gem.className = "hz-gem inline-block h-[7px] w-[7px] flex-none rotate-45";
+          const metaText = document.createElement("span");
+          metaText.className = "hz-meta";
+          meta.append(gem, metaText);
           full.append(title, meta);
 
           const tag = document.createElement("span");
@@ -534,16 +612,26 @@ export default function NightMap({
           const mk = new maplibregl.Marker({ element: el, anchor: "bottom", offset: [0, -10] })
             .setLngLat([e.lng, e.lat])
             .addTo(m);
-          // Measure both sizes once; the animation scales, so use layout sizes.
-          el.dataset.mode = "full";
-          const fw = el.offsetWidth, fh = el.offsetHeight;
-          el.dataset.mode = "tag";
-          const tw = el.offsetWidth, th = el.offsetHeight;
-          sg = { mk, rank, full: [fw, fh], tag: [tw, th] };
+          sg = { mk, rank, full: [0, 0], tag: [0, 0] };
           signs.current.set(e.id, sg);
         }
         sg.rank = rank;
         const el = sg.mk.getElement();
+
+        const tone = crowdLevel(e, at, crowdAt(e, at, live)).tone;
+        const trip = fix
+          ? travelEstimate({ ...fix, side: areaByName(fix.area ?? null)?.side }, { lat: e.lat, lng: e.lng, side: areaByName(e.area)?.side })
+          : null;
+        (el.querySelector(".hz-gem") as HTMLElement).style.background = TONE_HEX[tone];
+        (el.querySelector(".hz-meta") as HTMLElement).textContent =
+          `${nairaShort(e.price_naira)} · ${clockShort(e.starts_at)}${trip ? ` · ${trip.minutes}MIN` : ""}`;
+        // Re-measure: the text above changes width. The pop animation scales, so use layout sizes.
+        const was = el.dataset.mode;
+        el.dataset.mode = "full";
+        sg.full = [el.offsetWidth, el.offsetHeight];
+        el.dataset.mode = "tag";
+        sg.tag = [el.offsetWidth, el.offsetHeight];
+        el.dataset.mode = was;
         const on = e.id === selectedId;
         el.classList.toggle("hz-on", on);
         el.classList.toggle("hz-far", !inRange(e));
@@ -554,7 +642,25 @@ export default function NightMap({
     if (ready.current) place();
     else m.once("hoppaz:ready", place);
     // eslint-disable-next-line react-hooks/exhaustive-deps -- showPeek/hidePeek read refs
-  }, [loaded, events, fix, radiusKm, selectedId]);
+  }, [loaded, events, fix, radiusKm, selectedId, at, live]);
+
+  /* ------------------------------------------- fly to the picked venue -- */
+  // Down into the street so the venue's lot stands up in 3D, nudged up so the
+  // card at the bottom does not cover it.
+  useEffect(() => {
+    const m = map.current;
+    const e = events.find((x) => x.id === selectedId);
+    if (!m || !e) return;
+    m.easeTo({
+      center: [e.lng, e.lat],
+      zoom: Math.max(m.getZoom(), 15.6),
+      pitch: 55,
+      offset: [0, -Math.round(m.getContainer().clientHeight * 0.22)],
+      duration: 900,
+    });
+    // Only when the pick changes, not when the event list refreshes.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [loaded, selectedId]);
 
   // The init effect binds once; this ref lets it reach the current handlers.
   const peek = useRef({ show: showPeek, hide: hidePeek });
@@ -584,13 +690,14 @@ export default function NightMap({
           cbs.current.onHopSelect();
         });
         el.style.zIndex = "5";
-        busMk.current = new maplibregl.Marker({ element: el, anchor: "center" }).setLngLat([bus.lng, bus.lat]).addTo(m);
+        busMk.current = new maplibregl.Marker({ element: el, anchor: "top", offset: [0, 4] }).setLngLat([bus.lng, bus.lat]).addTo(m);
       }
       const el = busMk.current.getElement();
       (el.querySelector(".hz-bus-label") as HTMLElement).textContent = bus.label;
       el.setAttribute("aria-label", `The Hop bus: ${bus.label.toLowerCase()}`);
       el.classList.toggle("hz-bus-moving", bus.moving);
       busMk.current.setLngLat([bus.lng, bus.lat]);
+      declutter.current();
     };
     if (ready.current) place();
     else m.once("hoppaz:ready", place);

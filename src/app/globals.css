@@ -234,6 +234,13 @@
 .hz-sign[data-mode="tag"] .hz-full {
   display: none;
 }
+/* Street zoom: the sign floats above its venue's 3D lot instead of sitting on it */
+.hz-street .hz-sign {
+  transform-origin: 50% 100%;
+}
+.hz-street .hz-sign-board {
+  translate: 0 calc(-1 * var(--hz-lift, 0px));
+}
 .hz-sign[data-mode="off"] {
   visibility: hidden;
 }

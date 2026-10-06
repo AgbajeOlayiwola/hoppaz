@@ -15,6 +15,17 @@ export type EventRow = {
   heat: number;
   checkins?: number;
   swipes_in?: number;
+  /** Check-ins in the last three hours: the live crowd. */
+  here_now?: number;
+};
+
+export type EventPhoto = {
+  id: string;
+  event_id: string;
+  user_id: string;
+  path: string;
+  created_at: string;
+  url: string;
 };
 
 export type Profile = {

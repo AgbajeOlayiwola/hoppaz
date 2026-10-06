@@ -129,9 +129,25 @@ Me tab. Reduced-motion users skip it.
 looks are drawn on your map, so `normalizeLook()` maps every field onto the whitelists in
 `avatar.ts` and nothing stored is ever interpolated into the SVG.
 
+**Venues are Sims lots.** Each event is nine flat-coloured boxes in MapLibre's own 3D
+layer (`lib/eventLots.ts`): plinth, cream walls, door, stepped roof, and a floating
+diamond whose colour is the crowd level. They show from zoom 13; closer in, the dots fade
+and the billboards float above the roofs.
+
+**Crowd, live vs expected.** The heat map has a clock. NOW is real check-ins from the last
+three hours (`here_now` in `events_near`). Every later slot is an estimate from the event's
+heat and a typical Lagos night (`lib/crowd.ts`), and the UI says EXPECTED so nobody reads a
+guess as a crowd.
+
+**Event photos** live in the `event-photos` storage bucket. Only a Hopper the server has
+checked in at that event can post one (enforced in RLS, not the client). Photos go live
+straight away; hide one by setting `event_photos.hidden = true`.
+
 ---
 
 ## What is still open
+
+- **Photo moderation is a SQL update.** Fine for a small community, not for strangers.
 
 - **The wardrobe names real Lagos labels** (Orange Culture, Lagos Space Programme,
   Kenneth Ize, Tokyo James, Maki Oh, Lisa Folawiyo, Mai Atafo, WAFFLESNCREAM, Motherlan,

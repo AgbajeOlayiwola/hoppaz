@@ -183,14 +183,21 @@ select
   e.id as event_id,
   coalesce(c.n, 0)::int as checkins,
   coalesce(s.n, 0)::int as swipes_in,
-  least(100, e.base_heat + coalesce(c.n, 0) * 7 + coalesce(s.n, 0) * 3)::int as heat
+  least(100, e.base_heat + coalesce(c.n, 0) * 7 + coalesce(s.n, 0) * 3)::int as heat,
+  -- Last on purpose: create or replace view can only append columns.
+  coalesce(r.n, 0)::int as here_now
 from public.events e
 left join (select event_id, count(*) n from public.checkins group by 1) c on c.event_id = e.id
-left join (select event_id, count(*) n from public.swipes where decision = 'in' group by 1) s on s.event_id = e.id;
+left join (select event_id, count(*) n from public.swipes where decision = 'in' group by 1) s on s.event_id = e.id
+-- The live crowd: who checked in during the last three hours.
+left join (select event_id, count(*) n from public.checkins where created_at > now() - interval '3 hours' group by 1) r on r.event_id = e.id;
 
 -- ============================================================= rpc =========
 
 -- Everything live inside a radius, with distance and heat already computed.
+-- The return type grew here_now; Postgres will not replace a function whose
+-- result shape changed, so drop it first.
+drop function if exists public.events_near(double precision, double precision, double precision, timestamptz, timestamptz);
 create or replace function public.events_near(
   p_lat      double precision,
   p_lng      double precision,
@@ -203,7 +210,7 @@ returns table (
   lat double precision, lng double precision,
   starts_at timestamptz, price_naira int, vibe text, source text,
   ig_url text, flyer_url text,
-  distance_m double precision, heat int, checkins int, swipes_in int
+  distance_m double precision, heat int, checkins int, swipes_in int, here_now int
 )
 language sql stable security definer set search_path = public
 as $$
@@ -211,7 +218,7 @@ as $$
          st_y(e.geog::geometry), st_x(e.geog::geometry),
          e.starts_at, e.price_naira, e.vibe, e.source, e.ig_url, e.flyer_url,
          st_distance(e.geog, st_point(p_lng, p_lat)::geography),
-         h.heat, h.checkins, h.swipes_in
+         h.heat, h.checkins, h.swipes_in, h.here_now
   from public.events e
   join public.event_heat h on h.event_id = e.id
   where e.status = 'live'
@@ -395,6 +402,47 @@ create policy riders_read on public.hop_riders for select using (true);
 drop policy if exists riders_insert_own on public.hop_riders;
 create policy riders_insert_own on public.hop_riders for insert to authenticated
   with check (user_id = auth.uid());
+
+-- ================================================== event photos ==========
+-- Pictures from the night, shown in the event card. Only someone the server
+-- has checked in at that event can post, which keeps it to people who were
+-- actually there. Admins hide a photo by setting hidden = true.
+create table if not exists public.event_photos (
+  id         uuid primary key default gen_random_uuid(),
+  event_id   uuid not null references public.events(id) on delete cascade,
+  user_id    uuid not null references public.profiles(id) on delete cascade,
+  path       text not null check (char_length(path) between 3 and 200),
+  hidden     boolean not null default false,
+  created_at timestamptz not null default now()
+);
+create index if not exists event_photos_event_idx on public.event_photos (event_id, created_at desc);
+alter table public.event_photos enable row level security;
+
+drop policy if exists event_photos_read on public.event_photos;
+create policy event_photos_read on public.event_photos for select using (not hidden);
+drop policy if exists event_photos_insert on public.event_photos;
+create policy event_photos_insert on public.event_photos for insert to authenticated
+  with check (
+    user_id = auth.uid()
+    and hidden = false
+    -- the file must sit in the poster's own folder for this event
+    and path like auth.uid()::text || '/' || event_id::text || '/%'
+    and exists (select 1 from public.checkins c where c.event_id = event_photos.event_id and c.user_id = auth.uid())
+  );
+drop policy if exists event_photos_delete_own on public.event_photos;
+create policy event_photos_delete_own on public.event_photos for delete using (user_id = auth.uid());
+
+-- Storage: public to read, each Hopper writes only under their own folder.
+insert into storage.buckets (id, name, public, file_size_limit, allowed_mime_types)
+values ('event-photos', 'event-photos', true, 3145728, array['image/jpeg', 'image/webp'])
+on conflict (id) do nothing;
+
+drop policy if exists event_photos_upload on storage.objects;
+create policy event_photos_upload on storage.objects for insert to authenticated
+  with check (bucket_id = 'event-photos' and (storage.foldername(name))[1] = auth.uid()::text);
+drop policy if exists event_photos_remove_own on storage.objects;
+create policy event_photos_remove_own on storage.objects for delete to authenticated
+  using (bucket_id = 'event-photos' and (storage.foldername(name))[1] = auth.uid()::text);
 
 -- ======================================================= realtime ==========
 -- Live chat and live heat on the map.
