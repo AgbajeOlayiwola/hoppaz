@@ -21,6 +21,8 @@ export const VIBES = [
   "beach",
   "rooftop",
   "food",
+  "culture",
+  "tech",
 ] as const;
 
 export type Vibe = (typeof VIBES)[number];

@@ -14,7 +14,7 @@ function validDate(value:unknown):string|null{if(typeof value!=="string"||!value
 export async function GET(req:Request){
   if(!authorized(req))return bad("Unauthorized",401);const sb=adminClient();if(!sb)return bad("Admin service is not configured",503);
   const [events,liveEvents,photos,claims,reports,drops,partners,rules]=await Promise.all([
-    sb.from("events").select("id,title,venue_name,area,starts_at,created_at").eq("status","pending").order("created_at"),
+    sb.from("events").select("id,title,venue_name,area,starts_at,ig_url,created_at").eq("status","pending").order("created_at"),
     sb.from("events").select("id,title,venue_name,area,starts_at").eq("status","live").gte("starts_at",new Date(Date.now()-2*60*60*1000).toISOString()).order("starts_at"),
     sb.from("event_photos").select("id,event_id,user_id,path,created_at,events(title)").eq("moderation_status","pending").order("created_at").limit(50),
     sb.from("quest_claims").select("id,quest_id,user_id,event_id,evidence,claimed_at,quests(title)").eq("status","pending").order("claimed_at").limit(100),
@@ -33,7 +33,10 @@ export async function POST(req:Request){
   const action=String(b.action??"");
   if(action==="review_event"){
     if(typeof b.id!=="string"||!(b.status==="live"||b.status==="rejected"))return bad("Event review needs an ID and valid status");
-    const patch:Record<string,unknown>={status:b.status};if(typeof b.lat==="number"&&typeof b.lng==="number")patch.geog=`SRID=4326;POINT(${b.lng} ${b.lat})`;
+    const patch:Record<string,unknown>={status:b.status};if(b.status==="live"){
+      if(typeof b.lat!=="number"||typeof b.lng!=="number"||!Number.isFinite(b.lat)||!Number.isFinite(b.lng)||b.lat<6.3||b.lat>6.8||b.lng<3.05||b.lng>3.95)return bad("Set a verified Lagos venue coordinate before approving this event");
+      patch.geog=`SRID=4326;POINT(${b.lng} ${b.lat})`;
+    }
     const {error}=await sb.from("events").update(patch).eq("id",b.id);if(error)return bad(error.message,500);return NextResponse.json({ok:true});
   }
   if(action==="review_photo"){

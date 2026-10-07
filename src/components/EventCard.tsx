@@ -91,7 +91,7 @@ export default function EventCard({
         <p className="seclabel pr-8">{SOURCE_LABEL[event.source]}</p>
         <h2 className="mt-0.5 pr-8 font-display text-lg font-black leading-tight">{event.title}</h2>
         <p className="hint">
-          {event.venue_name} · {event.area} · {dayLagos(event.starts_at)} from {clockLagos(event.starts_at)}
+          {event.venue_name}{event.area ? ` · ${event.area}` : ""} · {dayLagos(event.starts_at)} from {clockLagos(event.starts_at)}
         </p>
 
         <div className="mt-2 grid grid-cols-3 gap-1.5">
@@ -117,7 +117,7 @@ export default function EventCard({
             <MessageSquare size={14} />
           </Link>
           {event.ig_url && (
-            <a href={event.ig_url} target="_blank" rel="noreferrer noopener" className="btn btn-ghost flex-none" aria-label="Open the Instagram post">
+            <a href={event.ig_url} target="_blank" rel="noreferrer noopener" className="btn btn-ghost flex-none" aria-label="Open the event listing">
               <ExternalLink size={14} />
             </a>
           )}

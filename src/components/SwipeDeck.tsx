@@ -212,7 +212,7 @@ function CardFace({
               rel="noreferrer noopener"
               className="btn btn-ghost mt-3.5 w-full"
             >
-              SEE THE FLYER
+              OPEN EVENT LISTING
             </a>
           )}
         </div>
