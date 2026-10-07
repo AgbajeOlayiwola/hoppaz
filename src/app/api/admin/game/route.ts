@@ -5,7 +5,7 @@ import { NextResponse } from "next/server";
 export const runtime="nodejs";
 export const dynamic="force-dynamic";
 
-function adminClient():SupabaseClient|null{const url=process.env.NEXT_PUBLIC_SUPABASE_URL;const key=process.env.SUPABASE_SERVICE_ROLE_KEY;return url&&key?createClient(url,key,{auth:{persistSession:false,autoRefreshToken:false}}):null;}
+function adminClient():SupabaseClient|null{const url=process.env.NEXT_PUBLIC_SUPABASE_URL;const key=process.env.SUPABASE_SECRET_KEY??process.env.SUPABASE_SERVICE_ROLE_KEY;return url&&key?createClient(url,key,{auth:{persistSession:false,autoRefreshToken:false}}):null;}
 function authorized(req:Request){const secret=process.env.HOPPAZ_ADMIN_TOKEN??"";const received=(req.headers.get("authorization")??"").replace(/^Bearer\s+/i,"");if(!secret||!received)return false;const a=Buffer.from(secret);const b=Buffer.from(received);return a.length===b.length&&timingSafeEqual(a,b);}
 function hash(value:string){return createHash("sha256").update(value).digest("hex");}
 const bad=(message:string,status=400)=>NextResponse.json({error:message},{status});

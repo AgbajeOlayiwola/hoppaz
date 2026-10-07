@@ -27,54 +27,56 @@ function repaint(style: StyleSpecification): StyleSpecification {
       return l;
     }
     if (id.includes("water") || id.includes("ocean") || id.includes("bay")) {
-      if (l.type === "fill") paint["fill-color"] = BRAND.ink3;
-      if (l.type === "line") paint["line-color"] = "#2E211C";
+      if (l.type === "fill") paint["fill-color"] = "#1D2B32";
+      if (l.type === "line") paint["line-color"] = "#455963";
       return l;
     }
     if (id.includes("park") || id.includes("wood") || id.includes("landcover") || id.includes("landuse")) {
       if (l.type === "fill") {
-        paint["fill-color"] = "#141010";
-        paint["fill-opacity"] = 0.8;
+        paint["fill-color"] = id.includes("park") || id.includes("wood") ? "#29352B" : "#34322B";
+        paint["fill-opacity"] = 0.9;
       }
       return l;
     }
     if (id.includes("building")) {
       if (l.type === "fill") {
-        paint["fill-color"] = "#1C1512";
-        paint["fill-opacity"] = 0.85;
+        paint["fill-color"] = "#3A2B23";
+        paint["fill-opacity"] = 0.95;
       }
       return l;
     }
     if (id.includes("boundary") || id.includes("admin")) {
       if (l.type === "line") {
-        paint["line-color"] = "#3A2A23";
-        paint["line-opacity"] = 0.5;
+        paint["line-color"] = "#59453A";
+        paint["line-opacity"] = 0.72;
       }
       return l;
     }
     if (id.includes("bridge")) {
       if (l.type === "line") {
-        paint["line-color"] = BRAND.orange;
-        paint["line-opacity"] = 0.55;
+        paint["line-color"] = "#C85E28";
+        paint["line-opacity"] = 0.8;
       }
       return l;
     }
     if (id.includes("motorway") || id.includes("trunk") || id.includes("primary")) {
       if (l.type === "line") {
-        paint["line-color"] = "#4A2D1E";
-        paint["line-opacity"] = 0.9;
+        paint["line-color"] = "#D88A4E";
+        paint["line-opacity"] = 0.98;
       }
+      if (l.type === "fill") paint["fill-color"] = "#78513A";
       return l;
     }
     if (id.includes("road") || id.includes("street") || id.includes("tunnel") || id.includes("transit")) {
       if (l.type === "line") {
-        paint["line-color"] = "#2A1F1A";
-        paint["line-opacity"] = 0.75;
+        paint["line-color"] = "#896B56";
+        paint["line-opacity"] = 0.92;
       }
+      if (l.type === "fill") paint["fill-color"] = "#57473B";
       return l;
     }
     if (l.type === "symbol") {
-      paint["text-color"] = id.includes("place") || id.includes("city") ? "#A89588" : "#6B5B52";
+      paint["text-color"] = id.includes("place") || id.includes("city") ? "#D0B6A3" : "#A38B79";
       paint["text-halo-color"] = BRAND.ink;
       paint["text-halo-width"] = 1.2;
       if (id.includes("poi") || id.includes("housenum")) l.layout = { ...(l.layout ?? {}), visibility: "none" };

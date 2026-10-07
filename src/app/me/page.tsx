@@ -11,11 +11,13 @@ import { useHoppaz, useToast } from "@/lib/store";
 import { BADGES, levelFor } from "@/lib/brand";
 import { dayLagos } from "@/lib/geo";
 import AreaPicker from "@/components/AreaPicker";
+import { useGameDashboard } from "@/lib/game";
 
 type Visit = { event_id: string; created_at: string; title: string; venue: string; area: string | null };
 
 export default function MePage() {
   const { userId, profile, patchProfile, state } = useSession();
+  const { stats: gameStats } = useGameDashboard(userId);
   const { fix, look, setSeenTitle } = useHoppaz();
   const say = useToast((s) => s.say);
   const router = useRouter();
@@ -215,9 +217,16 @@ export default function MePage() {
         {extraBadges.map(b=>{const got=owned.includes(b.key);return <div key={b.key} title={b.description} className={clsx("rounded-md border bg-ink-2 px-2 py-3 text-center",got?"border-orange":"border-line")}><div className={clsx("text-xl leading-tight",!got&&"opacity-30 grayscale")}>{b.icon}</div><div className={clsx("mt-1 font-mono text-[8px] font-bold uppercase tracking-[0.08em]",got?"text-cream":"text-dim")}>{b.name}</div></div>})}
       </div>
 
-      <Link href="/quests" className="mb-3 flex items-center gap-3 rounded border border-orange/50 bg-orange/10 p-3">
-        <span className="text-2xl" aria-hidden>✨</span><span className="flex-1"><b className="font-display">Play the city</b><p className="hint">Quests, streaks, monthly score and your Lagos rank</p></span><span className="font-mono text-[9px] font-bold text-orange">OPEN →</span>
-      </Link>
+      <section className="mb-3 rounded border border-orange/50 bg-orange/10 p-3">
+        <div className="flex items-start justify-between gap-3">
+          <div><p className="seclabel text-orange">OUTSIDE SCORE · THIS MONTH</p><p className="mt-1 font-display text-2xl font-black">{String(gameStats?.outside_score ?? 0)}</p></div>
+          <span className="tag tag-o">{gameStats?.lagos_rank ? `LAGOS #${gameStats.lagos_rank}` : "LAGOS"}</span>
+        </div>
+        <div className="mt-2 flex items-center justify-between gap-2 border-t border-orange/20 pt-2">
+          <p className="hint">{String(gameStats?.verified_outings ?? 0)} outings · {String(gameStats?.active_days_this_week ?? 0)}/3 days this week · {String(gameStats?.outing_streak ?? 0)} week outing streak</p>
+          <Link href="/quests" className="flex-none font-mono text-[9px] font-bold tracking-wider text-orange">DETAILS →</Link>
+        </div>
+      </section>
       <Link href="/collection" className="mb-5 flex items-center gap-3 rounded border border-violet/50 bg-violet/10 p-3">
         <span className="text-2xl" aria-hidden>✨</span><span className="flex-1"><b className="font-display">Found on the map</b><p className="hint">Collectibles from events you visit</p></span><span className="font-mono text-[9px] font-bold text-orange">OPEN →</span>
       </Link>

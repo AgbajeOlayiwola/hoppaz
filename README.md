@@ -51,8 +51,8 @@ must not be mistaken for a live event feed. Keep demo fixtures out of production
 3. **Authentication → Sign In / Providers → turn on Anonymous sign-ins.** Keep
    anonymous identity enabled; there is no mandatory email registration.
 4. Configure the app's Production environment in Vercel with
-   `NEXT_PUBLIC_SUPABASE_URL`, `NEXT_PUBLIC_SUPABASE_ANON_KEY`,
-   `SUPABASE_SERVICE_ROLE_KEY`, `HOPPAZ_ADMIN_TOKEN`, `NEXT_PUBLIC_MAP_STYLE`, and
+   `NEXT_PUBLIC_SUPABASE_URL`, `NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY`,
+   `SUPABASE_SECRET_KEY`, `HOPPAZ_ADMIN_TOKEN`, `NEXT_PUBLIC_MAP_STYLE`, and
    `NEXT_PUBLIC_SUPPORT_EMAIL`. The service role key and admin token must never use
    a `NEXT_PUBLIC_` prefix. Generate a unique long random admin token and store it
    in a password manager. Use the same values in Vercel Preview only if you intend

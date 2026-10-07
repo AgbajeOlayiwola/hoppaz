@@ -13,6 +13,10 @@ import { crowdAt, crowdLevel, TONE_HEX } from "@/lib/crowd";
 import { lotFeatures } from "@/lib/eventLots";
 import type { EventRow, HopStop } from "@/lib/types";
 
+// Next's app bundlers cannot infer MapLibre's dynamically resolved module-worker
+// URL. Serve the package worker as a same-origin static asset instead.
+maplibregl.setWorkerUrl("/maplibre-gl-worker.mjs");
+
 type Props = {
   events: EventRow[];
   collectibleEventIds: string[];
@@ -149,6 +153,9 @@ export default function NightMap({
       });
       m = created;
       map.current = created;
+      created.on("error", (event) => {
+        console.error("[hoppaz] map error:", event.error);
+      });
       created.touchZoomRotate.disableRotation();
       created.addControl(new maplibregl.NavigationControl({ showCompass: false }), "bottom-right");
 

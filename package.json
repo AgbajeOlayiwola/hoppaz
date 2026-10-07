@@ -5,6 +5,7 @@
   "description": "Hoppaz Night Map: a gamified map of what is happening in Lagos tonight",
   "scripts": {
     "dev": "next dev",
+    "postinstall": "node scripts/copy-maplibre-worker.mjs",
     "build": "next build --webpack",
     "start": "next start",
     "lint": "eslint .",

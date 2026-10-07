@@ -10,6 +10,7 @@ import { useToast } from "@/lib/store";
 import { useEventCollectibles } from "@/lib/useCollectibles";
 import { useGameDrops } from "@/lib/game";
 import QrScanner from "@/components/QrScanner";
+import EventQuestList from "@/components/EventQuestList";
 import { crowdAt, crowdLevel, nightProfile, TONE_HEX } from "@/lib/crowd";
 import { areaByName, clockLagos, clockShort, dayLagos, naira, travelEstimate } from "@/lib/geo";
 import type { EventRow } from "@/lib/types";
@@ -54,6 +55,7 @@ export default function EventCard({
   const [dropCode, setDropCode] = useState("");
   const [scanDrop,setScanDrop] = useState(false);
   const [dropReward, setDropReward] = useState<{title:string;description:string;code?:string}|null>(null);
+  const [photoSubmission, setPhotoSubmission] = useState<{eventId:string;submitted:boolean}|null>(null);
   const file = useRef<HTMLInputElement>(null);
   const scroller = useRef<HTMLDivElement>(null);
 
@@ -130,6 +132,8 @@ export default function EventCard({
           {fix && km > radiusKm && <span className="tag">OUTSIDE YOUR {radiusKm} KM</span>}
           {(event.swipes_in ?? 0) > 0 && <span className="tag">{event.swipes_in} SAID THEY&apos;RE IN</span>}
         </div>
+
+        <EventQuestList eventId={event.id} userId={userId} checkedIn={checkedIn} hasPhoto={photos.some((photo) => photo.user_id === userId) || (photoSubmission?.eventId === event.id && photoSubmission.submitted)} />
 
         {gameDrops.length > 0 && (
           <section className="mt-4 rounded border border-violet/50 bg-violet/10 p-3">
@@ -208,6 +212,7 @@ export default function EventCard({
                   e.target.value = "";
                   if (!f) return;
                   const err = await upload(f);
+                  if (err?.startsWith("PHOTO SUBMITTED")) setPhotoSubmission({ eventId: event.id, submitted: true });
                   say(err ?? "PHOTO POSTED");
                 }}
               />

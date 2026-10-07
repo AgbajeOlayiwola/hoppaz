@@ -6,7 +6,7 @@ export const dynamic="force-dynamic";
 
 export async function POST(req:Request){
   const bearer=(req.headers.get("authorization")??"").replace(/^Bearer\s+/i,"");
-  const url=process.env.NEXT_PUBLIC_SUPABASE_URL;const anon=process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;const service=process.env.SUPABASE_SERVICE_ROLE_KEY;
+  const url=process.env.NEXT_PUBLIC_SUPABASE_URL;const anon=process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY??process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;const service=process.env.SUPABASE_SECRET_KEY??process.env.SUPABASE_SERVICE_ROLE_KEY;
   if(!bearer||!url||!anon||!service)return NextResponse.json({error:"Account deletion is not configured"},{status:503});
   const userClient=createClient(url,anon,{auth:{persistSession:false},global:{headers:{Authorization:`Bearer ${bearer}`}}});
   const {data:{user},error:authError}=await userClient.auth.getUser();if(authError||!user)return NextResponse.json({error:"Session expired"},{status:401});

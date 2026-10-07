@@ -12,7 +12,7 @@ accounts, event operators, and real partner approvals.
 - [ ] Confirm the private `event-photos` bucket exists and that Storage, PostGIS,
   RLS, and Realtime are enabled.
 - [ ] Configure Vercel Production variables: `NEXT_PUBLIC_SUPABASE_URL`,
-  `NEXT_PUBLIC_SUPABASE_ANON_KEY`, `SUPABASE_SERVICE_ROLE_KEY`,
+  `NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY`, `SUPABASE_SECRET_KEY`,
   `HOPPAZ_ADMIN_TOKEN`, `NEXT_PUBLIC_MAP_STYLE`, and `NEXT_PUBLIC_SUPPORT_EMAIL`.
 - [ ] Keep the service role key and admin token server-only. Use a strong unique
   admin token and share it only with authorized moderators.
