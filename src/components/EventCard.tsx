@@ -12,7 +12,7 @@ import { useGameDrops } from "@/lib/game";
 import QrScanner from "@/components/QrScanner";
 import EventQuestList from "@/components/EventQuestList";
 import { crowdAt, crowdLevel, nightProfile, TONE_HEX } from "@/lib/crowd";
-import { areaByName, clockLagos, clockShort, dayLagos, naira, travelEstimate } from "@/lib/geo";
+import { areaByName, clockLagos, clockShort, dayLagos, eventPrice, eventTitle, isEventLead, travelEstimate } from "@/lib/geo";
 import type { EventRow } from "@/lib/types";
 
 const SOURCE_LABEL: Record<EventRow["source"], string> = {
@@ -88,14 +88,14 @@ export default function EventCard({
         <button onClick={onClose} aria-label="Close" className="absolute right-2 top-2 grid h-8 w-8 place-items-center text-dim hover:text-cream">
           <X size={16} />
         </button>
-        <p className="seclabel pr-8">{SOURCE_LABEL[event.source]}</p>
-        <h2 className="mt-0.5 pr-8 font-display text-lg font-black leading-tight">{event.title}</h2>
+        <p className="seclabel pr-8">{isEventLead(event) ? "Community lead · verify details" : SOURCE_LABEL[event.source]}</p>
+        <h2 className="mt-0.5 pr-8 font-display text-lg font-black leading-tight">{eventTitle(event)}</h2>
         <p className="hint">
-          {event.venue_name}{event.area ? ` · ${event.area}` : ""} · {dayLagos(event.starts_at)} from {clockLagos(event.starts_at)}
+          {event.venue_name}{event.area ? ` · ${event.area}` : ""} · {dayLagos(event.starts_at)}{isEventLead(event) ? " · check event listing for time" : ` from ${clockLagos(event.starts_at)}`}
         </p>
 
         <div className="mt-2 grid grid-cols-3 gap-1.5">
-          <Stat label="Price" value={naira(event.price_naira)} hot />
+          <Stat label="Price" value={eventPrice(event)} hot />
           <Stat
             label={trip?.crossesBridge ? "Over the bridge" : "To get there"}
             value={trip ? `~${trip.minutes} MIN` : "SET LOCATION"}
@@ -110,9 +110,9 @@ export default function EventCard({
         </div>
 
         <div className="mt-2.5 flex gap-2">
-          <button className="btn flex-1" onClick={onCheckIn} disabled={checkedIn || !closeEnough || busy}>
+          {isEventLead(event) ? <button className="btn flex-1" disabled>VERIFY DETAILS BEFORE CHECK-IN</button> : <button className="btn flex-1" onClick={onCheckIn} disabled={checkedIn || !closeEnough || busy}>
             {checkedIn ? "CHECKED IN ✓" : busy ? "CHECKING…" : closeEnough ? "CHECK IN · +50 XP" : "GET CLOSER TO CHECK IN"}
-          </button>
+          </button>}
           <Link href={`/chat?c=${event.id}`} className="btn btn-ghost flex-none" aria-label="Event chat">
             <MessageSquare size={14} />
           </Link>

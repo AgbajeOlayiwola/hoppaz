@@ -8,7 +8,7 @@ import { FALLBACK_STYLE, addCityLayer, loadBrandStyle, riseCity } from "@/lib/ma
 import { normalizeLook } from "@/lib/avatar";
 import { avatarSvg } from "@/lib/avatarSvg";
 import type { BusFix } from "@/lib/busPosition";
-import { LAGOS_BOUNDS, LAGOS_CENTER, areaByName, clockShort, dayLagos, naira, nairaShort, travelEstimate } from "@/lib/geo";
+import { LAGOS_BOUNDS, LAGOS_CENTER, areaByName, clockShort, dayLagos, eventPrice, eventPriceShort, eventTitle, isEventLead, travelEstimate } from "@/lib/geo";
 import { crowdAt, crowdLevel, TONE_HEX } from "@/lib/crowd";
 import { lotFeatures } from "@/lib/eventLots";
 import type { EventRow, HopStop } from "@/lib/types";
@@ -415,7 +415,7 @@ export default function NightMap({
             geometry: { type: "Point", coordinates: [e.lng, e.lat] },
             properties: {
               id: e.id,
-              title: e.title.toUpperCase(),
+              title: `${isEventLead(e) ? "LEAD · " : ""}${eventTitle(e).toUpperCase()}`,
               heat: e.heat,
               inRange: !fix || e.distance_m / 1000 <= radiusKm,
               selected: e.id === selectedId,
@@ -530,11 +530,11 @@ export default function NightMap({
       box.append(el);
     };
     const km = e.distance_m / 1000;
-    line("font-display text-sm font-black leading-tight text-cream", e.title);
+    line("font-display text-sm font-black leading-tight text-cream", `${isEventLead(e) ? "LEAD · " : ""}${eventTitle(e)}`);
     line("mt-0.5 font-mono text-[10px] text-dim", `${e.venue_name}${e.area ? ` · ${e.area}` : ""}`);
     line(
       "mt-1.5 font-mono text-[11px] font-bold text-orange",
-      `${naira(e.price_naira)} · ${dayLagos(e.starts_at)} ${clockShort(e.starts_at)} · ${e.vibe.toUpperCase()}`
+      `${eventPrice(e)} · ${dayLagos(e.starts_at)} ${isEventLead(e) ? "· CHECK DETAILS" : clockShort(e.starts_at)} · ${e.vibe.toUpperCase()}`
     );
     if (fixRef.current) {
       const f = fixRef.current;
@@ -586,7 +586,7 @@ export default function NightMap({
         if (!sg) {
           const el = document.createElement("button");
           el.className = "hz-sign flex flex-col items-center";
-          el.setAttribute("aria-label", `${e.title}, ${naira(e.price_naira)}, ${clockShort(e.starts_at)}`);
+          el.setAttribute("aria-label", `${eventTitle(e)}, ${isEventLead(e) ? "event lead; verify details" : `${eventPrice(e)}, ${clockShort(e.starts_at)}`}`);
           const board = document.createElement("span");
           board.className = "hz-sign-board flex flex-col items-center";
           board.style.setProperty("--d", `${Math.min(rank, 20) * 0.06}s`);
@@ -595,7 +595,7 @@ export default function NightMap({
           full.className = "hz-full block whitespace-nowrap rounded-sm px-2 py-1 text-center leading-none shadow-chunk-sm";
           const title = document.createElement("b");
           title.className = "block font-display text-[10px] font-black";
-          title.textContent = e.title.toUpperCase(); // textContent: titles come from Hoppers
+          title.textContent = `${isEventLead(e) ? "LEAD · " : ""}${eventTitle(e).toUpperCase()}`; // textContent: titles come from Hoppers
           const collectible = document.createElement("span");
           collectible.className = "hz-collectible-label";
           collectible.textContent = "✦ FIND";
@@ -611,7 +611,7 @@ export default function NightMap({
 
           const tag = document.createElement("span");
           tag.className = "hz-tag block whitespace-nowrap rounded-sm px-1.5 py-0.5 font-mono text-[9px] font-bold leading-none shadow-chunk-sm";
-          tag.textContent = nairaShort(e.price_naira);
+          tag.textContent = eventPriceShort(e);
 
           const posts = document.createElement("span");
           posts.className = "flex w-full justify-around px-2";
@@ -642,9 +642,9 @@ export default function NightMap({
         (el.querySelector(".hz-gem") as HTMLElement).style.background = TONE_HEX[tone];
         const collectibleLabel = el.querySelector(".hz-collectible-label") as HTMLElement;
         collectibleLabel.hidden = !collectibleEventIds.includes(e.id);
-        if (collectibleEventIds.includes(e.id)) el.setAttribute("aria-label", `${e.title}, collectible available, ${naira(e.price_naira)}, ${clockShort(e.starts_at)}`);
+        if (collectibleEventIds.includes(e.id)) el.setAttribute("aria-label", `${eventTitle(e)}, collectible available, ${eventPrice(e)}, ${clockShort(e.starts_at)}`);
         (el.querySelector(".hz-meta") as HTMLElement).textContent =
-          `${nairaShort(e.price_naira)} · ${clockShort(e.starts_at)}${trip ? ` · ${trip.minutes}MIN` : ""}`;
+          `${eventPriceShort(e)} · ${isEventLead(e) ? "CHECK DETAILS" : clockShort(e.starts_at)}${trip ? ` · ${trip.minutes}MIN` : ""}`;
         // Re-measure: the text above changes width. The pop animation scales, so use layout sizes.
         const was = el.dataset.mode;
         el.dataset.mode = "full";

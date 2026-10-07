@@ -1,3 +1,5 @@
+import type { EventRow } from "./types";
+
 export type Area = { name: string; side: "mainland" | "island"; lat: number; lng: number };
 
 /**
@@ -71,6 +73,23 @@ export const naira = (n: number) => (n > 0 ? `₦${n.toLocaleString("en-NG")}` :
 /** Price for a map tag, where space is tight: ₦10K, ₦7.5K, ₦800, FREE. */
 export const nairaShort = (n: number) =>
   n <= 0 ? "FREE" : n >= 1000 ? `₦${Number((n / 1000).toFixed(1))}K` : `₦${n}`;
+
+/** Lead listings are visible before full verification; don't imply a zero fare is free. */
+export function isEventLead(event: Pick<EventRow, "title">) {
+  return event.title.startsWith("LEAD · ");
+}
+
+export function eventTitle(event: Pick<EventRow, "title">) {
+  return isEventLead(event) ? event.title.slice("LEAD · ".length) : event.title;
+}
+
+export function eventPrice(event: Pick<EventRow, "title" | "price_naira">) {
+  return isEventLead(event) ? "CHECK LISTING" : naira(event.price_naira);
+}
+
+export function eventPriceShort(event: Pick<EventRow, "title" | "price_naira">) {
+  return isEventLead(event) ? "LEAD" : nairaShort(event.price_naira);
+}
 
 /** "11PM", "7:30PM": the start time as the map shows it. */
 export function clockShort(iso: string) {

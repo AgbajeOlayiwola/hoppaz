@@ -3,7 +3,7 @@
 import { useCallback, useRef, useState } from "react";
 import { Check, X, Info, MapPin } from "lucide-react";
 import HeatBar from "./HeatBar";
-import { areaByName, clockLagos, dayLagos, naira, travelEstimate } from "@/lib/geo";
+import { areaByName, clockLagos, dayLagos, eventPrice, eventTitle, isEventLead, travelEstimate } from "@/lib/geo";
 import type { EventRow } from "@/lib/types";
 
 type Decision = "in" | "pass";
@@ -165,15 +165,15 @@ function CardFace({
       )}
 
       <p className="seclabel">{dayLagos(event.starts_at)}</p>
-      <h2 className="mt-1.5 font-display text-2xl font-black leading-[1.05]">{event.title}</h2>
+      <h2 className="mt-1.5 font-display text-2xl font-black leading-[1.05]">{isEventLead(event) ? "LEAD · " : ""}{eventTitle(event)}</h2>
       <p className="hint mt-1.5 flex items-center gap-1.5">
         <MapPin size={11} aria-hidden /> {event.venue_name} · {event.area}
       </p>
 
       <div className="mt-3 flex flex-wrap gap-1.5">
         <span className="tag tag-o">{event.vibe}</span>
-        <span className="tag">{clockLagos(event.starts_at)}</span>
-        <span className="tag">{naira(event.price_naira)}</span>
+        <span className="tag">{isEventLead(event) ? "VERIFY DETAILS" : clockLagos(event.starts_at)}</span>
+        <span className="tag">{eventPrice(event)}</span>
         {trip && <span className="tag">{trip.km.toFixed(1)} km</span>}
       </div>
 
@@ -185,8 +185,8 @@ function CardFace({
       {open && (
         <div className="mt-4 border-t border-line pt-3.5">
           <dl className="grid grid-cols-2 gap-x-4 gap-y-2.5">
-            <Fact k="Gate fee" v={naira(event.price_naira)} />
-            <Fact k="Doors" v={clockLagos(event.starts_at)} />
+            <Fact k="Gate fee" v={eventPrice(event)} />
+            <Fact k="Doors" v={isEventLead(event) ? "Check event listing" : clockLagos(event.starts_at)} />
             {trip && <Fact k="Distance" v={`${trip.km.toFixed(1)} km`} />}
             {trip && <Fact k="Est. travel" v={`~${trip.minutes} min`} />}
             {trip?.crossesBridge && <Fact k="Route" v="Over the bridge" />}

@@ -7,7 +7,7 @@ import { getSupabase } from "@/lib/supabase/client";
 import { useHoppaz, useToast } from "@/lib/store";
 import { useSession } from "@/lib/useSession";
 import { useEvents } from "@/lib/useEvents";
-import { clockLagos, naira } from "@/lib/geo";
+import { clockLagos, eventPrice, eventTitle, isEventLead } from "@/lib/geo";
 import { dateOptions, matchesDate, matchesType } from "@/lib/filters";
 import type { EventRow } from "@/lib/types";
 
@@ -119,9 +119,9 @@ export default function DiscoverPage() {
                 key={e.id}
                 className="flex-none rounded border border-orange/60 bg-ink-2 px-2.5 py-1.5"
               >
-                <p className="font-display text-[11px] font-black">{e.title}</p>
+                <p className="font-display text-[11px] font-black">{isEventLead(e) ? "LEAD · " : ""}{eventTitle(e)}</p>
                 <p className="hint text-[9px]">
-                  {clockLagos(e.starts_at)} · {naira(e.price_naira)}
+                  {isEventLead(e) ? "Check event details" : clockLagos(e.starts_at)} · {eventPrice(e)}
                 </p>
               </li>
             ))}
