@@ -1,7 +1,8 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import maplibregl, { type Map as MLMap, type GeoJSONSource } from "maplibre-gl";
+import * as maplibregl from "maplibre-gl";
+import type { Map as MLMap, GeoJSONSource } from "maplibre-gl";
 import { BRAND } from "@/lib/brand";
 import { FALLBACK_STYLE, addCityLayer, loadBrandStyle, riseCity } from "@/lib/mapStyle";
 import { normalizeLook } from "@/lib/avatar";
@@ -14,6 +15,7 @@ import type { EventRow, HopStop } from "@/lib/types";
 
 type Props = {
   events: EventRow[];
+  collectibleEventIds: string[];
   hopStops: HopStop[];
   fix: { lat: number; lng: number; area?: string | null } | null;
   radiusKm: number;
@@ -92,6 +94,7 @@ const fc = (features: GeoJSON.Feature[]): GeoJSON.FeatureCollection => ({
 
 export default function NightMap({
   events,
+  collectibleEventIds,
   hopStops,
   fix,
   radiusKm,
@@ -131,7 +134,7 @@ export default function NightMap({
       }
       if (ac.signal.aborted || !holder.current) return;
 
-      m = new maplibregl.Map({
+      const created = new maplibregl.Map({
         container: holder.current,
         style,
         center: [LAGOS_CENTER.lng, LAGOS_CENTER.lat],
@@ -144,9 +147,10 @@ export default function NightMap({
         dragRotate: false,
         pitchWithRotate: false,
       });
-      map.current = m;
-      m.touchZoomRotate.disableRotation();
-      m.addControl(new maplibregl.NavigationControl({ showCompass: false }), "bottom-right");
+      m = created;
+      map.current = created;
+      created.touchZoomRotate.disableRotation();
+      created.addControl(new maplibregl.NavigationControl({ showCompass: false }), "bottom-right");
 
       m.on("load", () => {
         if (!m) return;
@@ -347,7 +351,7 @@ export default function NightMap({
         ready.current = true;
         m.resize();
         // Nudge the data layers now that the style is up.
-        m.fire("hoppaz:ready");
+        m.fire("hoppaz:ready" as never);
         setLoaded(true);
 
         // Billboards re-sort themselves so they never pile into one blob.
@@ -454,8 +458,8 @@ export default function NightMap({
     };
 
     if (ready.current) paint();
-    else m.once("hoppaz:ready", paint);
-  }, [loaded, events, hopStops, fix, radiusKm, selectedId, at, live]);
+    else m.once("hoppaz:ready" as never, paint);
+  }, [loaded, events, collectibleEventIds, hopStops, fix, radiusKm, selectedId, at, live]);
 
   /* -------------------------------------------------- event billboards -- */
   // Every event stands on the map as a rooftop sign with its price and start
@@ -585,6 +589,9 @@ export default function NightMap({
           const title = document.createElement("b");
           title.className = "block font-display text-[10px] font-black";
           title.textContent = e.title.toUpperCase(); // textContent: titles come from Hoppers
+          const collectible = document.createElement("span");
+          collectible.className = "hz-collectible-label";
+          collectible.textContent = "✦ FIND";
           // Second line: crowd diamond, price, start, and how long to get there.
           const meta = document.createElement("span");
           meta.className = "mt-0.5 flex items-center justify-center gap-1 font-mono text-[9px] font-bold";
@@ -593,7 +600,7 @@ export default function NightMap({
           const metaText = document.createElement("span");
           metaText.className = "hz-meta";
           meta.append(gem, metaText);
-          full.append(title, meta);
+          full.append(collectible, title, meta);
 
           const tag = document.createElement("span");
           tag.className = "hz-tag block whitespace-nowrap rounded-sm px-1.5 py-0.5 font-mono text-[9px] font-bold leading-none shadow-chunk-sm";
@@ -626,6 +633,9 @@ export default function NightMap({
           ? travelEstimate({ ...fix, side: areaByName(fix.area ?? null)?.side }, { lat: e.lat, lng: e.lng, side: areaByName(e.area)?.side })
           : null;
         (el.querySelector(".hz-gem") as HTMLElement).style.background = TONE_HEX[tone];
+        const collectibleLabel = el.querySelector(".hz-collectible-label") as HTMLElement;
+        collectibleLabel.hidden = !collectibleEventIds.includes(e.id);
+        if (collectibleEventIds.includes(e.id)) el.setAttribute("aria-label", `${e.title}, collectible available, ${naira(e.price_naira)}, ${clockShort(e.starts_at)}`);
         (el.querySelector(".hz-meta") as HTMLElement).textContent =
           `${nairaShort(e.price_naira)} · ${clockShort(e.starts_at)}${trip ? ` · ${trip.minutes}MIN` : ""}`;
         // Re-measure: the text above changes width. The pop animation scales, so use layout sizes.
@@ -643,7 +653,7 @@ export default function NightMap({
       declutter.current();
     };
     if (ready.current) place();
-    else m.once("hoppaz:ready", place);
+    else m.once("hoppaz:ready" as never, place);
     // eslint-disable-next-line react-hooks/exhaustive-deps -- showPeek/hidePeek read refs
   }, [loaded, events, fix, radiusKm, selectedId, at, live]);
 
@@ -718,7 +728,7 @@ export default function NightMap({
       declutter.current();
     };
     if (ready.current) place();
-    else m.once("hoppaz:ready", place);
+    else m.once("hoppaz:ready" as never, place);
   }, [loaded, bus]);
 
   useEffect(() => {
@@ -755,7 +765,7 @@ export default function NightMap({
       }
     };
     if (ready.current) place();
-    else m.once("hoppaz:ready", place);
+    else m.once("hoppaz:ready" as never, place);
     // eslint-disable-next-line react-hooks/exhaustive-deps -- lookKey stands in for myLook
   }, [loaded, crew, fix, lookKey]);
 
@@ -774,7 +784,7 @@ export default function NightMap({
       m.flyTo({ center: [to.lng, to.lat], zoom: fix ? 12.2 : 11.2, pitch: 50, bearing: -14, duration: 3400, curve: 1.3 });
     };
     if (ready.current) go();
-    else m.once("hoppaz:ready", go);
+    else m.once("hoppaz:ready" as never, go);
     // Only the first play matters; fix is read at that moment on purpose.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [loaded, play]);

@@ -1,12 +1,15 @@
 "use client";
 
-import { useEffect, useRef } from "react";
+import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { Camera, ExternalLink, MessageSquare, X } from "lucide-react";
 import clsx from "clsx";
 import { CHECKIN_RADIUS_M } from "@/lib/useCheckin";
 import { useEventFeed } from "@/lib/useEventFeed";
 import { useToast } from "@/lib/store";
+import { useEventCollectibles } from "@/lib/useCollectibles";
+import { useGameDrops } from "@/lib/game";
+import QrScanner from "@/components/QrScanner";
 import { crowdAt, crowdLevel, nightProfile, TONE_HEX } from "@/lib/crowd";
 import { areaByName, clockLagos, clockShort, dayLagos, naira, travelEstimate } from "@/lib/geo";
 import type { EventRow } from "@/lib/types";
@@ -46,6 +49,11 @@ export default function EventCard({
 }) {
   const say = useToast((s) => s.say);
   const { photos, chat, uploading, upload } = useEventFeed(event.id, userId);
+  const { drops, claimed, busy: collecting, collect } = useEventCollectibles(event.id, userId);
+  const { drops: gameDrops, busy: dropBusy, claim: claimDrop } = useGameDrops(event.id);
+  const [dropCode, setDropCode] = useState("");
+  const [scanDrop,setScanDrop] = useState(false);
+  const [dropReward, setDropReward] = useState<{title:string;description:string;code?:string}|null>(null);
   const file = useRef<HTMLInputElement>(null);
   const scroller = useRef<HTMLDivElement>(null);
 
@@ -122,6 +130,37 @@ export default function EventCard({
           {fix && km > radiusKm && <span className="tag">OUTSIDE YOUR {radiusKm} KM</span>}
           {(event.swipes_in ?? 0) > 0 && <span className="tag">{event.swipes_in} SAID THEY&apos;RE IN</span>}
         </div>
+
+        {gameDrops.length > 0 && (
+          <section className="mt-4 rounded border border-violet/50 bg-violet/10 p-3">
+            <p className="seclabel mb-2 text-[#A98CFF]">LIVE DROP · REAL REWARD</p>
+            {gameDrops.map((drop) => <div key={drop.id} className="border-t border-line py-2 first:border-0">
+              <div className="flex items-center gap-2"><span className="text-xl">🎁</span><div className="flex-1"><b className="font-display text-sm">{drop.title}</b><p className="hint">{drop.partner?.name ?? "Hoppaz"} · surprise reward</p></div><span className="tag tag-v">{drop.reward_model.toUpperCase()}</span></div>
+              {drop.claim_method !== "proximity" && <div className="mt-2 flex gap-2"><input value={dropCode} onChange={e=>setDropCode(e.target.value)} placeholder="Enter venue QR code"/><button type="button" className="btn btn-ghost flex-none px-3" onClick={()=>setScanDrop(true)} aria-label="Scan QR"><Camera size={14}/></button></div>}
+              <button className="btn mt-2 w-full px-3 py-2" disabled={dropBusy===drop.id || !closeEnough} onClick={async()=>{const result=await claimDrop(drop,fix,dropCode);if(result.error){say(result.error);return;}setDropReward({title:result.reward??"Reward",description:result.description??"",code:result.code});say("DROP CLAIMED · REWARD REVEALED","violet");}}>{dropBusy===drop.id?"OPENING…":closeEnough?"OPEN DROP":"GET CLOSER TO CLAIM"}</button>
+            </div>)}
+            {dropReward && <div className="mt-2 rounded bg-ink p-3"><p className="seclabel text-orange">YOU GOT</p><b className="font-display text-lg">{dropReward.title}</b><p className="hint">{dropReward.description}</p>{dropReward.code&&<p className="mt-2 font-mono text-xs">{dropReward.code}</p>}</div>}
+            {scanDrop&&<QrScanner onRead={value=>{setDropCode(value);setScanDrop(false);say("QR CODE READ","violet")}} onClose={()=>setScanDrop(false)}/>}
+          </section>
+        )}
+
+        {drops.length > 0 && (
+          <section className="mt-4 rounded border border-violet/50 bg-violet/10 p-3">
+            <div className="mb-2 flex items-center justify-between">
+              <p className="seclabel text-[#A98CFF]">Event collectibles</p>
+              <Link href="/collection" className="font-mono text-[9px] font-bold text-orange">COLLECTION →</Link>
+            </div>
+            {drops.map((drop) => (
+              <div key={drop.id} className="flex items-center gap-3 border-t border-line py-2 first:border-0">
+                <span className="text-2xl" aria-hidden>{drop.collectible.emoji}</span>
+                <div className="min-w-0 flex-1"><b className="font-display text-sm">{drop.collectible.name}</b><p className="hint">{drop.collectible.description}</p></div>
+                <button className="btn flex-none px-2.5 py-2 text-[9px]" disabled={claimed.has(drop.id) || collecting === drop.id || !closeEnough} onClick={async () => { const result = await collect(drop.id, fix); say(result, result.includes("ADDED") ? "violet" : "orange"); }}>
+                  {claimed.has(drop.id) ? "COLLECTED ✓" : collecting === drop.id ? "…" : closeEnough ? "COLLECT" : "GET CLOSER"}
+                </button>
+              </div>
+            ))}
+          </section>
+        )}
 
         {/* How the night goes: expected crowd hour by hour */}
         <p className="seclabel mt-4">How the night goes · expected</p>

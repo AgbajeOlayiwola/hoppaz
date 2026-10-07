@@ -74,3 +74,25 @@ insert into public.hop_stops (hop_id, idx, name, area, geog, stop_time, role)
 select h.id, s.idx, s.name, s.area, st_point(s.lng, s.lat)::geography, s.stop_time, s.role
 from stops s cross join h
 on conflict (hop_id, idx) do nothing;
+
+-- --------------------------------------------------------- collectibles -----
+-- Reusable catalog entries can be placed at any live event. These sample drops
+-- demonstrate the loop; add/remove placements without changing the app code.
+insert into public.collectibles (key, name, description, emoji) values
+  ('lagos-night-orbit', 'Night Orbit', 'A little light from the dance floor.', '🪩'),
+  ('shrine-sound-spirit', 'Sound Spirit', 'A keepsake from a night of live music.', '🎷'),
+  ('beach-tide-token', 'Tide Token', 'A small memento from the Lagos shoreline.', '🐚'),
+  ('freedom-park-spark', 'Freedom Spark', 'A spark from a night in the city.', '✨')
+on conflict (key) do update set name = excluded.name, description = excluded.description, emoji = excluded.emoji;
+
+insert into public.collectible_drops (event_id, collectible_id)
+select e.id, c.id
+from (values
+  ('Soundgarden', 'lagos-night-orbit'),
+  ('Shrine Friday', 'shrine-sound-spirit'),
+  ('Jara Sundown', 'beach-tide-token'),
+  ('Freedom Park Live', 'freedom-park-spark')
+) as placement(event_title, collectible_key)
+join public.events e on e.title = placement.event_title
+join public.collectibles c on c.key = placement.collectible_key
+on conflict (event_id, collectible_id) do nothing;

@@ -2,13 +2,14 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { Map, Flame, Users, MessageSquare, Star } from "lucide-react";
+import { Map, Flame, Users, MessageSquare, Star, Sparkles } from "lucide-react";
 import clsx from "clsx";
 
 const TABS = [
   { href: "/", label: "MAP", Icon: Map },
   { href: "/discover", label: "TONIGHT", Icon: Flame },
   { href: "/crew", label: "CREW", Icon: Users },
+  { href: "/quests", label: "GAME", Icon: Sparkles },
   { href: "/chat", label: "CHAT", Icon: MessageSquare },
   { href: "/me", label: "ME", Icon: Star },
 ] as const;

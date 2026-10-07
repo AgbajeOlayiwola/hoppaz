@@ -21,6 +21,7 @@ export default function MePage() {
   const router = useRouter();
 
   const [owned, setOwned] = useState<string[]>([]);
+  const [extraBadges,setExtraBadges]=useState<{key:string;name:string;icon:string;description:string}[]>([]);
   const [visits, setVisits] = useState<Visit[]>([]);
   const [editing, setEditing] = useState(false);
   const [draft, setDraft] = useState("");
@@ -31,8 +32,9 @@ export default function MePage() {
     if (!sb || !userId) return;
     let cancelled = false;
     (async () => {
-      const [b, c] = await Promise.all([
+      const [b, bc, c] = await Promise.all([
         sb.from("badges").select("key").eq("user_id", userId),
+        sb.from("badge_catalog").select("key,name,icon,description"),
         sb
           .from("checkins")
           .select("event_id, created_at, events(title, venue_name, area)")
@@ -42,6 +44,7 @@ export default function MePage() {
       ]);
       if (cancelled) return;
       setOwned(((b.data ?? []) as { key: string }[]).map((r) => r.key));
+      setExtraBadges(((bc.data ?? []) as {key:string;name:string;icon:string;description:string}[]).filter(x=>!BADGES.some(badge=>badge.key===x.key)));
       setVisits(
         ((c.data ?? []) as unknown as {
           event_id: string;
@@ -209,7 +212,15 @@ export default function MePage() {
             </div>
           );
         })}
+        {extraBadges.map(b=>{const got=owned.includes(b.key);return <div key={b.key} title={b.description} className={clsx("rounded-md border bg-ink-2 px-2 py-3 text-center",got?"border-orange":"border-line")}><div className={clsx("text-xl leading-tight",!got&&"opacity-30 grayscale")}>{b.icon}</div><div className={clsx("mt-1 font-mono text-[8px] font-bold uppercase tracking-[0.08em]",got?"text-cream":"text-dim")}>{b.name}</div></div>})}
       </div>
+
+      <Link href="/quests" className="mb-3 flex items-center gap-3 rounded border border-orange/50 bg-orange/10 p-3">
+        <span className="text-2xl" aria-hidden>✨</span><span className="flex-1"><b className="font-display">Play the city</b><p className="hint">Quests, streaks, monthly score and your Lagos rank</p></span><span className="font-mono text-[9px] font-bold text-orange">OPEN →</span>
+      </Link>
+      <Link href="/collection" className="mb-5 flex items-center gap-3 rounded border border-violet/50 bg-violet/10 p-3">
+        <span className="text-2xl" aria-hidden>✨</span><span className="flex-1"><b className="font-display">Found on the map</b><p className="hint">Collectibles from events you visit</p></span><span className="font-mono text-[9px] font-bold text-orange">OPEN →</span>
+      </Link>
 
       <div className="mb-3 h-px bg-line" />
       <p className="seclabel mb-2">Your nights</p>
@@ -242,6 +253,14 @@ export default function MePage() {
         were on the bus. Four badges and you are a Captain, the inner circle. The bus never waits:
         hop or stay.
       </p>
+
+      <div className="mt-6 border-t border-line pt-4">
+        <p className="seclabel mb-2">Account & community</p>
+        <div className="flex flex-wrap gap-3 font-mono text-[9px] font-bold tracking-wider">
+          <Link href="/privacy" className="text-orange underline">PRIVACY</Link><Link href="/community" className="text-orange underline">COMMUNITY RULES</Link><Link href="/admin" className="text-dim underline">STAFF</Link>
+        </div>
+        <button className="mt-4 border-b border-red-500 pb-px font-mono text-[9px] font-bold tracking-widest text-red-400" onClick={async()=>{if(!userId||!window.confirm("Delete your Hoppaz account, activity, chats and uploaded photos? This cannot be undone."))return;const sb=getSupabase();const {data}=await sb?.auth.getSession()??{data:{session:null}};const token=data.session?.access_token;if(!token){say("SESSION EXPIRED · REOPEN HOPPAZ");return;}const response=await fetch("/api/account/delete",{method:"POST",headers:{authorization:`Bearer ${token}`}});if(!response.ok){say("ACCOUNT COULD NOT BE DELETED");return;}await sb?.auth.signOut();localStorage.removeItem("hoppaz.v1");window.location.replace("/");}}>DELETE MY ACCOUNT</button>
+      </div>
 
       <button
         className="mt-5 border-b border-orange pb-px font-mono text-[9px] font-bold tracking-widest text-orange"

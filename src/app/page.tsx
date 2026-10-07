@@ -21,6 +21,8 @@ import { levelFor } from "@/lib/brand";
 import { haversineKm } from "@/lib/geo";
 import { busPosition } from "@/lib/busPosition";
 import { crowdAt, timeSlots } from "@/lib/crowd";
+import { useCollectibleEventIds } from "@/lib/useCollectibles";
+import { supabaseConfigured } from "@/lib/supabase/client";
 
 // MapLibre touches window on import, so it stays out of the server bundle.
 const NightMap = dynamic(() => import("@/components/map/NightMap"), {
@@ -39,6 +41,7 @@ export default function MapPage() {
   } = useHoppaz();
   const { userId, profile, refresh } = useSession();
   const { events: allEvents, demo } = useEvents(fix, radiusKm);
+  const collectibleEventIds = useCollectibleEventIds(allEvents.map((e) => e.id));
   const hop = useHop();
   const { crew } = useCrew(userId);
   const { done, busy, checkIn } = useCheckin(userId, refresh);
@@ -117,6 +120,7 @@ export default function MapPage() {
     <div className="absolute inset-0 overflow-hidden">
       <NightMap
         events={events}
+        collectibleEventIds={collectibleEventIds}
         hopStops={hop?.stops ?? []}
         fix={fix}
         radiusKm={radiusKm}
@@ -221,7 +225,12 @@ export default function MapPage() {
       <div className="pointer-events-none absolute inset-x-0 bottom-2.5 z-20 flex flex-col gap-2 px-3.5">
         {demo && (
           <p className="pointer-events-auto self-start rounded border border-violet/60 bg-ink-2/92 px-2 py-1 font-mono text-[9px] font-bold tracking-[0.1em] text-[#A98CFF] backdrop-blur">
-            DEMO NIGHT · NOT CONNECTED TO THE DATABASE
+            {allEvents.length ? "DEMO NIGHT · NOT CONNECTED TO THE DATABASE" : "LIVE EVENT DATA UNAVAILABLE · CHECK DATABASE SETUP"}
+          </p>
+        )}
+        {!supabaseConfigured() && process.env.NODE_ENV === "production" && (
+          <p role="alert" className="pointer-events-auto self-start rounded border border-orange bg-ink-2/95 px-2 py-1 font-mono text-[9px] font-bold tracking-[0.1em] text-orange backdrop-blur">
+            PRODUCTION DATABASE NOT CONFIGURED · LIVE EVENTS UNAVAILABLE
           </p>
         )}
 

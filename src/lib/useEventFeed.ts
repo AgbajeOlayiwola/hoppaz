@@ -40,12 +40,12 @@ export function useEventFeed(eventId: string | null, userId: string | null) {
         .limit(6),
     ]);
     setLoading(false);
-    setPhotos(
-      ((p.data ?? []) as Omit<EventPhoto, "url">[]).map((r) => ({
-        ...r,
-        url: sb.storage.from(BUCKET).getPublicUrl(r.path).data.publicUrl,
-      }))
-    );
+    const photoRows = (p.data ?? []) as Omit<EventPhoto, "url">[];
+    const signed = await Promise.all(photoRows.map(async (r) => {
+      const { data } = await sb.storage.from(BUCKET).createSignedUrl(r.path, 60 * 60);
+      return { ...r, url: data?.signedUrl ?? "" };
+    }));
+    setPhotos(signed.filter((r) => r.url));
     setChat((m.data ?? []) as Message[]);
   }, [eventId]);
 
@@ -71,7 +71,7 @@ export function useEventFeed(eventId: string | null, userId: string | null) {
           return "CHECK IN FIRST TO POST PHOTOS";
         }
         await load();
-        return null;
+        return "PHOTO SUBMITTED · PENDING REVIEW";
       } catch {
         return "COULD NOT READ THAT PHOTO";
       } finally {

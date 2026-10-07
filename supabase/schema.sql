@@ -126,6 +126,33 @@ create table if not exists public.badges (
   primary key (user_id, key)
 );
 
+-- Reusable collectibles: definitions are independent from event placements.
+create table if not exists public.collectibles (
+  id          uuid primary key default gen_random_uuid(),
+  key         text not null unique,
+  name        text not null check (char_length(name) between 2 and 80),
+  description text not null default '',
+  emoji       text not null default '✨',
+  art_url     text,
+  created_at  timestamptz not null default now()
+);
+create table if not exists public.collectible_drops (
+  id             uuid primary key default gen_random_uuid(),
+  event_id       uuid not null references public.events(id) on delete cascade,
+  collectible_id uuid not null references public.collectibles(id) on delete cascade,
+  opens_at       timestamptz,
+  closes_at      timestamptz,
+  unique (event_id, collectible_id),
+  check (closes_at is null or opens_at is null or closes_at > opens_at)
+);
+create index if not exists collectible_drops_event_idx on public.collectible_drops (event_id);
+create table if not exists public.collections (
+  user_id      uuid not null references public.profiles(id) on delete cascade,
+  drop_id      uuid not null references public.collectible_drops(id) on delete cascade,
+  collected_at timestamptz not null default now(),
+  primary key (user_id, drop_id)
+);
+
 -- ----------------------------------------------------------------- crew -----
 create table if not exists public.crew (
   user_id    uuid not null references public.profiles(id) on delete cascade,
@@ -328,6 +355,30 @@ as $$
   on conflict (user_id, key) do nothing;
 $$;
 
+-- A drop is claimable only near its live event and only once per Hopper.
+create or replace function public.claim_collectible(
+  p_drop_id uuid, p_lat double precision, p_lng double precision
+) returns jsonb language plpgsql security definer set search_path = public as $$
+declare d collectible_drops; e events; dist double precision; c collectibles;
+begin
+  if auth.uid() is null then return jsonb_build_object('ok', false, 'reason', 'no_session'); end if;
+  select * into d from collectible_drops where id = p_drop_id;
+  if not found then return jsonb_build_object('ok', false, 'reason', 'gone'); end if;
+  select * into e from events where id = d.event_id and status = 'live';
+  if not found then return jsonb_build_object('ok', false, 'reason', 'closed'); end if;
+  if (d.opens_at is not null and now() < d.opens_at) or (d.closes_at is not null and now() > d.closes_at)
+     or now() < e.starts_at - interval '2 hours'
+     or now() > coalesce(e.ends_at, e.starts_at + interval '8 hours') + interval '2 hours' then
+    return jsonb_build_object('ok', false, 'reason', 'closed');
+  end if;
+  dist := st_distance(e.geog, st_point(p_lng, p_lat)::geography);
+  if dist > 1500 then return jsonb_build_object('ok', false, 'reason', 'too_far', 'distance_m', round(dist)); end if;
+  insert into collections (user_id, drop_id) values (auth.uid(), d.id) on conflict do nothing;
+  if not found then return jsonb_build_object('ok', false, 'reason', 'already'); end if;
+  select * into c from collectibles where id = d.collectible_id;
+  return jsonb_build_object('ok', true, 'key', c.key, 'name', c.name, 'emoji', c.emoji);
+end; $$;
+
 -- ============================================================= rls =========
 alter table public.areas      enable row level security;
 alter table public.profiles   enable row level security;
@@ -335,6 +386,9 @@ alter table public.events     enable row level security;
 alter table public.checkins   enable row level security;
 alter table public.swipes     enable row level security;
 alter table public.badges     enable row level security;
+alter table public.collectibles enable row level security;
+alter table public.collectible_drops enable row level security;
+alter table public.collections enable row level security;
 alter table public.crew       enable row level security;
 alter table public.messages   enable row level security;
 alter table public.hops       enable row level security;
@@ -373,7 +427,7 @@ create policy events_delete_own_pending on public.events for delete
 
 -- check-ins are the product: who is out, right now
 drop policy if exists checkins_read on public.checkins;
-create policy checkins_read on public.checkins for select using (true);
+create policy checkins_read on public.checkins for select using (user_id=auth.uid());
 
 -- swipes are private to the Hopper who swiped
 drop policy if exists swipes_read_own on public.swipes;
@@ -386,6 +440,12 @@ create policy swipes_delete_own on public.swipes for delete using (user_id = aut
 
 drop policy if exists badges_read on public.badges;
 create policy badges_read on public.badges for select using (true);
+drop policy if exists collectibles_read on public.collectibles;
+create policy collectibles_read on public.collectibles for select using (true);
+drop policy if exists collectible_drops_read on public.collectible_drops;
+create policy collectible_drops_read on public.collectible_drops for select using (true);
+drop policy if exists collections_read_own on public.collections;
+create policy collections_read_own on public.collections for select using (user_id = auth.uid());
 
 drop policy if exists crew_rw_own on public.crew;
 create policy crew_rw_own on public.crew for all
@@ -409,18 +469,21 @@ create table if not exists public.event_photos (
   user_id    uuid not null references public.profiles(id) on delete cascade,
   path       text not null check (char_length(path) between 3 and 200),
   hidden     boolean not null default false,
+  moderation_status text not null default 'pending' check (moderation_status in ('pending','approved','rejected')),
   created_at timestamptz not null default now()
 );
+alter table public.event_photos add column if not exists moderation_status text not null default 'pending' check (moderation_status in ('pending','approved','rejected'));
 create index if not exists event_photos_event_idx on public.event_photos (event_id, created_at desc);
 alter table public.event_photos enable row level security;
 
 drop policy if exists event_photos_read on public.event_photos;
-create policy event_photos_read on public.event_photos for select using (not hidden);
+create policy event_photos_read on public.event_photos for select using (not hidden and moderation_status = 'approved');
 drop policy if exists event_photos_insert on public.event_photos;
 create policy event_photos_insert on public.event_photos for insert to authenticated
   with check (
     user_id = auth.uid()
     and hidden = false
+    and moderation_status = 'pending'
     -- the file must sit in the poster's own folder for this event
     and path like auth.uid()::text || '/' || event_id::text || '/%'
     and exists (select 1 from public.checkins c where c.event_id = event_photos.event_id and c.user_id = auth.uid())
@@ -430,8 +493,8 @@ create policy event_photos_delete_own on public.event_photos for delete using (u
 
 -- Storage: public to read, each Hopper writes only under their own folder.
 insert into storage.buckets (id, name, public, file_size_limit, allowed_mime_types)
-values ('event-photos', 'event-photos', true, 3145728, array['image/jpeg', 'image/webp'])
-on conflict (id) do nothing;
+values ('event-photos', 'event-photos', false, 3145728, array['image/jpeg', 'image/webp'])
+on conflict (id) do update set public = false;
 
 drop policy if exists event_photos_upload on storage.objects;
 create policy event_photos_upload on storage.objects for insert to authenticated
@@ -900,3 +963,650 @@ begin
     begin alter publication supabase_realtime add table public.dm_messages; exception when duplicate_object then null; end;
   end if;
 end $$;
+
+-- ======================================================= public game loops ===
+-- New systems are additive to the original event/check-in/chat schema. The
+-- activity ledger is the source for seasonal score, streaks and report cards.
+create table if not exists public.badge_catalog (
+  key text primary key,
+  name text not null,
+  icon text not null default '✨',
+  description text not null default ''
+);
+alter table public.badge_catalog enable row level security;
+drop policy if exists badge_catalog_read on public.badge_catalog;
+create policy badge_catalog_read on public.badge_catalog for select using (true);
+
+create table if not exists public.activity_log (
+  id           uuid primary key default gen_random_uuid(),
+  user_id      uuid not null references public.profiles(id) on delete cascade,
+  action       text not null check (action in ('checkin','quest','photo','post','drop','crew')),
+  source_id    uuid,
+  event_id     uuid references public.events(id) on delete set null,
+  crew_id      uuid,
+  outside_score integer not null default 0 check (outside_score >= 0),
+  created_at   timestamptz not null default now(),
+  unique (user_id, action, source_id)
+);
+create index if not exists activity_user_time_idx on public.activity_log(user_id, created_at desc);
+create index if not exists activity_month_score_idx on public.activity_log(created_at, outside_score desc);
+
+create table if not exists public.quests (
+  id             uuid primary key default gen_random_uuid(),
+  key            text not null unique,
+  title          text not null check (char_length(title) between 2 and 100),
+  description    text not null default '',
+  quest_type     text not null check (quest_type in ('checkin','photo','qr','insight','group')),
+  event_id       uuid references public.events(id) on delete cascade,
+  starts_at      timestamptz not null default now(),
+  ends_at        timestamptz,
+  repeat_period  text not null default 'once' check (repeat_period in ('once','daily','weekly','monthly')),
+  xp_reward      integer not null default 0 check (xp_reward between 0 and 10000),
+  badge_key      text,
+  group_size     smallint not null default 2 check (group_size between 2 and 100),
+  active         boolean not null default true,
+  created_at     timestamptz not null default now(),
+  check (ends_at is null or ends_at > starts_at)
+);
+create index if not exists quests_active_idx on public.quests(active, starts_at, ends_at);
+
+create table if not exists public.quest_claims (
+  id            uuid primary key default gen_random_uuid(),
+  quest_id      uuid not null references public.quests(id) on delete cascade,
+  user_id       uuid not null references public.profiles(id) on delete cascade,
+  event_id      uuid references public.events(id) on delete set null,
+  crew_id       uuid,
+  period_key    text not null,
+  evidence      text,
+  status        text not null default 'approved' check (status in ('pending','approved','rejected')),
+  claimed_at    timestamptz not null default now(),
+  reviewed_at   timestamptz,
+  unique (quest_id, user_id, period_key)
+);
+create index if not exists quest_claim_user_idx on public.quest_claims(user_id, claimed_at desc);
+
+create table if not exists public.quest_codes (
+  id          uuid primary key default gen_random_uuid(),
+  quest_id    uuid not null references public.quests(id) on delete cascade,
+  code_hash   text not null unique,
+  valid_from  timestamptz not null default now(),
+  valid_until timestamptz,
+  max_uses    integer not null default 500 check (max_uses > 0),
+  uses        integer not null default 0 check (uses >= 0),
+  active      boolean not null default true
+);
+
+create table if not exists public.partners (
+  id          uuid primary key default gen_random_uuid(),
+  name        text not null,
+  description text not null default '',
+  logo_url    text,
+  website     text,
+  active      boolean not null default true,
+  created_at  timestamptz not null default now()
+);
+
+create table if not exists public.game_drops (
+  id            uuid primary key default gen_random_uuid(),
+  title         text not null,
+  description   text not null default '',
+  partner_id    uuid references public.partners(id) on delete set null,
+  event_id      uuid references public.events(id) on delete cascade,
+  area          text references public.areas(name),
+  geog          geography(point,4326),
+  opens_at      timestamptz not null,
+  closes_at     timestamptz not null,
+  radius_m      integer not null default 250 check (radius_m between 25 and 5000),
+  claim_method  text not null default 'either' check (claim_method in ('proximity','qr','either')),
+  max_claims    integer check (max_claims is null or max_claims > 0),
+  claimed_count integer not null default 0 check (claimed_count >= 0),
+  reward_model  text not null default 'fixed' check (reward_model in ('fixed','random')),
+  active        boolean not null default true,
+  created_at    timestamptz not null default now(),
+  check (closes_at > opens_at),
+  check (event_id is not null or geog is not null)
+);
+create index if not exists game_drops_window_idx on public.game_drops(active, opens_at, closes_at);
+create index if not exists game_drops_geog_idx on public.game_drops using gist(geog);
+
+create table if not exists public.drop_rewards (
+  id           uuid primary key default gen_random_uuid(),
+  drop_id      uuid not null references public.game_drops(id) on delete cascade,
+  reward_type  text not null check (reward_type in ('xp','badge','discount','upgrade','ticket','collectible')),
+  title        text not null,
+  description  text not null default '',
+  quantity     integer check (quantity is null or quantity >= 0),
+  claimed      integer not null default 0 check (claimed >= 0),
+  weight       numeric not null default 1 check (weight > 0),
+  xp_amount    integer not null default 0 check (xp_amount between 0 and 10000),
+  badge_key    text,
+  collectible_id uuid references public.collectibles(id) on delete set null,
+  active       boolean not null default true
+);
+create index if not exists drop_rewards_drop_idx on public.drop_rewards(drop_id, active);
+
+create table if not exists public.drop_reward_codes (
+  id           uuid primary key default gen_random_uuid(),
+  reward_id    uuid not null references public.drop_rewards(id) on delete cascade,
+  code         text not null,
+  claimed_by   uuid references public.profiles(id) on delete set null,
+  claimed_at   timestamptz,
+  unique (reward_id, code)
+);
+
+create table if not exists public.drop_claims (
+  id           uuid primary key default gen_random_uuid(),
+  drop_id      uuid not null references public.game_drops(id) on delete cascade,
+  user_id      uuid not null references public.profiles(id) on delete cascade,
+  reward_id    uuid references public.drop_rewards(id) on delete set null,
+  claimed_at   timestamptz not null default now(),
+  unique (drop_id, user_id)
+);
+
+create table if not exists public.drop_qr_codes (
+  id          uuid primary key default gen_random_uuid(),
+  drop_id     uuid not null references public.game_drops(id) on delete cascade,
+  code_hash   text not null unique,
+  valid_from  timestamptz not null,
+  valid_until timestamptz not null,
+  max_uses   integer not null default 500 check (max_uses > 0),
+  uses       integer not null default 0 check (uses >= 0),
+  active     boolean not null default true
+);
+
+-- Crews are durable groups. The legacy pairwise crew table remains for the
+-- existing friend map and search experience.
+create table if not exists public.crews (
+  id          uuid primary key default gen_random_uuid(),
+  name        text not null check (char_length(name) between 2 and 50),
+  created_by  uuid not null references public.profiles(id) on delete cascade,
+  visibility  text not null default 'private' check (visibility in ('open','private')),
+  invite_code text not null unique default upper(substr(encode(gen_random_bytes(8),'hex'),1,10)),
+  created_at  timestamptz not null default now()
+);
+create table if not exists public.crew_members (
+  crew_id    uuid not null references public.crews(id) on delete cascade,
+  user_id    uuid not null references public.profiles(id) on delete cascade,
+  role       text not null default 'member' check (role in ('owner','member')),
+  joined_at  timestamptz not null default now(),
+  primary key (crew_id,user_id)
+);
+create table if not exists public.crew_moves (
+  id          uuid primary key default gen_random_uuid(),
+  crew_id     uuid not null references public.crews(id) on delete cascade,
+  created_by  uuid not null references public.profiles(id) on delete cascade,
+  event_id    uuid references public.events(id) on delete set null,
+  title       text not null,
+  meetup      text,
+  starts_at   timestamptz not null,
+  note        text not null default '',
+  created_at  timestamptz not null default now()
+);
+create table if not exists public.crew_move_rsvps (
+  move_id     uuid not null references public.crew_moves(id) on delete cascade,
+  user_id     uuid not null references public.profiles(id) on delete cascade,
+  status      text not null check (status in ('going','maybe','cant_go')),
+  updated_at  timestamptz not null default now(),
+  primary key (move_id,user_id)
+);
+
+create table if not exists public.monthly_reports (
+  id           uuid primary key default gen_random_uuid(),
+  user_id      uuid not null references public.profiles(id) on delete cascade,
+  month_start  date not null,
+  share_token  text not null unique default encode(gen_random_bytes(12),'hex'),
+  snapshot     jsonb not null,
+  created_at   timestamptz not null default now(),
+  unique (user_id, month_start)
+);
+
+-- Photo approval is required before an image can be public or count as quest evidence.
+alter table public.event_photos add column if not exists moderation_status text not null default 'pending'
+  check (moderation_status in ('pending','approved','rejected'));
+
+alter table public.activity_log enable row level security;
+alter table public.quests enable row level security;
+alter table public.quest_claims enable row level security;
+alter table public.quest_codes enable row level security;
+alter table public.partners enable row level security;
+alter table public.game_drops enable row level security;
+alter table public.drop_rewards enable row level security;
+alter table public.drop_reward_codes enable row level security;
+alter table public.drop_claims enable row level security;
+alter table public.drop_qr_codes enable row level security;
+alter table public.crews enable row level security;
+alter table public.crew_members enable row level security;
+alter table public.crew_moves enable row level security;
+alter table public.crew_move_rsvps enable row level security;
+alter table public.monthly_reports enable row level security;
+
+drop policy if exists activity_read_own on public.activity_log;
+create policy activity_read_own on public.activity_log for select using (user_id = auth.uid());
+drop policy if exists quests_read_active on public.quests;
+create policy quests_read_active on public.quests for select using (active and starts_at <= now() and (ends_at is null or ends_at > now()));
+drop policy if exists quest_claim_read_own on public.quest_claims;
+create policy quest_claim_read_own on public.quest_claims for select using (user_id = auth.uid());
+drop policy if exists partners_read_active on public.partners;
+create policy partners_read_active on public.partners for select using (active);
+drop policy if exists drops_read_active on public.game_drops;
+create policy drops_read_active on public.game_drops for select using (active and closes_at > now());
+drop policy if exists drop_claim_read_own on public.drop_claims;
+create policy drop_claim_read_own on public.drop_claims for select using (user_id = auth.uid());
+drop policy if exists crew_read_member_or_open on public.crews;
+create policy crew_read_member_or_open on public.crews for select using (visibility = 'open' or exists(select 1 from public.crew_members m where m.crew_id = id and m.user_id = auth.uid()));
+drop policy if exists crew_member_read on public.crew_members;
+create policy crew_member_read on public.crew_members for select using (exists(select 1 from public.crew_members m where m.crew_id = crew_id and m.user_id = auth.uid()));
+drop policy if exists crew_moves_read_member on public.crew_moves;
+create policy crew_moves_read_member on public.crew_moves for select using (exists(select 1 from public.crew_members m where m.crew_id = crew_id and m.user_id = auth.uid()));
+drop policy if exists crew_rsvp_read_member on public.crew_move_rsvps;
+create policy crew_rsvp_read_member on public.crew_move_rsvps for select using (exists(select 1 from public.crew_members m join public.crew_moves cm on cm.crew_id = m.crew_id where cm.id = move_id and m.user_id = auth.uid()));
+drop policy if exists report_read_by_share_token on public.monthly_reports;
+create policy report_read_by_share_token on public.monthly_reports for select using (true);
+drop policy if exists report_insert_own on public.monthly_reports;
+create policy report_insert_own on public.monthly_reports for insert with check (user_id = auth.uid());
+
+-- Quest claims are server-verified and idempotent per recurrence period.
+create or replace function public.claim_quest(p_quest uuid, p_event uuid default null, p_code text default null, p_evidence text default null, p_crew uuid default null)
+returns jsonb language plpgsql security definer set search_path = public as $$
+declare q quests; me uuid := auth.uid(); period text; claim_status text := 'approved'; c quest_codes; members int;
+begin
+  if me is null then return jsonb_build_object('ok',false,'reason','no_session'); end if;
+  select * into q from quests where id=p_quest and active and starts_at <= now() and (ends_at is null or ends_at > now());
+  if not found then return jsonb_build_object('ok',false,'reason','closed'); end if;
+  period := case q.repeat_period when 'daily' then to_char(now() at time zone 'Africa/Lagos','YYYY-MM-DD') when 'weekly' then to_char(date_trunc('week',now() at time zone 'Africa/Lagos'),'YYYY-MM-DD') when 'monthly' then to_char(now() at time zone 'Africa/Lagos','YYYY-MM') else 'once' end;
+  if q.event_id is not null and p_event is distinct from q.event_id then return jsonb_build_object('ok',false,'reason','wrong_event'); end if;
+  if q.quest_type='checkin' and not exists(select 1 from checkins where user_id=me and event_id=coalesce(p_event,q.event_id)) then
+    return jsonb_build_object('ok',false,'reason','checkin_required');
+  elsif q.quest_type='photo' and not exists(select 1 from event_photos where user_id=me and event_id=coalesce(p_event,q.event_id) and moderation_status='approved' and not hidden) then
+    return jsonb_build_object('ok',false,'reason','approved_photo_required');
+  elsif q.quest_type in ('qr','insight') then
+    update quest_codes set uses=uses+1 where quest_id=q.id and active and code_hash=encode(digest(coalesce(p_code,''),'sha256'),'hex') and valid_from <= now() and (valid_until is null or valid_until > now()) and uses < max_uses returning * into c;
+    if not found then return jsonb_build_object('ok',false,'reason','invalid_code'); end if;
+  elsif q.quest_type='group' then
+    if p_crew is null or not exists(select 1 from crew_members where crew_id=p_crew and user_id=me) then return jsonb_build_object('ok',false,'reason','crew_required'); end if;
+    select count(*) into members from crew_members cm join checkins ci on ci.user_id=cm.user_id where cm.crew_id=p_crew and ci.event_id=coalesce(p_event,q.event_id);
+    if members < q.group_size then return jsonb_build_object('ok',false,'reason','group_not_there'); end if;
+  end if;
+  if q.quest_type in ('photo','insight') then claim_status := 'pending'; end if;
+  insert into quest_claims(quest_id,user_id,event_id,crew_id,period_key,evidence,status)
+    values(q.id,me,coalesce(p_event,q.event_id),p_crew,period,left(p_evidence,500),claim_status)
+    on conflict(quest_id,user_id,period_key) do nothing;
+  if not found then return jsonb_build_object('ok',false,'reason','already'); end if;
+  if claim_status='approved' then
+    update profiles set xp=xp+q.xp_reward where id=me;
+    insert into activity_log(user_id,action,source_id,event_id,crew_id,outside_score) values(me,'quest',p_quest,coalesce(p_event,q.event_id),p_crew,50) on conflict do nothing;
+    if q.badge_key is not null then perform award_badge(me,q.badge_key); end if;
+  end if;
+  return jsonb_build_object('ok',true,'status',claim_status,'xp',case when claim_status='approved' then q.xp_reward else 0 end);
+end $$;
+
+-- Authenticated admins are confirmed through the protected profile column.
+create or replace function public.approve_quest_claim(p_claim uuid, p_approve boolean)
+returns boolean language plpgsql security definer set search_path=public as $$
+declare c quest_claims; q quests;
+begin
+  if not exists(select 1 from profiles where id=auth.uid() and is_admin) then return false; end if;
+  update quest_claims set status=case when p_approve then 'approved' else 'rejected' end, reviewed_at=now() where id=p_claim and status='pending' returning * into c;
+  if not found then return false; end if;
+  if p_approve then
+    select * into q from quests where id=c.quest_id;
+    update profiles set xp=xp+q.xp_reward where id=c.user_id;
+    insert into activity_log(user_id,action,source_id,event_id,crew_id,outside_score) values(c.user_id,'quest',c.id,c.event_id,c.crew_id,(select score from game_score_rules where key='quest')) on conflict do nothing;
+    if q.badge_key is not null then perform award_badge(c.user_id,q.badge_key); end if;
+  end if;
+  return true;
+end $$;
+
+create or replace function public.create_crew(p_name text,p_visibility text default 'private')
+returns uuid language plpgsql security definer set search_path=public as $$
+declare c uuid;
+begin
+  if auth.uid() is null then raise exception 'no_session'; end if;
+  insert into crews(name,created_by,visibility) values(left(btrim(p_name),50),auth.uid(),case when p_visibility='open' then 'open' else 'private' end) returning id into c;
+  insert into crew_members(crew_id,user_id,role) values(c,auth.uid(),'owner');
+  return c;
+end $$;
+create or replace function public.join_crew(p_invite text)
+returns uuid language plpgsql security definer set search_path=public as $$
+declare c crews;
+begin
+  if auth.uid() is null then raise exception 'no_session'; end if;
+  select * into c from crews where invite_code=upper(btrim(p_invite)) or (visibility='open' and id::text=p_invite) limit 1;
+  if not found then return null; end if;
+  insert into crew_members(crew_id,user_id) values(c.id,auth.uid()) on conflict do nothing;
+  return c.id;
+end $$;
+
+-- Atomic drop claims: lock the drop and reward inventory, validate location/QR,
+-- allocate one reward and one optional voucher, then persist the user's claim.
+create or replace function public.claim_game_drop(p_drop uuid,p_lat double precision default null,p_lng double precision default null,p_code text default null)
+returns jsonb language plpgsql security definer set search_path=public as $$
+declare d game_drops; r drop_rewards; e events; claim_id uuid; voucher text; dist double precision; ticket drop_qr_codes; roll numeric; total numeric;
+begin
+  if auth.uid() is null then return jsonb_build_object('ok',false,'reason','no_session'); end if;
+  select * into d from game_drops where id=p_drop and active for update;
+  if not found or now()<d.opens_at or now()>d.closes_at then return jsonb_build_object('ok',false,'reason','closed'); end if;
+  if d.max_claims is not null and d.claimed_count>=d.max_claims then return jsonb_build_object('ok',false,'reason','sold_out'); end if;
+  if d.claim_method in ('qr','either') and p_code is not null then
+    update drop_qr_codes set uses=uses+1 where drop_id=d.id and active and code_hash=encode(digest(p_code,'sha256'),'hex') and valid_from<=now() and valid_until>now() and uses<max_uses returning * into ticket;
+    if not found and d.claim_method='qr' then return jsonb_build_object('ok',false,'reason','invalid_code'); end if;
+  elsif d.claim_method='qr' then return jsonb_build_object('ok',false,'reason','code_required'); end if;
+  if ticket.id is null or p_code is null then
+    if p_lat is null or p_lng is null then return jsonb_build_object('ok',false,'reason','location_required'); end if;
+    select * into e from events where id=d.event_id;
+    if coalesce(d.geog,e.geog) is null then return jsonb_build_object('ok',false,'reason','location_required'); end if;
+    dist:=st_distance(coalesce(d.geog,e.geog),st_point(p_lng,p_lat)::geography);
+    if dist>d.radius_m then return jsonb_build_object('ok',false,'reason','too_far','distance_m',round(dist)); end if;
+  end if;
+  if exists(select 1 from drop_claims where drop_id=d.id and user_id=auth.uid()) then return jsonb_build_object('ok',false,'reason','already'); end if;
+  select coalesce(sum(weight),0) into total from drop_rewards where drop_id=d.id and active and (quantity is null or claimed<quantity);
+  if total<=0 then return jsonb_build_object('ok',false,'reason','sold_out'); end if;
+  roll:=random()*total;
+  if d.reward_model='random' then
+    select dr.* into r from (select id,sum(weight) over(order by id) running from drop_rewards where drop_id=d.id and active and (quantity is null or claimed<quantity)) x join drop_rewards dr on dr.id=x.id where x.running>=roll order by x.running limit 1;
+  else
+    select * into r from drop_rewards where drop_id=d.id and active and (quantity is null or claimed<quantity) order by id limit 1;
+  end if;
+  if not found then return jsonb_build_object('ok',false,'reason','sold_out'); end if;
+  update drop_rewards set claimed=claimed+1 where id=r.id and (quantity is null or claimed<quantity);
+  if not found then return jsonb_build_object('ok',false,'reason','sold_out'); end if;
+  if r.reward_type in ('discount','upgrade','ticket') then
+    select code into voucher from drop_reward_codes where reward_id=r.id and claimed_by is null order by id limit 1 for update skip locked;
+    if voucher is null then update drop_rewards set claimed=claimed-1 where id=r.id; return jsonb_build_object('ok',false,'reason','sold_out'); end if;
+    update drop_reward_codes set claimed_by=auth.uid(),claimed_at=now() where reward_id=r.id and code=voucher;
+  end if;
+  insert into drop_claims(drop_id,user_id,reward_id) values(d.id,auth.uid(),r.id) returning id into claim_id;
+  update game_drops set claimed_count=claimed_count+1 where id=d.id;
+  if r.xp_amount>0 then update profiles set xp=xp+r.xp_amount where id=auth.uid(); end if;
+  if r.badge_key is not null then perform award_badge(auth.uid(),r.badge_key); end if;
+  insert into activity_log(user_id,action,source_id,event_id,outside_score) values(auth.uid(),'drop',claim_id,d.event_id,(select score from game_score_rules where key='drop'));
+  return jsonb_build_object('ok',true,'claim_id',claim_id,'reward',r.title,'description',r.description,'code',voucher,'xp',r.xp_amount);
+end $$;
+
+create or replace function public.my_game_stats(p_month date default date_trunc('month',now() at time zone 'Africa/Lagos')::date)
+returns jsonb language plpgsql stable security definer set search_path=public as $$
+declare me uuid:=auth.uid(); month_end date:= (p_month+interval '1 month')::date; monthly int; outing int; active_days int; daily_streak int:=0; week_days int; weekend int;
+begin
+  if me is null then return '{}'::jsonb; end if;
+  select coalesce(sum(outside_score),0),count(distinct (created_at at time zone 'Africa/Lagos')::date)
+    into monthly,active_days from activity_log where user_id=me and created_at >= p_month::timestamp at time zone 'Africa/Lagos' and created_at < month_end::timestamp at time zone 'Africa/Lagos';
+  select count(*) into outing from checkins where user_id=me and created_at >= p_month::timestamp at time zone 'Africa/Lagos' and created_at < month_end::timestamp at time zone 'Africa/Lagos';
+  select count(distinct (created_at at time zone 'Africa/Lagos')::date) into week_days from activity_log where user_id=me and created_at >= date_trunc('week',now() at time zone 'Africa/Lagos') at time zone 'Africa/Lagos';
+  select count(*) into weekend from checkins where user_id=me and extract(isodow from created_at at time zone 'Africa/Lagos') in (5,6,7) and created_at >= date_trunc('week',now() at time zone 'Africa/Lagos') at time zone 'Africa/Lagos';
+  with days as (select distinct (created_at at time zone 'Africa/Lagos')::date d from activity_log where user_id=me), chain as (select d, current_date - d as lag from days where d<=current_date order by d desc) select count(*) into daily_streak from chain where lag < 365 and lag = (select min(lag) from chain)+row_number() over(order by lag)-1;
+  return jsonb_build_object('month_start',p_month,'outside_score',monthly,'active_days',active_days,'verified_outings',outing,'active_days_this_week',week_days,'weekend_outings_this_week',weekend,'daily_streak',daily_streak,'weekly_activity_goal',week_days>=3,'weekend_goal',weekend>0,'outing_streak',0);
+end $$;
+
+create or replace function public.create_monthly_report(p_month date default (date_trunc('month',now() at time zone 'Africa/Lagos')-interval '1 month')::date)
+returns text language plpgsql security definer set search_path=public as $$
+declare me uuid:=auth.uid(); snap jsonb; token text;
+begin
+  if me is null then return null; end if;
+  snap:=my_game_stats(p_month)||jsonb_build_object('name',(select coalesce(display_name,'A Hopper') from profiles where id=me),'events',(select count(*) from checkins where user_id=me and created_at >= p_month::timestamp at time zone 'Africa/Lagos' and created_at < (p_month+interval '1 month')::timestamp at time zone 'Africa/Lagos'),'quests',(select count(*) from quest_claims where user_id=me and status='approved' and claimed_at >= p_month::timestamp at time zone 'Africa/Lagos' and claimed_at < (p_month+interval '1 month')::timestamp at time zone 'Africa/Lagos'));
+  insert into monthly_reports(user_id,month_start,snapshot) values(me,p_month,snap) on conflict(user_id,month_start) do update set snapshot=excluded.snapshot,created_at=now() returning share_token into token;
+  return token;
+end $$;
+
+-- Public leaderboards expose names and scores only, never user IDs or location.
+create or replace function public.monthly_leaderboard(p_month date default date_trunc('month',now() at time zone 'Africa/Lagos')::date,p_limit int default 50)
+returns table(rank bigint,display_name text,outside_score bigint,avatar jsonb)
+language sql stable security definer set search_path=public as $$
+ select row_number() over(order by sum(a.outside_score) desc)::bigint,coalesce(p.display_name,'Hopper'),sum(a.outside_score),p.avatar
+ from activity_log a join profiles p on p.id=a.user_id
+ where a.created_at >= p_month::timestamp at time zone 'Africa/Lagos' and a.created_at < (p_month+interval '1 month')::timestamp at time zone 'Africa/Lagos'
+ group by p.id,p.display_name,p.avatar order by sum(a.outside_score) desc limit least(greatest(p_limit,1),100);
+$$;
+
+create table if not exists public.game_score_rules (
+  key text primary key,
+  score integer not null check (score between 0 and 10000),
+  updated_at timestamptz not null default now()
+);
+insert into public.game_score_rules(key,score) values ('checkin',100),('quest',50),('photo',20),('drop',100),('post',0),('crew',20) on conflict(key) do nothing;
+alter table public.game_score_rules enable row level security;
+drop policy if exists score_rules_public_read on public.game_score_rules;
+create policy score_rules_public_read on public.game_score_rules for select using (true);
+
+-- Seed events into the activity ledger exactly once when the verified check-in
+-- transaction inserts a new checkin. User coordinates are never retained.
+create or replace function public.log_checkin_activity()
+returns trigger language plpgsql security definer set search_path=public as $$
+begin
+  insert into activity_log(user_id,action,source_id,event_id,outside_score) values(new.user_id,'checkin',new.event_id,new.event_id,(select score from game_score_rules where key='checkin')) on conflict do nothing;
+  return new;
+end $$;
+drop trigger if exists checkin_activity on public.checkins;
+create trigger checkin_activity after insert on public.checkins for each row execute function public.log_checkin_activity();
+
+-- Public quest/reward definitions; inventory, codes, claims and verification
+-- tokens are RPC-only or owner-only.
+drop policy if exists drop_rewards_no_direct_read on public.drop_rewards;
+create policy drop_rewards_no_direct_read on public.drop_rewards for select using (false);
+drop policy if exists drop_codes_no_direct_read on public.drop_reward_codes;
+create policy drop_codes_no_direct_read on public.drop_reward_codes for select using (false);
+drop policy if exists drop_qr_no_direct_read on public.drop_qr_codes;
+create policy drop_qr_no_direct_read on public.drop_qr_codes for select using (false);
+drop policy if exists quest_codes_no_direct_read on public.quest_codes;
+create policy quest_codes_no_direct_read on public.quest_codes for select using (false);
+drop policy if exists claims_insert_blocked on public.quest_claims;
+create policy claims_insert_blocked on public.quest_claims for insert with check (false);
+drop policy if exists drops_insert_blocked on public.drop_claims;
+create policy drops_insert_blocked on public.drop_claims for insert with check (false);
+drop policy if exists crew_insert_blocked on public.crews;
+create policy crew_insert_blocked on public.crews for insert with check (false);
+drop policy if exists crew_members_insert_blocked on public.crew_members;
+create policy crew_members_insert_blocked on public.crew_members for insert with check (false);
+drop policy if exists crews_update_owner on public.crews;
+create policy crews_update_owner on public.crews for update using (created_by=auth.uid()) with check (created_by=auth.uid());
+drop policy if exists moves_insert_member on public.crew_moves;
+create policy moves_insert_member on public.crew_moves for insert with check (created_by=auth.uid() and exists(select 1 from public.crew_members cm where cm.crew_id=crew_id and cm.user_id=auth.uid()));
+drop policy if exists rsvps_upsert_own on public.crew_move_rsvps;
+create policy rsvps_upsert_own on public.crew_move_rsvps for all using (user_id=auth.uid()) with check (user_id=auth.uid() and exists(select 1 from public.crew_moves cm join public.crew_members m on m.crew_id=cm.crew_id where cm.id=move_id and m.user_id=auth.uid()));
+
+
+-- Public launch hardening and policy helpers. These are repeated safely so the
+-- schema can be re-applied while the production project is being provisioned.
+alter table public.event_photos alter column moderation_status set default 'pending';
+drop policy if exists event_photos_read on public.event_photos;
+create policy event_photos_read on public.event_photos for select using (not hidden and moderation_status='approved');
+drop policy if exists event_photos_insert on public.event_photos;
+create policy event_photos_insert on public.event_photos for insert to authenticated with check (
+  user_id=auth.uid() and hidden=false and moderation_status='pending'
+  and path like auth.uid()::text || '/' || event_id::text || '/%'
+  and exists(select 1 from checkins c where c.event_id=event_photos.event_id and c.user_id=auth.uid())
+);
+drop policy if exists event_photos_storage_read on storage.objects;
+create policy event_photos_storage_read on storage.objects for select using (
+  bucket_id='event-photos' and exists(select 1 from event_photos p where p.path=name and not p.hidden and p.moderation_status='approved')
+);
+
+create or replace function public.is_crew_member(p_crew uuid)
+returns boolean language sql stable security definer set search_path=public as $$
+  select exists(select 1 from crew_members where crew_id=p_crew and user_id=auth.uid());
+$$;
+revoke all on function public.is_crew_member(uuid) from public, anon, authenticated;
+grant execute on function public.is_crew_member(uuid) to authenticated;
+
+drop policy if exists crew_read_member_or_open on public.crews;
+create policy crew_read_member_or_open on public.crews for select using (visibility='open' or public.is_crew_member(id));
+drop policy if exists crew_member_read on public.crew_members;
+create policy crew_member_read on public.crew_members for select using (public.is_crew_member(crew_id));
+drop policy if exists crew_moves_read_member on public.crew_moves;
+create policy crew_moves_read_member on public.crew_moves for select using (public.is_crew_member(crew_id));
+drop policy if exists crew_rsvp_read_member on public.crew_move_rsvps;
+create policy crew_rsvp_read_member on public.crew_move_rsvps for select using (exists(select 1 from crew_moves cm where cm.id=move_id and public.is_crew_member(cm.crew_id)));
+drop policy if exists moves_insert_member on public.crew_moves;
+create policy moves_insert_member on public.crew_moves for insert with check (created_by=auth.uid() and public.is_crew_member(crew_id));
+drop policy if exists rsvps_upsert_own on public.crew_move_rsvps;
+create policy rsvps_upsert_own on public.crew_move_rsvps for all using (user_id=auth.uid() and exists(select 1 from crew_moves cm where cm.id=move_id and public.is_crew_member(cm.crew_id))) with check (user_id=auth.uid() and exists(select 1 from crew_moves cm where cm.id=move_id and public.is_crew_member(cm.crew_id)));
+
+-- Share tokens are the only public read path for monthly report snapshots.
+drop policy if exists report_read_by_share_token on public.monthly_reports;
+create policy report_read_by_share_token on public.monthly_reports for select using (false);
+drop policy if exists report_insert_own on public.monthly_reports;
+create policy report_insert_own on public.monthly_reports for insert with check (false);
+create or replace function public.get_monthly_report(p_token text)
+returns jsonb language sql stable security definer set search_path=public as $$
+ select jsonb_build_object('month_start',month_start,'snapshot',snapshot)
+ from monthly_reports where share_token=p_token limit 1;
+$$;
+
+create or replace function public.my_game_stats(p_month date default date_trunc('month',now() at time zone 'Africa/Lagos')::date)
+returns jsonb language plpgsql stable security definer set search_path=public as $$
+declare
+  me uuid:=auth.uid(); month_end date:=(p_month+interval '1 month')::date;
+  monthly bigint; outing int; active_days int; daily_streak int:=0; week_days int; weekend int; outing_streak int:=0; lagos_rank int:=0; today date:=(now() at time zone 'Africa/Lagos')::date;
+begin
+  if me is null then return '{}'::jsonb; end if;
+  select coalesce(sum(outside_score),0),count(distinct (created_at at time zone 'Africa/Lagos')::date)
+    into monthly,active_days from activity_log where user_id=me and created_at>=p_month::timestamp at time zone 'Africa/Lagos' and created_at<month_end::timestamp at time zone 'Africa/Lagos';
+  select count(*) into outing from checkins where user_id=me and created_at>=p_month::timestamp at time zone 'Africa/Lagos' and created_at<month_end::timestamp at time zone 'Africa/Lagos';
+  select count(distinct (created_at at time zone 'Africa/Lagos')::date) into week_days from activity_log where user_id=me and created_at>=date_trunc('week',now() at time zone 'Africa/Lagos') at time zone 'Africa/Lagos';
+  select count(*) into weekend from checkins where user_id=me and extract(isodow from created_at at time zone 'Africa/Lagos') in (5,6,7) and created_at>=date_trunc('week',now() at time zone 'Africa/Lagos') at time zone 'Africa/Lagos';
+  with days as (select distinct (created_at at time zone 'Africa/Lagos')::date d from activity_log where user_id=me),
+  anchor as (select case when exists(select 1 from days where d=today) then today else today-1 end d),
+  numbered as (select days.d, anchor.d-days.d-(row_number() over(order by days.d desc)::int-1) gap from days cross join anchor where days.d<=anchor.d)
+  select count(*) into daily_streak from numbered where gap=0;
+  with weeks as (select distinct date_trunc('week',created_at at time zone 'Africa/Lagos')::date d from checkins where user_id=me),
+  anchor as (select case when exists(select 1 from weeks where d=date_trunc('week',now() at time zone 'Africa/Lagos')::date) then date_trunc('week',now() at time zone 'Africa/Lagos')::date else (date_trunc('week',now() at time zone 'Africa/Lagos')-interval '7 days')::date end d),
+  numbered as (select weeks.d, (anchor.d-weeks.d)/7-(row_number() over(order by weeks.d desc)::int-1) gap from weeks cross join anchor where weeks.d<=anchor.d)
+  select count(*) into outing_streak from numbered where gap=0;
+  return jsonb_build_object('month_start',p_month,'outside_score',monthly,'active_days',active_days,'verified_outings',outing,'active_days_this_week',week_days,'weekend_outings_this_week',weekend,'daily_streak',daily_streak,'weekly_activity_goal',week_days>=3,'weekend_goal',weekend>0,'outing_streak',outing_streak,'lagos_rank',(select coalesce((select rank::int from (select user_id,dense_rank() over(order by sum(outside_score) desc) rank from activity_log where created_at>=p_month::timestamp at time zone 'Africa/Lagos' and created_at<month_end::timestamp at time zone 'Africa/Lagos' group by user_id) ranks where user_id=me),0)));
+end $$;
+
+create or replace function public.claim_quest(p_quest uuid,p_event uuid default null,p_code text default null,p_evidence text default null,p_crew uuid default null)
+returns jsonb language plpgsql security definer set search_path=public as $$
+declare q quests; me uuid:=auth.uid(); period text; claim_status text:='approved'; c quest_codes; members int; new_claim uuid; photo_ref uuid;
+begin
+  if me is null then return jsonb_build_object('ok',false,'reason','no_session'); end if;
+  select * into q from quests where id=p_quest and active and starts_at<=now() and (ends_at is null or ends_at>now());
+  if not found then return jsonb_build_object('ok',false,'reason','closed'); end if;
+  period:=case q.repeat_period when 'daily' then to_char(now() at time zone 'Africa/Lagos','YYYY-MM-DD') when 'weekly' then to_char(date_trunc('week',now() at time zone 'Africa/Lagos'),'YYYY-MM-DD') when 'monthly' then to_char(now() at time zone 'Africa/Lagos','YYYY-MM') else 'once' end;
+  if q.event_id is not null and p_event is distinct from q.event_id then return jsonb_build_object('ok',false,'reason','wrong_event'); end if;
+  if q.quest_type='checkin' and not exists(select 1 from checkins where user_id=me and event_id=coalesce(p_event,q.event_id)) then return jsonb_build_object('ok',false,'reason','checkin_required');
+  elsif q.quest_type='photo' then
+    select p.id,p.moderation_status into photo_ref,claim_status from event_photos p where p.user_id=me and p.event_id=coalesce(p_event,q.event_id) and not p.hidden and p.moderation_status in ('pending','approved') and not exists(select 1 from quest_claims old where old.quest_id=q.id and old.evidence_id=p.id) order by p.created_at desc limit 1;
+    if photo_ref is null then return jsonb_build_object('ok',false,'reason','photo_required'); end if;
+    claim_status:=case when exists(select 1 from event_photos where id=photo_ref and moderation_status='approved') then 'approved' else 'pending' end;
+  elsif q.quest_type in ('qr','insight') then
+    update quest_codes set uses=uses+1 where quest_id=q.id and active and code_hash=encode(digest(coalesce(p_code,''),'sha256'),'hex') and valid_from<=now() and (valid_until is null or valid_until>now()) and uses<max_uses returning * into c;
+    if not found then return jsonb_build_object('ok',false,'reason','invalid_code'); end if;
+    if q.quest_type='insight' then claim_status:='pending'; end if;
+  elsif q.quest_type='group' then
+    if p_crew is null or not public.is_crew_member(p_crew) then return jsonb_build_object('ok',false,'reason','crew_required'); end if;
+    select count(*) into members from crew_members cm join checkins ci on ci.user_id=cm.user_id where cm.crew_id=p_crew and ci.event_id=coalesce(p_event,q.event_id);
+    if members<q.group_size then return jsonb_build_object('ok',false,'reason','group_not_there'); end if;
+  end if;
+  insert into quest_claims(quest_id,user_id,event_id,crew_id,period_key,evidence,status,evidence_id) values(q.id,me,coalesce(p_event,q.event_id),p_crew,period,left(p_evidence,500),claim_status,photo_ref) on conflict(quest_id,user_id,period_key) do nothing returning id into new_claim;
+  if new_claim is null then return jsonb_build_object('ok',false,'reason','already'); end if;
+  if claim_status='approved' then
+    update profiles set xp=xp+q.xp_reward where id=me;
+    insert into activity_log(user_id,action,source_id,event_id,crew_id,outside_score) values(me,'quest',new_claim,coalesce(p_event,q.event_id),p_crew,(select score from game_score_rules where key='quest'));
+    if q.badge_key is not null then perform award_badge(me,q.badge_key); end if;
+  end if;
+  return jsonb_build_object('ok',true,'status',claim_status,'xp',case when claim_status='approved' then q.xp_reward else 0 end);
+end $$;
+
+-- Reward-code assignment happens only after a validated claim. Existing legacy
+-- collectibles remain readable and claimable during the launch transition.
+
+create or replace function public.my_drop_claims()
+returns table(drop_id uuid,title text,partner text,reward text,description text,code text,claimed_at timestamptz)
+language sql stable security definer set search_path=public as $$
+ select c.drop_id,d.title,p.name,r.title,r.description,v.code,c.claimed_at
+ from drop_claims c join game_drops d on d.id=c.drop_id left join partners p on p.id=d.partner_id left join drop_rewards r on r.id=c.reward_id left join drop_reward_codes v on v.reward_id=r.id and v.claimed_by=c.user_id
+ where c.user_id=auth.uid() order by c.claimed_at desc;
+$$;
+
+create or replace function public.log_approved_photo()
+returns trigger language plpgsql security definer set search_path=public as $$
+begin
+ if new.moderation_status='approved' and (tg_op='INSERT' or old.moderation_status is distinct from 'approved') then
+   insert into activity_log(user_id,action,source_id,event_id,outside_score) values(new.user_id,'photo',new.id,new.event_id,(select score from game_score_rules where key='photo')) on conflict do nothing;
+   update quest_claims set status='approved',reviewed_at=now() where evidence_id=new.id and status='pending';
+   update profiles p set xp=p.xp+x.amount from (select c.user_id,sum(q.xp_reward) amount from quest_claims c join quests q on q.id=c.quest_id where c.evidence_id=new.id and c.status='approved' group by c.user_id) x where p.id=x.user_id;
+   insert into activity_log(user_id,action,source_id,event_id,crew_id,outside_score) select c.user_id,'quest',c.id,c.event_id,c.crew_id,(select score from game_score_rules where key='quest') from quest_claims c where c.evidence_id=new.id and c.status='approved' on conflict do nothing;
+ end if;
+ return new;
+end $$;
+drop trigger if exists event_photo_approval_activity on public.event_photos;
+create trigger event_photo_approval_activity after insert or update of moderation_status on public.event_photos for each row execute function public.log_approved_photo();
+
+create or replace function public.log_chat_activity()
+returns trigger language plpgsql security definer set search_path=public as $$
+declare who uuid;
+begin
+ select user_id into who from room_identities where id=new.author_key;
+ if who is not null then insert into activity_log(user_id,action,source_id,outside_score) values(who,'post',new.id,(select score from game_score_rules where key='post')) on conflict do nothing; end if;
+ return new;
+end $$;
+drop trigger if exists message_activity on public.messages;
+create trigger message_activity after insert on public.messages for each row execute function public.log_chat_activity();
+
+
+grant select on public.quests,public.partners,public.game_drops,public.game_score_rules,public.badge_catalog to anon,authenticated;
+grant select on public.activity_log,public.quest_claims,public.drop_claims,public.crews,public.crew_members,public.crew_moves,public.crew_move_rsvps to authenticated;
+grant insert,update on public.crew_move_rsvps to authenticated;
+grant insert on public.crew_moves to authenticated;
+
+create or replace function public.admin_award_xp(p_user uuid,p_xp int,p_source uuid,p_event uuid default null,p_crew uuid default null)
+returns void language plpgsql security definer set search_path=public as $$
+declare inserted uuid;
+begin
+ if auth.role()<>'service_role' then raise exception 'service_only'; end if;
+ insert into activity_log(user_id,action,source_id,event_id,crew_id,outside_score) values(p_user,'quest',p_source,p_event,p_crew,(select score from game_score_rules where key='quest')) on conflict do nothing returning id into inserted;
+ if inserted is null then return; end if;
+ update profiles set xp=xp+greatest(0,least(p_xp,10000)) where id=p_user;
+end $$;
+revoke all on function public.admin_award_xp(uuid,int,uuid,uuid,uuid) from public,anon,authenticated;
+grant execute on function public.admin_award_xp(uuid,int,uuid,uuid,uuid) to service_role;
+
+create or replace function public.create_monthly_report(p_month date default (date_trunc('month',now() at time zone 'Africa/Lagos')-interval '1 month')::date)
+returns text language plpgsql security definer set search_path=public as $$
+declare me uuid:=auth.uid(); snap jsonb; token text; month_end date:=(p_month+interval '1 month')::date;
+begin
+ if me is null then return null; end if;
+ snap:=my_game_stats(p_month)||jsonb_build_object(
+  'name',(select coalesce(display_name,'A Hopper') from profiles where id=me),
+  'events',(select count(*) from checkins where user_id=me and created_at>=p_month::timestamp at time zone 'Africa/Lagos' and created_at<month_end::timestamp at time zone 'Africa/Lagos'),
+  'quests',(select count(*) from quest_claims where user_id=me and status='approved' and claimed_at>=p_month::timestamp at time zone 'Africa/Lagos' and claimed_at<month_end::timestamp at time zone 'Africa/Lagos'),
+  'crew_activity',(select count(*) from activity_log where user_id=me and crew_id is not null and created_at>=p_month::timestamp at time zone 'Africa/Lagos' and created_at<month_end::timestamp at time zone 'Africa/Lagos'),
+  'lagos_rank',(select rank::int from (select user_id,dense_rank() over(order by sum(outside_score) desc) rank from activity_log where created_at>=p_month::timestamp at time zone 'Africa/Lagos' and created_at<month_end::timestamp at time zone 'Africa/Lagos' group by user_id) ranks where user_id=me));
+ insert into monthly_reports(user_id,month_start,snapshot) values(me,p_month,snap) on conflict(user_id,month_start) do update set snapshot=excluded.snapshot,created_at=now() returning share_token into token;
+ return token;
+end $$;
+
+create or replace function public.admin_review_quest_claim(p_claim uuid,p_approve boolean)
+returns boolean language plpgsql security definer set search_path=public as $$
+declare c quest_claims; q quests;
+begin
+ if auth.role()<>'service_role' then raise exception 'service_only'; end if;
+ update quest_claims set status=case when p_approve then 'approved' else 'rejected' end,reviewed_at=now() where id=p_claim and status='pending' returning * into c;
+ if not found then return false; end if;
+ if p_approve then
+   select * into q from quests where id=c.quest_id;
+   perform admin_award_xp(c.user_id,q.xp_reward,c.id,c.event_id,c.crew_id);
+   if q.badge_key is not null then insert into badges(user_id,key) values(c.user_id,q.badge_key) on conflict do nothing; end if;
+ end if;
+ return true;
+end $$;
+revoke all on function public.admin_review_quest_claim(uuid,boolean) from public,anon,authenticated;
+grant execute on function public.admin_review_quest_claim(uuid,boolean) to service_role;
+
+alter table public.reports add column if not exists reviewed_at timestamptz;
+
+drop policy if exists checkins_read on public.checkins;
+create policy checkins_read on public.checkins for select using (user_id=auth.uid());
+
+create or replace function public.log_crew_rsvp_activity()
+returns trigger language plpgsql security definer set search_path=public as $$
+begin
+ if new.status='going' then
+   insert into activity_log(user_id,action,source_id,crew_id,outside_score)
+     select new.user_id,'crew',new.move_id,cm.crew_id,(select score from game_score_rules where key='crew')
+     from crew_moves cm where cm.id=new.move_id on conflict do nothing;
+ end if;
+ return new;
+end $$;
+drop trigger if exists crew_rsvp_activity on public.crew_move_rsvps;
+create trigger crew_rsvp_activity after insert or update of status on public.crew_move_rsvps for each row execute function public.log_crew_rsvp_activity();

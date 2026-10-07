@@ -24,8 +24,9 @@ export function useEvents(fix: Fix, radiusKm: number) {
   const load = useCallback(async () => {
     const sb = getSupabase();
     if (!sb) {
-      setEvents(withDistance(DEMO_EVENTS, fix));
-      setDemo(true);
+      const production = process.env.NODE_ENV === "production";
+      setEvents(production ? [] : withDistance(DEMO_EVENTS, fix));
+      setDemo(!production);
       return;
     }
     setLoading(true);
@@ -42,7 +43,8 @@ export function useEvents(fix: Fix, radiusKm: number) {
     setLoading(false);
     if (error || !data) {
       console.warn("[hoppaz] events_near failed, showing the demo night:", error?.message);
-      setEvents(withDistance(DEMO_EVENTS, fix));
+      const production = process.env.NODE_ENV === "production";
+      setEvents(production ? [] : withDistance(DEMO_EVENTS, fix));
       setDemo(true);
       return;
     }

@@ -100,7 +100,7 @@ export default function PersonCard({
                 </button>
               ))}
             </div>
-            <p className="hint mt-2">Reports go to the Hoppaz crew with what they wrote. They're not told who reported.</p>
+            <p className="hint mt-2">Reports go to the Hoppaz crew with what they wrote. They&apos;re not told who reported.</p>
           </div>
         )}
       </div>

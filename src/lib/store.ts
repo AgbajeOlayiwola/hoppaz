@@ -52,7 +52,11 @@ export const useHoppaz = create<HoppazState>()(
     }),
     {
       name: "hoppaz.v1",
-      partialize: ({ dateFilter: _d, ...rest }) => rest,
+      partialize: (state) => {
+        const { dateFilter, ...rest } = state;
+        void dateFilter;
+        return rest;
+      },
     }
   )
 );

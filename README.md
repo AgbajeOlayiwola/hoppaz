@@ -36,23 +36,45 @@ cp .env.example .env.local     # fill in the Supabase values
 npm run dev                     # http://localhost:3000
 ```
 
-It runs with no env vars at all: the app falls back to a built-in demo night so you
-can see every screen before Supabase exists. A violet badge on the map says
-`DEMO NIGHT` whenever that is what you are looking at.
+The UI can be opened without env vars, but production features require Supabase. A
+production build with missing or unreachable Supabase shows an unavailable state; it
+must not be mistaken for a live event feed. Keep demo fixtures out of production.
 
 ### Supabase setup
 
-1. Create a project at supabase.com. Free tier is enough to launch.
-2. SQL Editor, run `supabase/schema.sql`, then `supabase/seed.sql`.
-3. **Authentication → Sign In / Providers → turn on Anonymous sign-ins.** Without
-   this nothing saves and the app stays in demo mode.
-4. Project Settings → API: copy the URL and the `anon` key into `.env.local`.
-5. The `service_role` key goes in `SUPABASE_SERVICE_ROLE_KEY`, server side only,
-   and is used by the moderation route.
+1. Create a fresh Supabase project in the intended production region and save its
+   database password and recovery details in the team's password manager.
+2. In SQL Editor, run `supabase/schema.sql` against the empty project. This creates
+   the tables, PostGIS functions, RLS policies, private photo bucket, and Realtime
+   publication entries. Do not run `supabase/seed.sql` in production: it contains
+   sample events and test data. Add verified Lagos events through the staff queue.
+3. **Authentication → Sign In / Providers → turn on Anonymous sign-ins.** Keep
+   anonymous identity enabled; there is no mandatory email registration.
+4. Configure the app's Production environment in Vercel with
+   `NEXT_PUBLIC_SUPABASE_URL`, `NEXT_PUBLIC_SUPABASE_ANON_KEY`,
+   `SUPABASE_SERVICE_ROLE_KEY`, `HOPPAZ_ADMIN_TOKEN`, `NEXT_PUBLIC_MAP_STYLE`, and
+   `NEXT_PUBLIC_SUPPORT_EMAIL`. The service role key and admin token must never use
+   a `NEXT_PUBLIC_` prefix. Generate a unique long random admin token and store it
+   in a password manager. Use the same values in Vercel Preview only if you intend
+   preview deployments to access production data; otherwise create a separate
+   Supabase staging project.
+5. Apply the same public and server environment variables in local `.env.local`.
+   Restart the dev server after changing them. Set the privacy email to a monitored
+   address on Hoppaz's domain before launch.
+6. Configure Supabase Auth URL settings with the actual production domain and
+   localhost for local work. Check that anonymous sign-in works from the deployed
+   domain, then verify RLS using a normal anonymous account before loading real data.
+7. Add approved event locations and staff-approved partners/drops at `/admin`.
+   The launch desk is protected by `HOPPAZ_ADMIN_TOKEN`; do not share the token with
+   players. Publish community rules and have the product owner complete the privacy
+   notice's controller identity and retention details before opening the app.
 
 ### Deploying
 
-Push to GitHub, import into Vercel, paste the same env vars. Nothing else to do.
+The repository is already intended for the existing Vercel app. After setting the
+Production environment values, deploy the reviewed commit from the Vercel dashboard
+or CI, then smoke-test the production URL on mobile and desktop. Do not consider
+launch complete until the checklist in `docs/LAUNCH_CHECKLIST.md` is signed off.
 
 ---
 
@@ -63,9 +85,12 @@ src/
   app/
     page.tsx            map, the landing page
     discover/           the swipe deck
-    crew/               crew, search and leaderboard
-    chat/               channel chat on Supabase Realtime
-    me/                 XP, badges, ladder, history
+    crew/               friend network and lasting open/private crews
+    chat/               event rooms, waves and direct chat on Supabase Realtime
+    quests/             quests, Outside Score, streaks and Lagos leaderboard
+    drops/              timed event and neighborhood rewards
+    admin/              token-protected operations desk
+    me/                 XP, badges, account controls and history
     me/avatar/          the look editor: skin, hair, face, Lagos-label wardrobe
     drop/               add an event, with the caption parser
     api/admin/events/   moderation queue, token guarded
@@ -83,8 +108,8 @@ src/
     avatarSvg.ts        draws a look as an SVG string (React and map markers)
     useEvents / useSession / useCheckin / useCrew
 supabase/
-  schema.sql            tables, RLS, RPCs, heat view
-  seed.sql              Lagos areas, a sample night, Hop 02
+  schema.sql            tables, RLS, RPCs, photo storage and Realtime setup
+  seed.sql              local/demo sample data; never use for public production
 ```
 
 ### The things worth knowing
@@ -139,15 +164,18 @@ three hours (`here_now` in `events_near`). Every later slot is an estimate from 
 heat and a typical Lagos night (`lib/crowd.ts`), and the UI says EXPECTED so nobody reads a
 guess as a crowd.
 
-**Event photos** live in the `event-photos` storage bucket. Only a Hopper the server has
-checked in at that event can post one (enforced in RLS, not the client). Photos go live
-straight away; hide one by setting `event_photos.hidden = true`.
+**Event photos** live in the private `event-photos` storage bucket. Only a Hopper the
+server has checked in at that event can submit one (enforced in RLS, not the client).
+New images stay hidden pending review; the staff launch desk approves or rejects them.
+Approved images are served with short-lived signed URLs.
 
 ---
 
-## What is still open
+## Launch status and remaining setup
 
-- **Photo moderation is a SQL update.** Fine for a small community, not for strangers.
+- **Production credentials and cloud provisioning are external setup.** The project
+  still needs its production Supabase project, Vercel environment values, verified
+  Lagos listings, real partner agreements, and a live deployment smoke test.
 
 - **The wardrobe names real Lagos labels** (Orange Culture, Lagos Space Programme,
   Kenneth Ize, Tokyo James, Maki Oh, Lisa Folawiyo, Mai Atafo, WAFFLESNCREAM, Motherlan,
@@ -163,9 +191,8 @@ straight away; hide one by setting `event_photos.hidden = true`.
   Fine for a sort order, not fine for telling someone they will make the 11:30 stop.
 - **Dropped events sit at the area centroid** until an admin approves them with a real
   point. A map-tap pin picker in the drop form would remove that step.
-- **Moderation is a curl.** It wants a real screen before anyone but Jae runs it.
-- **Crew is one-directional**: adding someone does not ask them. That is fine for a
-  small community and wrong once strangers join.
+- **Legal and operational launch details need owner input.** Confirm privacy contact,
+  data retention, incident response and moderator coverage before public launch.
 - **No push notifications.** "Your crew just checked in at South Social" is the obvious
   retention loop and is not built.
 # hoppaz

@@ -218,6 +218,17 @@
 .hz-sign .hz-meta {
   color: #b83600;
 }
+.hz-collectible-label {
+  display: block;
+  margin-bottom: 2px;
+  color: #6f42d8;
+  font-family: var(--font-mono), monospace;
+  font-size: 7px;
+  font-weight: 700;
+  letter-spacing: 0.12em;
+}
+.hz-collectible-label[hidden] { display: none; }
+.hz-sign.hz-on .hz-collectible-label { color: #0e0b0a; }
 .hz-sign.hz-on .hz-full,
 .hz-sign.hz-on .hz-tag {
   background: #ff4d00;

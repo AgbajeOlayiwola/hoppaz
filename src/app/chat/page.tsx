@@ -1,221 +1,86 @@
 "use client";
 
-import { Suspense, useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { useSearchParams } from "next/navigation";
+import { Suspense, useMemo, useState } from "react";
+import Link from "next/link";
+import { useSearchParams, useRouter } from "next/navigation";
+import { Hand, MessageCircle, Users } from "lucide-react";
 import clsx from "clsx";
-import { getSupabase } from "@/lib/supabase/client";
 import { useSession } from "@/lib/useSession";
 import { useEvents } from "@/lib/useEvents";
-import { useHoppaz } from "@/lib/store";
-import type { Message } from "@/lib/types";
+import { useHoppaz, useToast } from "@/lib/store";
+import { useInbox, useRoom, useWhosHere, wave } from "@/lib/chat";
+import ChatFace from "@/components/chat/ChatFace";
+import PersonCard from "@/components/chat/PersonCard";
 
 export default function ChatPage() {
-  return (
-    <Suspense fallback={<div className="grid h-full place-items-center"><span className="hint">LOADING…</span></div>}>
-      <Chat />
-    </Suspense>
-  );
+  return <Suspense fallback={<div className="grid h-full place-items-center"><span className="hint">LOADING…</span></div>}><Chat /></Suspense>;
 }
 
 function Chat() {
   const params = useSearchParams();
+  const router = useRouter();
   const { userId, profile } = useSession();
   const { fix } = useHoppaz();
   const { events } = useEvents(fix, 45);
-
   const [channel, setChannel] = useState(params.get("c") ?? "base");
-  const [msgs, setMsgs] = useState<Message[]>([]);
-  const [names, setNames] = useState<Record<string, string>>({});
+  const [view, setView] = useState<"room" | "inbox">("room");
   const [body, setBody] = useState("");
-  const [live, setLive] = useState(false);
-  const feed = useRef<HTMLDivElement>(null);
+  const [anon, setAnon] = useState(false);
+  const [person, setPerson] = useState<{ key: string; name: string; look?: unknown; anon: boolean; messageId?: string; excerpt?: string } | null>(null);
+  const say = useToast((s) => s.say);
+  const { msgs, mine, alias, live, send } = useRoom(channel, userId);
+  const { waves, dms, respond } = useInbox(userId);
+  const event = events.find((e) => e.id === channel);
+  const { people, reload } = useWhosHere(event?.id ?? null, !!event && !event.id.startsWith("demo-"));
+  const rooms = useMemo(() => [{ id: "base", label: "BASE" }, ...events.slice(0, 8).map((e) => ({ id: e.id, label: e.title.toUpperCase() }))], [events]);
 
-  const channels = useMemo(() => {
-    const top = events.slice(0, 6).map((e) => ({ id: e.id, label: e.title.toUpperCase() }));
-    const list = [{ id: "base", label: "BASE" }, ...top];
-    if (!list.some((c) => c.id === channel)) {
-      const e = events.find((x) => x.id === channel);
-      list.push({ id: channel, label: (e?.title ?? channel.replace(/^hop-/, "HOP ")).toUpperCase() });
-    }
-    return list;
-  }, [events, channel]);
-
-  const resolveNames = useCallback(async (rows: Message[]) => {
-    const sb = getSupabase();
-    if (!sb) return;
-    const need = [...new Set(rows.map((r) => r.user_id))].filter((id) => !(id in names));
-    if (!need.length) return;
-    const { data } = await sb.from("profiles").select("id, display_name").in("id", need);
-    if (!data) return;
-    setNames((n) => {
-      const out = { ...n };
-      (data as { id: string; display_name: string | null }[]).forEach((p) => {
-        out[p.id] = p.display_name || "A Hopper";
-      });
-      return out;
-    });
-  }, [names]);
-
-  // history
-  useEffect(() => {
-    const sb = getSupabase();
-    if (!sb) {
-      setMsgs([]);
-      setLive(false);
-      return;
-    }
-    let cancelled = false;
-    (async () => {
-      const { data } = await sb
-        .from("messages")
-        .select("*")
-        .eq("channel", channel)
-        .order("created_at", { ascending: false })
-        .limit(80);
-      if (cancelled || !data) return;
-      const rows = (data as Message[]).slice().reverse();
-      setMsgs(rows);
-      void resolveNames(rows);
-    })();
-    return () => {
-      cancelled = true;
-    };
-    // resolveNames intentionally excluded: it changes with the name cache
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [channel]);
-
-  // realtime
-  useEffect(() => {
-    const sb = getSupabase();
-    if (!sb) return;
-    const ch = sb
-      .channel(`room:${channel}`)
-      .on(
-        "postgres_changes",
-        { event: "INSERT", schema: "public", table: "messages", filter: `channel=eq.${channel}` },
-        (payload) => {
-          const m = payload.new as Message;
-          setMsgs((prev) => (prev.some((p) => p.id === m.id) ? prev : [...prev, m].slice(-120)));
-          void resolveNames([m]);
-        }
-      )
-      .subscribe((status) => setLive(status === "SUBSCRIBED"));
-    return () => {
-      void sb.removeChannel(ch);
-    };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [channel]);
-
-  useEffect(() => {
-    feed.current?.scrollTo({ top: feed.current.scrollHeight });
-  }, [msgs]);
-
-  const send = async (e: React.FormEvent) => {
+  const submit = async (e: React.FormEvent) => {
     e.preventDefault();
     const text = body.trim();
     if (!text) return;
-    setBody("");
-    const sb = getSupabase();
-    if (!sb || !userId) {
-      setMsgs((m) => [
-        ...m,
-        {
-          id: `local-${Date.now()}`,
-          channel,
-          user_id: "me",
-          body: text,
-          created_at: new Date().toISOString(),
-        },
-      ]);
-      return;
-    }
-    const { error } = await sb.from("messages").insert({ channel, user_id: userId, body: text });
-    if (error) console.warn("[hoppaz] message not sent:", error.message);
+    const error = await send(text, anon);
+    if (error) say(error);
+    else setBody("");
   };
 
-  const label = channels.find((c) => c.id === channel)?.label ?? "BASE";
-
-  return (
-    <div className="flex h-full flex-col overflow-hidden px-4">
-      <header className="pad-top flex-none pb-2">
-        <h1 className="font-display text-2xl font-black leading-none">The bus chat</h1>
-        <p className={clsx("seclabel mt-1.5", live ? "text-ok" : "text-dim")}>
-          {live ? `LIVE · ${label}` : `${label} · NOT CONNECTED`}
-        </p>
-      </header>
-
-      <div className="flex-none overflow-x-auto pb-3 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
-        <div className="flex gap-1.5">
-          {channels.map((c) => (
-            <button
-              key={c.id}
-              onClick={() => setChannel(c.id)}
-              aria-pressed={c.id === channel}
-              className={clsx(
-                "flex-none whitespace-nowrap rounded-full border px-2.5 py-1.5 font-mono text-[9.5px] font-bold tracking-[0.08em]",
-                c.id === channel
-                  ? "border-orange bg-orange text-ink"
-                  : "border-line text-dim"
-              )}
-            >
-              {c.label}
-            </button>
-          ))}
-        </div>
-      </div>
-
-      <div ref={feed} className="flex min-h-0 flex-1 flex-col gap-2.5 overflow-y-auto pb-3">
-        {msgs.length === 0 ? (
-          <p className="hint">
-            Quiet in here. Say where you are coming from and who is out tonight.
-          </p>
-        ) : (
-          msgs.map((m) => {
-            const mine = m.user_id === userId || m.user_id === "me";
-            const who = mine ? profile?.display_name || "You" : names[m.user_id] || "A Hopper";
-            return (
-              <div key={m.id} className={clsx("flex items-start gap-2", mine && "flex-row-reverse")}>
-                <span
-                  className={clsx(
-                    "grid h-8 w-8 flex-none place-items-center rounded font-display text-xs font-black",
-                    mine ? "bg-orange text-ink" : "bg-cream text-ink"
-                  )}
-                  aria-hidden
-                >
-                  {who[0].toUpperCase()}
-                </span>
-                <span
-                  className={clsx(
-                    "min-w-0 max-w-[82%] rounded border px-2.5 py-2",
-                    mine ? "border-[#4A2D1E] bg-[#2A1A12]" : "border-line bg-ink-2"
-                  )}
-                >
-                  <span className="font-mono text-[8.5px] font-bold uppercase tracking-[0.1em] text-orange">
-                    {who}
-                  </span>
-                  <p className="mt-0.5 break-words font-display text-[13.5px] leading-snug">
-                    {m.body}
-                  </p>
-                </span>
-              </div>
-            );
-          })
-        )}
-      </div>
-
-      <form onSubmit={send} className="pad-bottom flex flex-none items-end gap-2 border-t border-line pt-2.5">
-        <input
-          value={body}
-          onChange={(e) => setBody(e.target.value)}
-          placeholder="Say something"
-          maxLength={400}
-          autoComplete="off"
-          aria-label="Message"
-        />
-        <button type="submit" className="btn flex-none px-3.5 py-2.5 text-[11px]">
-          SEND
-        </button>
-      </form>
+  return <div className="flex h-full flex-col overflow-hidden px-4">
+    <header className="pad-top flex-none pb-3">
+      <h1 className="font-display text-2xl font-black leading-none">Chat</h1>
+      <p className="seclabel mt-1.5">Meet at the night. Say hi on your terms.</p>
+    </header>
+    <div className="mb-3 grid flex-none grid-cols-2 gap-2">
+      <button className={clsx("btn", view !== "room" && "btn-ghost")} onClick={() => setView("room")}><MessageCircle size={14}/> ROOMS</button>
+      <button className={clsx("btn", view !== "inbox" && "btn-ghost")} onClick={() => setView("inbox")}><Hand size={14}/> WAVES & DMS{waves.length + dms.length > 0 ? ` · ${waves.length + dms.length}` : ""}</button>
     </div>
-  );
+
+    {view === "room" ? <>
+      <div className="flex-none overflow-x-auto pb-3 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"><div className="flex gap-1.5">
+        {rooms.map((r) => <button key={r.id} onClick={() => setChannel(r.id)} aria-pressed={channel === r.id} className={clsx("flex-none whitespace-nowrap rounded-full border px-2.5 py-1.5 font-mono text-[9.5px] font-bold tracking-[0.08em]", channel === r.id ? "border-orange bg-orange text-ink" : "border-line text-dim")}>{r.label}</button>)}
+      </div></div>
+      <div className="mb-2 flex flex-none items-center justify-between">
+        <span className={clsx("seclabel", live ? "text-ok" : "text-dim")}>{live ? "LIVE" : "ROOM CHAT"} · {anon ? alias ?? "ANONYMOUS" : profile?.display_name ?? "HOPPER"}</span>
+        {event && <button className="btn btn-ghost px-2.5 py-1.5 text-[9px]" onClick={() => void reload()}><Users size={13}/> WHO’S HERE</button>}
+      </div>
+      {event && people.length > 0 && <div className="mb-2 flex flex-none gap-2 overflow-x-auto">{people.map((p) => <button key={p.key} className="tag tag-v" onClick={async () => { const r = await wave(p.key); say(r.text, r.dm ? "orange" : "violet"); if (r.dm) router.push(`/chat/dm/${r.dm}`); else void reload(); }}>{p.alias} · WAVE</button>)}</div>}
+      <div className="flex min-h-0 flex-1 flex-col gap-2.5 overflow-y-auto pb-3">
+        {!msgs.length ? <p className="hint">Be the first to break the ice. Keep it friendly; you can post with a room alias.</p> : msgs.map((m) => {
+          const own = !!m.author_key && mine.has(m.author_key);
+          const who = own ? (m.anon ? alias ?? m.author_name ?? "You" : "You") : m.author_name ?? "A Hopper";
+          return <button key={m.id} onClick={() => !own && m.author_key && setPerson({ key: m.author_key, name: who, look: m.author_look, anon: m.anon, messageId: m.id, excerpt: m.body })} className={clsx("flex items-start gap-2 text-left", own && "flex-row-reverse")}>
+            <ChatFace look={m.author_look} alias={m.anon ? who : null} size={32}/>
+            <span className={clsx("min-w-0 max-w-[82%] rounded border px-2.5 py-2", own ? "border-[#4A2D1E] bg-[#2A1A12]" : "border-line bg-ink-2")}><span className="font-mono text-[8.5px] font-bold uppercase tracking-[0.1em] text-orange">{who}{m.anon ? " · ANON" : ""}</span><p className="mt-0.5 break-words font-display text-[13.5px] leading-snug">{m.body}</p></span>
+          </button>;
+        })}
+      </div>
+      <form onSubmit={submit} className="pad-bottom flex flex-none flex-col gap-2 border-t border-line pt-2.5">
+        <label className="flex items-center gap-2 font-mono text-[10px] text-dim"><input type="checkbox" checked={anon} onChange={(e) => setAnon(e.target.checked)} className="h-4 w-4 accent-orange"/> POST AS {anon ? alias ?? "ANONYMOUS ALIAS" : "MY NAME"}</label>
+        <div className="flex items-end gap-2"><input value={body} onChange={(e) => setBody(e.target.value)} placeholder="Say something" maxLength={400} autoComplete="off" aria-label="Message"/><button type="submit" className="btn flex-none px-3.5 py-2.5 text-[11px]">SEND</button></div>
+      </form>
+    </> : <div className="min-h-0 flex-1 overflow-y-auto pb-4">
+      {waves.length > 0 && <><p className="seclabel mb-2">They waved at you</p>{waves.map((w) => <div key={w.id} className="card mb-2 flex items-center gap-3 py-3"><ChatFace alias={w.from_alias} size={38}/><div className="min-w-0 flex-1"><b className="font-display">{w.from_alias}</b><p className="hint">{w.event_title ? `Met at ${w.event_title}` : "Someone you met out"}</p></div><button className="btn px-3 py-2" onClick={async () => { const id = await respond(w.id, true); if (id) router.push(`/chat/dm/${id}`); }}>CHAT</button><button className="btn btn-ghost px-3 py-2" onClick={() => void respond(w.id, false)}>PASS</button></div>)}</>}
+      <p className="seclabel mb-2 mt-4">Your chats</p>
+      {dms.length === 0 ? <p className="hint">Wave at someone you met at an event or on a Hoppaz ride. If they wave back, your private chat opens.</p> : dms.map((d) => <Link href={`/chat/dm/${d.id}`} key={d.id} className="card mb-2 flex items-center gap-3 py-3"><ChatFace look={d.other_look} alias={d.revealed ? null : d.other_name} size={38}/><span className="min-w-0 flex-1"><b className="font-display">{d.other_name}</b><p className="hint truncate">{d.last_body ?? (d.event_title ? `Met at ${d.event_title}` : "Say hello")}</p></span><span className="tag">{d.revealed ? "KNOWN" : "ANON"}</span></Link>)}
+    </div>}
+    {person && <PersonCard person={person} onClose={() => setPerson(null)}/>}
+  </div>;
 }
