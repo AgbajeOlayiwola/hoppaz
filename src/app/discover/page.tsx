@@ -8,10 +8,11 @@ import { useHoppaz, useToast } from "@/lib/store";
 import { useSession } from "@/lib/useSession";
 import { useEvents } from "@/lib/useEvents";
 import { clockLagos, naira } from "@/lib/geo";
+import { dateOptions, matchesDate, matchesType } from "@/lib/filters";
 import type { EventRow } from "@/lib/types";
 
 export default function DiscoverPage() {
-  const { fix } = useHoppaz();
+  const { fix, dateFilter, setDateFilter, types } = useHoppaz();
   const { userId } = useSession();
   const { events } = useEvents(fix, 45);
   const say = useToast((s) => s.say);
@@ -37,10 +38,10 @@ export default function DiscoverPage() {
   const deck = useMemo(
     () =>
       events
-        .filter((e) => !judged.has(e.id))
+        .filter((e) => !judged.has(e.id) && matchesDate(e, dateFilter) && matchesType(e, types))
         .slice()
         .sort((a, b) => a.distance_m - b.distance_m),
-    [events, judged]
+    [events, judged, dateFilter, types]
   );
 
   const onDecide = useCallback(
@@ -65,9 +66,9 @@ export default function DiscoverPage() {
       <header className="pad-top flex-none px-4 pb-3">
         <div className="flex items-end justify-between gap-3">
           <div>
-            <h1 className="font-display text-2xl font-black leading-none">Tonight</h1>
+            <h1 className="font-display text-2xl font-black leading-none">Discover</h1>
             <p className="seclabel mt-1.5">
-              {deck.length} left{fix?.area ? ` · from ${fix.area}` : ""}
+              {deck.length} events{fix?.area ? ` · near ${fix.area}` : ""}
             </p>
           </div>
           <Link href="/" className="btn btn-ghost px-3 py-2 text-[10px]">
@@ -75,6 +76,35 @@ export default function DiscoverPage() {
           </Link>
         </div>
       </header>
+
+      <div className="flex-none space-y-2 px-4 pb-3">
+        <div className="flex gap-1.5 overflow-x-auto pb-1" aria-label="Filter by date">
+          {dateOptions().map((option) => (
+            <button
+              key={option.key}
+              onClick={() => setDateFilter(option.value)}
+              aria-pressed={dateFilter.kind === "night" ? dateFilter.date === option.key : dateFilter.kind === option.value.kind}
+              className={`flex-none rounded-full border px-3 py-1.5 font-mono text-[9px] font-bold tracking-wider ${
+                (dateFilter.kind === "night" ? dateFilter.date === option.key : dateFilter.kind === option.value.kind)
+                  ? "border-orange bg-orange text-ink"
+                  : "border-line text-cream"
+              }`}
+            >
+              {option.label}
+            </button>
+          ))}
+        </div>
+        <label className="flex items-center justify-between text-xs text-dim">
+          <span>Pick a date</span>
+          <input
+            aria-label="Choose event date"
+            type="date"
+            value={dateFilter.kind === "night" ? dateFilter.date : ""}
+            onChange={(e) => e.target.value && setDateFilter({ kind: "night", date: e.target.value })}
+            className="rounded border border-line bg-ink-2 px-2 py-1.5 font-mono text-xs text-cream [color-scheme:dark]"
+          />
+        </label>
+      </div>
 
       <div className="relative min-h-0 flex-1 px-4">
         <SwipeDeck events={deck} fix={fix} onDecide={onDecide} />

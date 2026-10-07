@@ -68,7 +68,13 @@ export function matchesType(e: EventRow, types: string[]) {
 
 export function describeFilter(f: DateFilter, types: string[], now = Date.now()) {
   const parts: string[] = [];
-  if (f.kind !== "any") parts.push(dateOptions(now).find((o) => o.key === dateKey(f))?.label ?? f.kind.toUpperCase());
+  if (f.kind !== "any") {
+    const quickLabel = dateOptions(now).find((o) => o.key === dateKey(f))?.label;
+    const customLabel = f.kind === "night"
+      ? new Date(`${f.date}T12:00:00Z`).toLocaleDateString("en-NG", { weekday: "short", day: "numeric", month: "short", timeZone: "UTC" }).toUpperCase()
+      : f.kind.toUpperCase();
+    parts.push(quickLabel ?? customLabel);
+  }
   if (types.length) parts.push(types.length > 2 ? `${types.length} TYPES` : types.join(", ").toUpperCase());
   return parts.join(" · ");
 }

@@ -65,6 +65,17 @@ export default function FilterCard({
           ))}
         </div>
 
+        <label className="mt-3 flex items-center justify-between gap-3 text-xs text-dim">
+          <span>Choose another date</span>
+          <input
+            aria-label="Choose event date"
+            type="date"
+            value={date.kind === "night" ? date.date : ""}
+            onChange={(e) => e.target.value && onDate({ kind: "night", date: e.target.value })}
+            className="rounded border border-line bg-ink px-2 py-1.5 font-mono text-xs text-cream [color-scheme:dark]"
+          />
+        </label>
+
         <div className="mt-4 flex items-baseline justify-between">
           <p className="label">What kind</p>
           {types.length > 0 && (

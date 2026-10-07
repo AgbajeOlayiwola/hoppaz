@@ -36,9 +36,9 @@ export function useEvents(fix: Fix, radiusKm: number) {
       p_lng: from.lng,
       // Always pull a wide net; the radius only decides what is revealed.
       p_radius_m: Math.max(radiusKm, 45) * 1000,
-      // A week ahead, so the date filter has something to filter. The map
-      // narrows it down; the default 36h window would hide next weekend.
-      p_to: new Date(Date.now() + 8 * 24 * 3.6e6).toISOString(),
+      // Keep upcoming listings available for calendar browsing, including
+      // event calendars spanning the rest of the month. The map narrows them.
+      p_to: new Date(Date.now() + 45 * 24 * 3.6e6).toISOString(),
     });
     setLoading(false);
     if (error || !data) {
@@ -54,6 +54,21 @@ export function useEvents(fix: Fix, radiusKm: number) {
 
   useEffect(() => {
     void load();
+  }, [load]);
+
+  // Keep the rolling event window current while someone has the app open.
+  // Refreshing on return from a background tab also catches edits made while
+  // the app was suspended by the browser.
+  useEffect(() => {
+    const refreshIfVisible = () => {
+      if (document.visibilityState === "visible") void load();
+    };
+    const timer = window.setInterval(refreshIfVisible, 5 * 60 * 1000);
+    document.addEventListener("visibilitychange", refreshIfVisible);
+    return () => {
+      window.clearInterval(timer);
+      document.removeEventListener("visibilitychange", refreshIfVisible);
+    };
   }, [load]);
 
   // Live heat: a check-in anywhere nudges the map for everyone watching.
