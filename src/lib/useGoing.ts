@@ -1,0 +1,120 @@
+"use client";
+
+import { useCallback, useEffect } from "react";
+import { create } from "zustand";
+import { getSupabase } from "./supabase/client";
+
+/**
+ * "I'm going", shared by the event page, the Today list and the swipe mode.
+ *
+ * It is the same row a right swipe has always written (public.swipes,
+ * decision "in"), so the going count (events_near.swipes_in) and the map heat
+ * keep working unchanged. Swipes are private to each Hopper: only your own
+ * choices are ever read back.
+ *
+ * The table allows insert and delete of your own rows but not update, so
+ * changing an old "pass" to "in" deletes the old row first. Tapping again
+ * undoes it. The button only shows "going" after the save succeeds.
+ */
+
+type Decision = "in" | "pass";
+
+type GoingState = {
+  loadedFor: string | null;
+  decisions: Record<string, Decision>;
+  busy: Record<string, boolean>;
+  setLoaded: (userId: string, decisions: Record<string, Decision>) => void;
+  setDecision: (eventId: string, d: Decision | null) => void;
+  setBusy: (eventId: string, b: boolean) => void;
+};
+
+const useGoingStore = create<GoingState>((set) => ({
+  loadedFor: null,
+  decisions: {},
+  busy: {},
+  setLoaded: (loadedFor, decisions) => set({ loadedFor, decisions }),
+  setDecision: (eventId, d) =>
+    set((s) => {
+      const next = { ...s.decisions };
+      if (d) next[eventId] = d;
+      else delete next[eventId];
+      return { decisions: next };
+    }),
+  setBusy: (eventId, b) => set((s) => ({ busy: { ...s.busy, [eventId]: b } })),
+}));
+
+/** Fired once, the first time a Hopper says they're going. The install sheet listens. */
+export const FIRST_GOING_EVENT = "hoppaz:first-going";
+const FIRST_GOING_KEY = "hoppaz.firstGoing";
+
+export function useGoing(userId: string | null) {
+  const { loadedFor, decisions, busy, setLoaded, setDecision, setBusy } = useGoingStore();
+
+  useEffect(() => {
+    const sb = getSupabase();
+    if (!sb || !userId || loadedFor === userId) return;
+    let cancelled = false;
+    (async () => {
+      const { data } = await sb.from("swipes").select("event_id, decision").eq("user_id", userId);
+      if (cancelled || !data) return;
+      const map: Record<string, Decision> = {};
+      for (const r of data) map[String(r.event_id)] = r.decision as Decision;
+      setLoaded(userId, map);
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [userId, loadedFor, setLoaded]);
+
+  const isGoing = useCallback((eventId: string) => decisions[eventId] === "in", [decisions]);
+  const hasJudged = useCallback((eventId: string) => eventId in decisions, [decisions]);
+
+  /**
+   * Save a decision. Returns an error message for the person, or null on
+   * success. Without Supabase (local demo) it only changes the screen.
+   */
+  const decide = useCallback(
+    async (eventId: string, decision: Decision | null): Promise<string | null> => {
+      const sb = getSupabase();
+      if (!sb) {
+        setDecision(eventId, decision);
+        return null;
+      }
+      if (!userId) return "Still connecting. Try again in a moment.";
+      setBusy(eventId, true);
+      try {
+        if (eventId in useGoingStore.getState().decisions) {
+          const { error } = await sb.from("swipes").delete().eq("user_id", userId).eq("event_id", eventId);
+          if (error) return "That didn't save. Try again.";
+        }
+        if (decision) {
+          const { error } = await sb.from("swipes").insert({ user_id: userId, event_id: eventId, decision });
+          if (error) return "That didn't save. Try again.";
+        }
+        setDecision(eventId, decision);
+        if (decision === "in") {
+          try {
+            if (!localStorage.getItem(FIRST_GOING_KEY)) {
+              localStorage.setItem(FIRST_GOING_KEY, "1");
+              window.dispatchEvent(new Event(FIRST_GOING_EVENT));
+            }
+          } catch {
+            /* private mode: skip the install nudge */
+          }
+        }
+        return null;
+      } finally {
+        setBusy(eventId, false);
+      }
+    },
+    [userId, setBusy, setDecision]
+  );
+
+  /** I'M GOING toggles: going -> not decided, anything else -> going. */
+  const toggleGoing = useCallback(
+    (eventId: string) => decide(eventId, decisions[eventId] === "in" ? null : "in"),
+    [decide, decisions]
+  );
+
+  return { decisions, busy, isGoing, hasJudged, decide, toggleGoing };
+}
