@@ -24,6 +24,8 @@ export async function GET(req:Request){
     sb.from("partners").select("id,name,active").order("name"),
     sb.from("game_score_rules").select("key,score").order("key"),
   ]);
+  // Say what failed rather than showing empty queues (a bad service key fails every query).
+  const failed=[events,liveEvents,photos,claims,reports,drops,partners,rules].find(r=>r.error);if(failed?.error)return bad(`Database error: ${failed.error.message}`,500);
   const pendingPhotos=await Promise.all(((photos.data??[]) as {id:string;event_id:string;user_id:string;path:string;created_at:string;events:unknown}[]).map(async p=>{const {data}=await sb.storage.from("event-photos").createSignedUrl(p.path,900);return {...p,url:data?.signedUrl??null};}));
   return NextResponse.json({events:events.data??[],liveEvents:liveEvents.data??[],photos:pendingPhotos,claims:claims.data??[],reports:reports.data??[],drops:drops.data??[],partners:partners.data??[],rules:rules.data??[]});
 }
