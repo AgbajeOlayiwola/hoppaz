@@ -2,9 +2,12 @@
 
 import { useState } from "react";
 import Link from "next/link";
-import { QrCode } from "lucide-react";
+import { Camera, QrCode } from "lucide-react";
 import QrScanner from "@/components/QrScanner";
 import Reveal, { type RevealItem, type RevealOutcome } from "@/components/reveal/Reveal";
+import CameraHunt from "@/components/CameraHunt";
+import Hunt3D from "@/components/Hunt3D";
+import { huntItem, RARITY } from "@/lib/huntItems";
 import { useToast } from "@/lib/store";
 import { clockShort } from "@/lib/geo";
 import type { GameDrop } from "@/lib/game";
@@ -33,6 +36,9 @@ export default function DropRow({
   onCollect,
   openedIds,
   onOpened,
+  onClaimHunt,
+  eventPoint,
+  fix,
 }: {
   /** The event's name, for the reveal's share line. */
   where?: string;
@@ -49,12 +55,17 @@ export default function DropRow({
   /** Drops you have already opened (earlier visits, and just now). They are not hidden here any more. */
   openedIds: Set<string>;
   onOpened: (id: string) => void;
+  /** Camera hunts (Ola's 3D items): claims at the point where the item was found. */
+  onClaimHunt?: (drop: GameDrop, at: { lat: number; lng: number }) => Promise<{ error?: string; reward?: string; description?: string; code?: string }>;
+  eventPoint?: { lat: number; lng: number };
+  fix?: { lat: number; lng: number } | null;
 }) {
   const say = useToast((s) => s.say);
   const [codes, setCodes] = useState<Record<string, string>>({});
   const [scanFor, setScanFor] = useState<string | null>(null);
   const [got, setGot] = useState<Got[]>([]);
   const [reveal, setReveal] = useState<{ kind: "game"; drop: GameDrop } | { kind: "col"; drop: CollectibleDrop } | null>(null);
+  const [hunting, setHunting] = useState<string | null>(null);
 
   const pendingGame = gameDrops.filter((d) => !openedIds.has(d.id));
   const pendingCol = collectibles.filter((d) => !collected.has(d.id) && !openedIds.has(d.id));
@@ -94,9 +105,33 @@ export default function DropRow({
             </span>
           </p>
 
+          {pendingGame.map((drop) => {
+            const item = huntItem(drop.hunt_item);
+            if (!item) return null;
+            return (
+              <div key={`hunt-${drop.id}`} className="mt-3 flex items-center gap-3 rounded-hz border border-line bg-ink-3 p-2.5">
+                <Hunt3D item={item.key} className="h-16 w-16 flex-none" />
+                <div className="min-w-0 flex-1">
+                  <p className="font-mono text-[10px] font-medium uppercase tracking-[0.12em]" style={{ color: RARITY[item.rarity].color }}>
+                    {RARITY[item.rarity].label} · CAMERA HUNT
+                  </p>
+                  <b className="block font-display text-[14px] font-black leading-tight">{item.name} is hiding here</b>
+                  <p className="hint">{drop.partner?.name ? `${drop.partner.name} reward` : "Find it, keep it, get the reward"}</p>
+                </div>
+              </div>
+            );
+          })}
+
           {closeEnough && (
             <div className="mt-3 space-y-3">
               {pendingGame.map((drop) => {
+                if (huntItem(drop.hunt_item) && onClaimHunt) {
+                  return (
+                    <button key={drop.id} className="btn w-full" onClick={() => setHunting(drop.id)}>
+                      <Camera size={16} aria-hidden /> FIND IT WITH YOUR CAMERA
+                    </button>
+                  );
+                }
                 // The server refuses a claim before the drop opens, so the button waits for it too.
                 const opens = Date.parse(drop.opens_at);
                 const notYet = Number.isFinite(opens) && opens > Date.now();
@@ -166,6 +201,27 @@ export default function DropRow({
           onClose={() => setReveal(null)}
         />
       )}
+      {(() => {
+        const d = hunting ? gameDrops.find((x) => x.id === hunting) : null;
+        if (!d || !onClaimHunt || !eventPoint) return null;
+        return (
+          <CameraHunt
+            drop={d}
+            eventPoint={eventPoint}
+            initialFix={fix ?? null}
+            onClaim={async (at) => {
+              const res = await onClaimHunt(d, at);
+              if (!res.error) {
+                onOpened(d.id);
+                setGot((g) => [...g, { id: d.id, title: res.reward ?? "Your reward", description: res.description ?? "", code: res.code, toCollection: true }]);
+                say("Found it. Reward unlocked.", "violet");
+              }
+              return res;
+            }}
+            onClose={() => setHunting(null)}
+          />
+        );
+      })()}
 
       {scanFor && (
         <QrScanner
