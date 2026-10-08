@@ -33,8 +33,11 @@ export default function TopChrome({
   onLocate,
   showBus,
   onBus,
+  lead,
   children,
 }: {
+  /** A chip before the days on the rail (the Map's NEXT 20). */
+  lead?: { label: string; sub: string; aria: string; on: boolean; onClick: () => void };
   hudRef?: React.Ref<HTMLDivElement>;
   day: DateFilter;
   onDay: (f: DateFilter) => void;
@@ -113,7 +116,7 @@ export default function TopChrome({
           </button>
         </div>
 
-        <DayRail slim value={day} onChange={onDay} counts={counts} className="pointer-events-auto mt-1" />
+        <DayRail slim value={day} onChange={onDay} counts={counts} lead={lead} className="pointer-events-auto mt-1" />
 
         {filtered && (
           <div className="pointer-events-auto -mx-3.5 mt-px flex items-center gap-1.5 overflow-x-auto px-3.5 py-[7px] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">

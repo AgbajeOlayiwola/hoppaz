@@ -16,6 +16,7 @@ const TABS = [
 /** Sub-pages keep their parent tab lit, so you always know where you are. */
 const PARENT: Array<[string, string]> = [
   ["/drop", "/"],
+  ["/event", "/"],
   ["/quests", "/me"],
   ["/drops", "/me"],
   ["/collection", "/me"],

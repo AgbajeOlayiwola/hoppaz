@@ -19,7 +19,7 @@ import {
   isEventLead,
   travelEstimate,
 } from "@/lib/geo";
-import { dayLabel } from "@/lib/filters";
+import { dayLabel, nightOf, nightTag } from "@/lib/filters";
 import { crowdAt, crowdLevel, TONE_HEX } from "@/lib/crowd";
 import { lotFeatures } from "@/lib/eventLots";
 import { useTheme } from "@/lib/useTheme";
@@ -80,7 +80,17 @@ export type NightMapProps = {
    * then pulls in and stands the venue's house in the strip of map to its left.
    */
   sidePanel?: boolean;
+  /** Every pin orange (the map's opening "next 20" view), not just the busy ones. */
+  allHot?: boolean;
+  /** Sealed boxes (drops) to place on the map. Tapping one calls onBox. */
+  boxes?: MapBox[];
+  onBox?: (id: string) => void;
+  /** Filled with a finder for the side card's arrows: the nearest event left (-1) or right (1) of one, on screen. */
+  navRef?: React.MutableRefObject<((fromId: string, dir: -1 | 1) => string | null) | null>;
 };
+
+/** A drop on the map: a sealed box at its spot. Open ones glow; sealed ones carry when they open. */
+export type MapBox = { id: string; lat: number; lng: number; open: boolean; label: string; hunt: boolean };
 
 type Mode = "card" | "banner" | "mini";
 type Box = [number, number, number, number];
@@ -108,6 +118,7 @@ const PICK_ZOOM = 15.6;
 /** With the card docked on the right the house has a narrow strip, so the camera comes in closer. */
 const PICK_ZOOM_SIDE = 16;
 const NO_IDS: string[] = [];
+const NO_BOXES: MapBox[] = [];
 
 const SRC = {
   heat: "hoppaz-heat",
@@ -284,7 +295,7 @@ function setupLayers(m: MLMap, theme: Theme, cityGrown: boolean) {
       id: "pins-halo",
       type: "circle",
       source: SRC.pins,
-      filter: [">=", ["get", "heat"], 55],
+      filter: ["==", ["get", "hot"], true],
       paint: {
         "circle-radius": ["interpolate", ["linear"], ["get", "heat"], 55, 18, 100, 30],
         "circle-color": BRAND.orange,
@@ -306,8 +317,8 @@ function setupLayers(m: MLMap, theme: Theme, cityGrown: boolean) {
         ] as ExpressionSpecification,
         "circle-color": [
           "case",
+          ["get", "hot"], BRAND.orange,
           ["!", ["get", "inRange"]], night ? "#2C2017" : "#CDBEA9",
-          [">=", ["get", "heat"], 55], BRAND.orange,
           "#6E4433",
         ] as ExpressionSpecification,
         "circle-stroke-color": ["case", ["get", "selected"], P.text, P.ground] as ExpressionSpecification,
@@ -342,6 +353,10 @@ export default function NightMap({
   hudTop = DEFAULT_HUD.top,
   hudBottom = DEFAULT_HUD.bottom,
   sidePanel = false,
+  allHot = false,
+  boxes = NO_BOXES,
+  onBox,
+  navRef,
 }: NightMapProps) {
   const holder = useRef<HTMLDivElement>(null);
   const map = useRef<MLMap | null>(null);
@@ -368,8 +383,8 @@ export default function NightMap({
   /** The city has risen once; a day/night swap rebuilds it standing. */
   const cityGrown = useRef(false);
 
-  const cbs = useRef({ onSelect, onHopSelect, onClear, onBus });
-  cbs.current = { onSelect, onHopSelect, onClear, onBus };
+  const cbs = useRef({ onSelect, onHopSelect, onClear, onBus, onBox });
+  cbs.current = { onSelect, onHopSelect, onClear, onBus, onBox };
   const eventsRef = useRef(events);
   eventsRef.current = events;
   const fixRef = useRef(fix);
@@ -413,6 +428,7 @@ export default function NightMap({
   const stopMks = useRef<maplibregl.Marker[]>([]);
   const busMk = useRef<maplibregl.Marker | null>(null);
   const meMk = useRef<maplibregl.Marker | null>(null);
+  const boxMks = useRef(new Map<string, maplibregl.Marker>());
   const hover = useRef<maplibregl.Popup | null>(null);
   const declutter = useRef(() => {});
 
@@ -491,6 +507,11 @@ export default function NightMap({
     stopMks.current.forEach((mk) => {
       const ll = mk.getLngLat();
       reserve(ll.lng, ll.lat, 14, 14, 14, 14);
+    });
+    // A box and its label sit just above its point.
+    boxMks.current.forEach((mk) => {
+      const ll = mk.getLngLat();
+      reserve(ll.lng, ll.lat, 34, 58, 34, 4);
     });
     const ctrl = holder.current?.querySelector(".maplibregl-ctrl-top-right .maplibregl-ctrl-group");
     if (ctrl && h0) {
@@ -668,11 +689,13 @@ export default function NightMap({
     })();
 
     const signMap = signs.current;
+    const boxMap = boxMks.current;
     return () => {
       ac.abort();
       ready.current = false;
       signMap.clear();
       stopMks.current = [];
+      boxMap.clear();
       busMk.current = null;
       meMk.current = null;
       hover.current = null;
@@ -751,7 +774,7 @@ export default function NightMap({
         events.map((e) => ({
           type: "Feature",
           geometry: { type: "Point", coordinates: [e.lng, e.lat] },
-          properties: { id: e.id, heat: e.heat, inRange: inRange(e), selected: e.id === selectedId },
+          properties: { id: e.id, heat: e.heat, hot: allHot || e.heat >= 55, inRange: inRange(e), selected: e.id === selectedId },
         }))
       )
     );
@@ -788,7 +811,7 @@ export default function NightMap({
 
     // Later: the venue models follow the same events and selection.
     updateVenueModels(m, { theme: themeRef.current, events, selectedId });
-  }, [epoch, events, hopStops, showHop, fix, radiusKm, selectedId, at, live]);
+  }, [epoch, events, hopStops, showHop, fix, radiusKm, selectedId, at, live, allHot]);
 
   /* -------------------------------------------------------- event signs -- */
   useEffect(() => {
@@ -874,7 +897,8 @@ export default function NightMap({
         sg.sig = sig;
         (el.querySelector(".hz-name") as HTMLElement).textContent = name;
         (el.querySelector(".hz-when") as HTMLElement).textContent = line;
-        (el.querySelector(".hz-mini") as HTMLElement).textContent = lead ? "LEAD" : price;
+        // A lead has no price yet; its night says more than "LEAD" would on every pin.
+        (el.querySelector(".hz-mini") as HTMLElement).textContent = lead ? nightTag(nightOf(Date.parse(e.starts_at))) : price;
         (el.querySelector(".hz-drop") as HTMLElement).hidden = !hasDrop;
         const art = el.querySelector(".hz-art") as HTMLElement;
         art.dataset.vibe = e.vibe;
@@ -1036,6 +1060,88 @@ export default function NightMap({
     declutter.current();
     // busKey stands in for the bus object, which is rebuilt every render.
   }, [epoch, busKey]);
+
+  /* ------------------------------------------------------------ boxes ---- */
+  // Drops stand on the map as sealed boxes: open ones glow and bob, sealed ones say when they open.
+  const boxKey = boxes.map((b) => `${b.id}:${b.lat.toFixed(5)},${b.lng.toFixed(5)}:${b.open}:${b.hunt}:${b.label}`).join("|");
+  useEffect(() => {
+    const m = map.current;
+    if (!m || !ready.current) return;
+    const keep = new Set(boxes.map((b) => b.id));
+    boxMks.current.forEach((mk, id) => {
+      if (!keep.has(id)) {
+        mk.remove();
+        boxMks.current.delete(id);
+      }
+    });
+    boxes.forEach((b, i) => {
+      let mk = boxMks.current.get(b.id);
+      if (!mk) {
+        const el = make("button", "hz-boxpin");
+        el.type = "button";
+        const glow = make("span", "hz-boxpin-glow");
+        const box = make("span", "hz-boxpin-box");
+        el.append(glow, box, make("span", "hz-boxpin-label"));
+        el.style.setProperty("--d", `${i * 90}ms`);
+        el.addEventListener("click", (ev) => {
+          ev.stopPropagation();
+          hidePeek();
+          cbs.current.onBox?.(b.id);
+        });
+        el.style.zIndex = "5";
+        mk = new maplibregl.Marker({ element: el, anchor: "bottom" }).setLngLat([b.lng, b.lat]).addTo(m);
+        boxMks.current.set(b.id, mk);
+      }
+      const el = mk.getElement();
+      el.classList.toggle("hz-boxpin-open", b.open);
+      el.classList.toggle("hz-boxpin-sealed", !b.open);
+      el.classList.toggle("hz-boxpin-hunt", b.hunt);
+      (el.querySelector(".hz-boxpin-label") as HTMLElement).textContent = b.label;
+      el.setAttribute("aria-label", `${b.hunt ? "Hunt" : "Drop"}: ${b.label.toLowerCase()}. ${b.open ? "Open it nearby." : ""}`);
+      mk.setLngLat([b.lng, b.lat]);
+    });
+    declutter.current();
+    // boxKey stands in for boxes.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [epoch, boxKey]);
+
+  /* ---------------------------------------- the side card's left and right -- */
+  // The nearest event to the left or right of one, as the map is drawn now (tilt and angle included).
+  useEffect(() => {
+    if (!navRef) return;
+    navRef.current = (fromId, dir) => {
+      const m = map.current;
+      const evs = eventsRef.current;
+      const from = evs.find((e) => e.id === fromId);
+      if (!m || !from) return null;
+      const p0 = m.project([from.lng, from.lat]);
+      let best: string | null = null;
+      let bestD = Infinity;
+      for (const e of evs) {
+        if (e.id === fromId) continue;
+        const p = m.project([e.lng, e.lat]);
+        const dx = (p.x - p0.x) * dir;
+        const dy = p.y - p0.y;
+        let d: number;
+        if (Math.abs(p.x - p0.x) < 1 && Math.abs(dy) < 1) {
+          // Two events at one venue: step through them in a fixed order.
+          if (e.id > fromId !== (dir === 1)) continue;
+          d = 0.5;
+        } else {
+          if (dx <= 2) continue;
+          d = dx * dx + 2.5 * dy * dy;
+        }
+        if (d < bestD) {
+          bestD = d;
+          best = e.id;
+        }
+      }
+      return best;
+    };
+    return () => {
+      navRef.current = null;
+    };
+  }, [navRef]);
 
   /* ------------------------------------------------------------- me ---- */
   const lookKey = JSON.stringify(myLook ?? null);

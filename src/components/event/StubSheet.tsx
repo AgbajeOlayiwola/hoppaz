@@ -2,7 +2,7 @@
 
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import clsx from "clsx";
-import { X } from "lucide-react";
+import { ChevronLeft, X } from "lucide-react";
 import type { Theme } from "@/lib/theme";
 import { SIDE_PANEL, SIDE_PANEL_CSS_WIDTH } from "./side";
 
@@ -28,14 +28,17 @@ export default function StubSheet({
   onClose,
   closeOnEscape = true,
   placement = "sheet",
+  toolbar,
   footer,
   children,
 }: {
+  /** Side placement only: buttons in the top bar, left of the close button (the map's left and right). */
+  toolbar?: React.ReactNode;
   label: string;
   theme?: Theme;
   onClose: () => void;
   closeOnEscape?: boolean;
-  placement?: "sheet" | "side";
+  placement?: "sheet" | "side" | "page";
   footer?: React.ReactNode;
   children: React.ReactNode;
 }) {
@@ -47,6 +50,7 @@ export default function StubSheet({
   const drag = useRef<{ y: number; t: number } | null>(null);
   const hasFooter = !!footer;
   const side = placement === "side";
+  const page = placement === "page";
 
   useEffect(() => {
     shell.current?.focus({ preventScroll: true });
@@ -92,6 +96,37 @@ export default function StubSheet({
     else setDy(0);
   };
 
+  if (page) {
+    // The full event page: the same stub, filling the screen, with a back arrow instead of a close.
+    return (
+      <div className="absolute inset-0 flex flex-col">
+        <div
+          ref={stub}
+          className={clsx("stub flex min-h-0 flex-1 flex-col rounded-none border-0", theme && `stub-${theme}`)}
+          style={notchY != null ? ({ "--notch-y": `${notchY}px` } as React.CSSProperties) : undefined}
+        >
+          <div className="pad-top flex flex-none items-center gap-1 px-2 pb-1">
+            <button onClick={onClose} aria-label="Back" className="grid h-11 w-11 place-items-center text-cream">
+              <ChevronLeft size={26} strokeWidth={2.2} aria-hidden />
+            </button>
+            <p className="seclabel min-w-0 flex-1 truncate">{label}</p>
+          </div>
+          <div className="relative flex min-h-0 flex-1 flex-col">
+            <div data-evt-scroll className="min-h-0 flex-1 overflow-y-auto overscroll-contain">
+              <div className="mx-auto max-w-[680px]">{children}</div>
+            </div>
+            {footer && <div aria-hidden className="pointer-events-none absolute inset-x-0 bottom-0 h-5 bg-gradient-to-t from-ink-2 to-transparent" />}
+          </div>
+          {footer && (
+            <div ref={foot} className="flex-none border-t border-dashed border-line px-5 pb-4 pt-4">
+              <div className="mx-auto max-w-[680px]">{footer}</div>
+            </div>
+          )}
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div
       ref={shell}
@@ -120,7 +155,7 @@ export default function StubSheet({
         style={notchY != null ? ({ "--notch-y": `${notchY}px` } as React.CSSProperties) : undefined}
       >
         {side ? (
-          <div aria-hidden className="h-3 flex-none" />
+          toolbar ? <div className="flex h-11 flex-none items-center gap-1 pl-1.5 pr-12">{toolbar}</div> : <div aria-hidden className="h-3 flex-none" />
         ) : (
           <div
             aria-hidden

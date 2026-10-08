@@ -140,3 +140,27 @@ export function dayLabel(startsAt: string, now = Date.now()) {
         : d.toLocaleDateString("en-NG", { weekday: "short", day: "numeric", month: "short", timeZone: "UTC" }).toUpperCase().replace(",", "");
   return `${day} · ${time}`;
 }
+
+/** How many events the map opens on: enough to look alive, few enough to read. */
+export const NEXT_COUNT = 20;
+
+/**
+ * The next `n` events from now (anything still on counts: it started under six
+ * hours ago), soonest first, with the first and last night they cover. The map
+ * opens on these instead of one possibly quiet day.
+ */
+export function nextEvents(events: EventRow[], n = NEXT_COUNT, now = Date.now()) {
+  const list = events
+    .filter((e) => Date.parse(e.starts_at) > now - 6 * HOUR)
+    .sort((a, b) => Date.parse(a.starts_at) - Date.parse(b.starts_at))
+    .slice(0, n);
+  const from = list[0] ? nightOf(Date.parse(list[0].starts_at)) : null;
+  const to = list.length ? nightOf(Date.parse(list[list.length - 1].starts_at)) : null;
+  return { list, from, to };
+}
+
+/** "FRI 9": a night key as the rail prints it. */
+export function nightTag(key: string) {
+  const d = new Date(`${key}T12:00:00Z`);
+  return `${d.toLocaleDateString("en-NG", { weekday: "short", timeZone: "UTC" }).toUpperCase()} ${d.getUTCDate()}`;
+}

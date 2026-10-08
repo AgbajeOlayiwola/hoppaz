@@ -68,3 +68,11 @@ export function shortDate(iso: string) {
   const t = new Date(Date.parse(iso) + HOUR);
   return `${t.getUTCDate()} ${MONTHS[t.getUTCMonth()]}`;
 }
+
+/** The few characters under a sealed box on the map: "OPENS 9PM" tonight, "OPENS SAT" later. */
+export function opensShort(opensAt: string, now: number) {
+  const at = Date.parse(opensAt);
+  const night = (ms: number) => new Date(ms + HOUR - 6 * HOUR).toISOString().slice(0, 10);
+  if (night(at) === night(now)) return `OPENS ${clock12(at)}`;
+  return `OPENS ${DAYS[new Date(at + HOUR).getUTCDay()]}`;
+}

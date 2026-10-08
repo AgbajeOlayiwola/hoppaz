@@ -32,6 +32,20 @@ import type { HopStop } from "@/lib/types";
 import { busPosition } from "@/lib/busPosition";
 import { useCollectibleEventIds } from "@/lib/useCollectibles";
 import { DEMO_DROP_TITLES } from "@/lib/demoData";
+import NextBar from "@/components/map-chrome/NextBar";
+import BoxSheet from "@/components/reveal/BoxSheet";
+import Reveal, { type RevealItem, type RevealOutcome } from "@/components/reveal/Reveal";
+import CameraHunt from "@/components/CameraHunt";
+import type { MapBox } from "@/components/map/NightMap";
+import { sentence } from "@/components/event/copy";
+import { DEMO, demoDrops, demoReveal } from "@/components/me/demo";
+import { opensShort } from "@/components/me/dropTime";
+import { NEXT_COUNT, nextEvents } from "@/lib/filters";
+import { areaByName, pointFromGeog } from "@/lib/geo";
+import { useGameDrops, type GameDrop } from "@/lib/game";
+import { huntItem } from "@/lib/huntItems";
+import { useToast } from "@/lib/store";
+import { loadDropReceipts } from "@/lib/useCollectibles";
 
 // MapLibre touches window on import, so it stays out of the server bundle.
 const NightMap = dynamic(() => import("@/components/map/NightMap"), {
@@ -66,6 +80,8 @@ export default function MapPage() {
   const streak = Number(stats?.daily_streak ?? 0) || 0;
 
   const [picking, setPicking] = useState(false);
+  /** The map opens on the next events (NEXT 20); tapping a day switches to that one night. */
+  const [mode, setMode] = useState<"next" | "day">("next");
   const [selected, setSelected] = useState<string | null>(null);
   const [hopOpen, setHopOpen] = useState(false);
   const [filtering, setFiltering] = useState(false);
@@ -89,12 +105,16 @@ export default function MapPage() {
   // Rail counts: everything loaded, narrowed by type only (not by distance).
   const typed = useMemo(() => allEvents.filter((e) => matchesType(e, shownTypes)), [allEvents, shownTypes]);
   const counts = useMemo(() => countByDay(typed), [typed]);
-  // Everything on the map (pins, heat, the scrubber) works off the one chosen day.
-  const events = useMemo(() => typed.filter((e) => nightOf(Date.parse(e.starts_at)) === dayKey), [typed, dayKey]);
+  // NEXT 20: the next events from now, whatever night they fall on, so the map never opens empty.
+  const next = useMemo(() => nextEvents(typed, NEXT_COUNT, now), [typed, now]);
+  // Otherwise everything on the map (pins, heat, the scrubber) works off the one chosen day.
+  const dayEvents = useMemo(() => typed.filter((e) => nightOf(Date.parse(e.starts_at)) === dayKey), [typed, dayKey]);
+  const events = mode === "next" ? next.list : dayEvents;
 
   const pickDay = useCallback(
     (f: DateFilter) => {
       setDateFilter(f);
+      setMode("day");
       setSelected(null);
     },
     [setDateFilter]
@@ -140,6 +160,7 @@ export default function MapPage() {
       return;
     }
     setDateFilter({ kind: "night", date: nightOf(Date.parse(ev.starts_at)) });
+    setMode("day");
     if (useHoppaz.getState().types.length && !useHoppaz.getState().types.includes(ev.vibe)) setTypes([]);
   }, [ready, allEvents, setDateFilter, setTypes]);
 
@@ -160,6 +181,8 @@ export default function MapPage() {
     // A failed first load has nothing to look at yet: wait for "try again" to bring events in.
     if (!ready || firstDayChosen || (failed && allEvents.length === 0)) return;
     firstDayChosen = true;
+    // NEXT 20 is never empty while anything is coming up, so there is no quiet day to skip.
+    if (mode === "next") return;
     if (deepLink.current) return;
     const d = useHoppaz.getState().dateFilter;
     const t = todayKey();
@@ -168,7 +191,7 @@ export default function MapPage() {
       .filter((k) => k > t && counts[k] > 0)
       .sort()[0];
     if (next) setDateFilter({ kind: "night", date: next });
-  }, [ready, failed, allEvents.length, counts, setDateFilter]);
+  }, [ready, failed, allEvents.length, counts, setDateFilter, mode]);
 
   /* ---------------------------------------------------------- the scrubber -- */
   const [chosen, setChosen] = useState<{ day: string; at: number; live: boolean } | null>(null);
@@ -202,7 +225,8 @@ export default function MapPage() {
   const bus = useMemo(() => busPosition(hop, new Date(now)), [hop, now]);
   const [busFocus, setBusFocus] = useState(0);
   // The route and the bus button belong to Hop day only. Other days the bus sits parked and opens the Hop.
-  const hopActive = !!hop && hop.hop_date === dayKey;
+  // The NEXT view spans several nights, so there it waits for the Hop's own night.
+  const hopActive = !!hop && hop.hop_date === (mode === "next" ? todayStr : dayKey);
 
   // The first-run title plays once; after it, ask for a location once, never nag.
   const signNames = useMemo(
@@ -235,6 +259,68 @@ export default function MapPage() {
     [counts, dayKey]
   );
 
+  /* ------------------------------------------------------------ boxes -- */
+  // Drops stand on the map as boxes once you have set where you are.
+  const say = useToast((s) => s.say);
+  const live = useGameDrops();
+  const [sampleDrops] = useState<GameDrop[]>(() => (DEMO ? demoDrops(Date.now()) : []));
+  const allDrops = DEMO ? sampleDrops : live.drops;
+  const [opened, setOpened] = useState<Set<string>>(new Set());
+  useEffect(() => {
+    let on = true;
+    void loadDropReceipts(userId).then((rows) => on && setOpened(new Set(rows.map((r) => r.drop_id))));
+    return () => {
+      on = false;
+    };
+  }, [userId]);
+  const placed = useMemo(() => {
+    const out: Array<{ drop: GameDrop; at: { lat: number; lng: number }; eventId: string | null }> = [];
+    for (const d of allDrops) {
+      if (opened.has(d.id) || Date.parse(d.closes_at) <= now) continue;
+      const ev = d.event_id ? allEvents.find((e) => e.id === d.event_id) : undefined;
+      const at = pointFromGeog(d.geog) ?? (ev ? { lat: ev.lat, lng: ev.lng } : null) ?? areaByName(d.area) ?? null;
+      if (at) out.push({ drop: d, at: { lat: at.lat, lng: at.lng }, eventId: ev?.id ?? null });
+    }
+    return out;
+  }, [allDrops, opened, allEvents, now]);
+  const boxes: MapBox[] = useMemo(
+    () =>
+      fix
+        ? placed.map(({ drop, at }) => {
+            const open = Date.parse(drop.opens_at) <= now;
+            const hunt = !!huntItem(drop.hunt_item);
+            return { id: drop.id, lat: at.lat, lng: at.lng, open, hunt, label: open ? (hunt ? "HUNT" : "OPEN") : opensShort(drop.opens_at, now) };
+          })
+        : [],
+    [placed, fix, now]
+  );
+  const openBoxes = boxes.filter((b) => b.open).length;
+  // The moment you set your location, the boxes drop onto the map; say so once.
+  const announced = useRef(false);
+  useEffect(() => {
+    if (!fix || announced.current || boxes.length === 0) return;
+    announced.current = true;
+    say(`${boxes.length} ${boxes.length === 1 ? "box" : "boxes"} on the map. Go find ${boxes.length === 1 ? "it" : "them"}.`, "violet");
+  }, [fix, boxes.length, say]);
+
+  const [boxId, setBoxId] = useState<string | null>(null);
+  const [opening, setOpening] = useState<{ drop: GameDrop; code: string } | null>(null);
+  const [hunting, setHunting] = useState<{ drop: GameDrop; at: { lat: number; lng: number } } | null>(null);
+  const box = boxId ? placed.find((p) => p.drop.id === boxId) ?? null : null;
+  const markOpened = (id: string) => setOpened((s) => new Set(s).add(id));
+  const openBox = async (drop: GameDrop, code: string): Promise<RevealOutcome> => {
+    const r: { error?: string; reward?: string; description?: string; code?: string; xp?: number } = DEMO ? demoReveal() : await live.claim(drop, fix, code || undefined);
+    if (r.error) return { error: sentence(r.error) };
+    markOpened(drop.id);
+    const items: RevealItem[] = [{ kind: "reward", title: r.reward ?? "Your reward", line: r.description, code: r.code }];
+    if (r.xp) items.push({ kind: "xp", title: `+${r.xp} XP`, line: "Added to your XP." });
+    return { items };
+  };
+
+  /* ---------------------------------------- the side card's left and right -- */
+  const navRef = useRef<((fromId: string, dir: -1 | 1) => string | null) | null>(null);
+  const step = (dir: -1 | 1) => (selected ? navRef.current?.(selected, dir) ?? null : null);
+
   /* ------------------------------------------- how much of the map the chrome covers -- */
   const topRef = useRef<HTMLDivElement>(null);
   const bottomRef = useRef<HTMLDivElement>(null);
@@ -259,7 +345,7 @@ export default function MapPage() {
     : noLiveEvents
       ? "Nothing to show yet."
       : conductorLine({ events, dropEventIds: dropSet, dayKey, now });
-  const showEmpty = ready && !noLiveEvents && events.length === 0 && !filtering && !event;
+  const showEmpty = mode === "day" && ready && !noLiveEvents && events.length === 0 && !filtering && !event;
 
   return (
     <div
@@ -275,10 +361,10 @@ export default function MapPage() {
         radiusKm={radiusKm}
         bus={bus}
         busFocus={busFocus}
-        at={slot?.t ?? now}
-        live={slot?.live ?? true}
+        at={mode === "next" ? now : slot?.t ?? now}
+        live={mode === "next" ? true : slot?.live ?? true}
         onClear={() => setSelected(null)}
-        fitKey={`${dayKey}|${shownTypes.join(",")}`}
+        fitKey={`${mode === "next" ? "next" : dayKey}|${shownTypes.join(",")}`}
         selectedId={selected}
         onSelect={setSelected}
         onHopSelect={() => setHopOpen(true)}
@@ -290,6 +376,13 @@ export default function MapPage() {
         play={mounted && seenTitle}
         myLook={profile?.avatar ?? look}
         sidePanel={!!event}
+        allHot={mode === "next"}
+        boxes={boxes}
+        onBox={(id) => {
+          setSelected(null);
+          setBoxId(id);
+        }}
+        navRef={navRef}
       />
 
       {/* The chrome is all "now" (today's rail, the clock), so it draws on the client only: a page
@@ -300,7 +393,17 @@ export default function MapPage() {
         <TopChrome
           key={todayStr} /* a new day (6am) rebuilds the 14-day rail */
           hudRef={topRef}
-          day={dayFilter}
+          day={mode === "next" ? { kind: "any" } : dayFilter}
+          lead={{
+            label: "NEXT",
+            sub: String(next.list.length || NEXT_COUNT),
+            aria: `Next ${next.list.length} events`,
+            on: mode === "next",
+            onClick: () => {
+              setMode("next");
+              setSelected(null);
+            },
+          }}
           onDay={pickDay}
           counts={counts}
           types={shownTypes}
@@ -338,7 +441,18 @@ export default function MapPage() {
               <Plus size={16} strokeWidth={3} aria-hidden />
               Post a flyer
             </Link>
-            {slot && (
+            {mode === "next" ? (
+              <NextBar
+                className="pointer-events-auto w-full"
+                count={next.list.length}
+                from={next.from}
+                to={next.to}
+                boxes={boxes.length}
+                openBoxes={openBoxes}
+                hasFix={!!fix}
+                onLocate={() => setPicking(true)}
+              />
+            ) : slot && (
               <TimeScrubber
                 className="pointer-events-auto w-full"
                 stops={stops}
@@ -372,6 +486,8 @@ export default function MapPage() {
           onClose={closeCard}
           isHopStop={isHopStop}
           placement="side"
+          onPrev={step(-1) ? () => setSelected(step(-1)) : undefined}
+          onNext={step(1) ? () => setSelected(step(1)) : undefined}
         />
       )}
       {filtering && (
@@ -381,6 +497,57 @@ export default function MapPage() {
           onTypes={setTypes}
           onClear={() => setTypes([])}
           onClose={() => setFiltering(false)}
+        />
+      )}
+      {box && (
+        <BoxSheet
+          drop={box.drop}
+          at={box.at}
+          fix={fix}
+          now={now}
+          eventTitle={box.eventId ? allEvents.find((e) => e.id === box.eventId)?.title ?? null : null}
+          onEvent={
+            box.eventId
+              ? () => {
+                  const ev = allEvents.find((e) => e.id === box.eventId);
+                  setBoxId(null);
+                  if (ev) {
+                    if (mode === "day" && nightOf(Date.parse(ev.starts_at)) !== dayKey) setDateFilter({ kind: "night", date: nightOf(Date.parse(ev.starts_at)) });
+                    setSelected(ev.id);
+                  }
+                }
+              : undefined
+          }
+          onOpen={(code) => {
+            setOpening({ drop: box.drop, code });
+            setBoxId(null);
+          }}
+          onHunt={() => {
+            setHunting({ drop: box.drop, at: box.at });
+            setBoxId(null);
+          }}
+          onClose={() => setBoxId(null)}
+        />
+      )}
+      {opening && (
+        <Reveal
+          label={opening.drop.title}
+          where={opening.drop.partner?.name ?? opening.drop.area}
+          open={() => openBox(opening.drop, opening.code)}
+          onClose={() => setOpening(null)}
+        />
+      )}
+      {hunting && (
+        <CameraHunt
+          drop={hunting.drop}
+          eventPoint={hunting.at}
+          initialFix={fix ?? null}
+          onClaim={async (at) => {
+            const r = DEMO ? demoReveal() : await live.claim(hunting.drop, at);
+            if (!("error" in r) || !r.error) markOpened(hunting.drop.id);
+            return r;
+          }}
+          onClose={() => setHunting(null)}
         />
       )}
       {hopOpen && <HopSheet hop={hop} fix={fix} onClose={() => setHopOpen(false)} />}

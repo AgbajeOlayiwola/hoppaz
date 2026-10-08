@@ -1080,3 +1080,109 @@ svg.rig.poke #character { animation: rig-poke 0.42s cubic-bezier(0.3, 1.6, 0.5, 
 .hz-pulled-art {
   background: #ff4d00 url(/brand/mark-cream.png) center / auto 46px no-repeat;
 }
+
+/* ------------------------------------------------------ boxes on the map -- */
+/* A drop on the map is the same sealed box as the reveal, small. Open boxes glow and bob; sealed ones sit still and say when they open. */
+.hz-boxpin {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+  padding: 0;
+  border: 0;
+  background: none;
+  cursor: pointer;
+  animation: hz-boxpin-in 0.5s cubic-bezier(0.34, 1.56, 0.64, 1) var(--d, 0s) backwards;
+}
+@keyframes hz-boxpin-in {
+  from {
+    transform: translateY(-40px) scale(0.6);
+    opacity: 0;
+  }
+}
+.hz-boxpin-box {
+  position: relative;
+  display: block;
+  width: 30px;
+  height: 30px;
+  border-radius: 5px;
+  background: #f5ebdd;
+  box-shadow:
+    0 3px 0 #b83600,
+    0 8px 16px rgb(0 0 0 / 0.45);
+}
+.hz-boxpin-box::before {
+  content: "";
+  position: absolute;
+  inset: 0 0 auto;
+  height: 8px;
+  border-radius: 5px 5px 0 0;
+  background: #ece0cd;
+  border-bottom: 1px solid rgb(14 11 10 / 0.15);
+}
+.hz-boxpin-box::after {
+  content: "";
+  position: absolute;
+  left: 0;
+  right: 0;
+  top: 11px;
+  height: 6px;
+  background: #5b2eff;
+}
+.hz-boxpin-label {
+  padding: 2px 6px;
+  border-radius: 3px;
+  background: #0e0b0a;
+  white-space: nowrap;
+  font-family: var(--font-mono), monospace;
+  font-weight: 500;
+  font-size: 10px;
+  line-height: 1.2;
+  letter-spacing: 0.08em;
+  color: #f5ebdd;
+}
+.hz-boxpin-glow {
+  position: absolute;
+  left: 50%;
+  top: 15px;
+  width: 64px;
+  height: 64px;
+  margin: -32px 0 0 -32px;
+  border-radius: 9999px;
+  pointer-events: none;
+  background: radial-gradient(closest-side, rgb(91 46 255 / 0.55), rgb(91 46 255 / 0));
+  opacity: 0;
+}
+.hz-boxpin-open .hz-boxpin-glow {
+  animation: hz-boxpin-glow 1.8s ease-in-out infinite;
+}
+.hz-boxpin-open .hz-boxpin-box {
+  animation: hz-boxpin-bob 1.8s ease-in-out infinite;
+}
+.hz-boxpin-open .hz-boxpin-label {
+  background: #5b2eff;
+}
+.hz-boxpin-sealed .hz-boxpin-box {
+  filter: saturate(0.7) brightness(0.88);
+}
+@keyframes hz-boxpin-bob {
+  0%,
+  100% {
+    transform: translateY(0);
+  }
+  50% {
+    transform: translateY(-4px);
+  }
+}
+@keyframes hz-boxpin-glow {
+  0%,
+  100% {
+    opacity: 0.55;
+    transform: scale(0.85);
+  }
+  50% {
+    opacity: 1;
+    transform: scale(1.1);
+  }
+}

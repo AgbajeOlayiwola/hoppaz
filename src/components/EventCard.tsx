@@ -1,7 +1,8 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import { Bus } from "lucide-react";
+import Link from "next/link";
+import { ArrowRight, Bus, ChevronLeft, ChevronRight } from "lucide-react";
 import StubSheet from "@/components/event/StubSheet";
 import ArtPanel from "@/components/event/ArtPanel";
 import GoingFoot from "@/components/event/GoingFoot";
@@ -40,7 +41,10 @@ type Props = {
    * "sheet" (default): a tall stub rising from the bottom. "side": docked on the
    * right of the map, so the venue's house stays in view on the left.
    */
-  placement?: "sheet" | "side";
+  placement?: "sheet" | "side" | "page";
+  /** Side placement: step to the nearest event to the left or right on the map. Absent when there is none. */
+  onPrev?: () => void;
+  onNext?: () => void;
 };
 
 /** Check-in times seen this session, so the stamp keeps its time when you reopen the card. */
@@ -60,8 +64,9 @@ export default function EventCard(props: Props) {
   return <EventSheet key={props.event.id} {...props} />;
 }
 
-function EventSheet({ event, fix, userId, checkedIn, busy, onCheckIn, onClose, isHopStop, checkedAt, placement = "sheet" }: Props) {
+function EventSheet({ event, fix, userId, checkedIn, busy, onCheckIn, onClose, isHopStop, checkedAt, placement = "sheet", onPrev, onNext }: Props) {
   const side = placement === "side";
+  const page = placement === "page";
   const say = useToast((s) => s.say);
   const { photos: loaded, uploading, upload } = useEventFeed(event.id, userId);
   const sampleShots = useMemo(() => demoPhotos(event), [event]);
@@ -130,12 +135,37 @@ function EventSheet({ event, fix, userId, checkedIn, busy, onCheckIn, onClose, i
   };
 
   return (
-    <StubSheet label={title} theme={theme} onClose={onClose} placement={placement} footer={<GoingFoot event={event} userId={userId} compact={side} />}>
-      <ArtPanel flyer={flyer} alt={`${title} flyer`} vibe={event.vibe} tone={theme === "day" ? "ink" : "cream"} />
+    <StubSheet
+      label={title}
+      theme={theme}
+      onClose={onClose}
+      placement={placement}
+      toolbar={
+        side && (onPrev || onNext) ? (
+          <>
+            <button type="button" onClick={onPrev} disabled={!onPrev} aria-label="Nearest event to the left" className="grid h-10 w-10 place-items-center rounded-hz text-cream disabled:opacity-30">
+              <ChevronLeft size={22} aria-hidden />
+            </button>
+            <button type="button" onClick={onNext} disabled={!onNext} aria-label="Nearest event to the right" className="grid h-10 w-10 place-items-center rounded-hz text-cream disabled:opacity-30">
+              <ChevronRight size={22} aria-hidden />
+            </button>
+            {/* Up here it stays in sight however far the card scrolls. */}
+            <Link
+              href={`/event/${event.id}`}
+              className="ml-auto inline-flex min-h-[40px] items-center gap-1 whitespace-nowrap font-mono text-[11px] font-medium uppercase tracking-[0.08em] text-cream underline decoration-orange decoration-2 underline-offset-4"
+            >
+              FULL LISTING <ArrowRight size={13} className="text-orange" aria-hidden />
+            </Link>
+          </>
+        ) : undefined
+      }
+      footer={<GoingFoot event={event} userId={userId} compact={side} />}
+    >
+      <ArtPanel tall={page} flyer={flyer} alt={`${title} flyer`} vibe={event.vibe} tone={theme === "day" ? "ink" : "cream"} />
 
       {/* ----------------------------------------------- title and the facts -- */}
       <div className="px-5 pt-4">
-        <h2 className={`font-display font-black leading-[1.05] tracking-[-0.01em] ${side ? "pr-6 text-[22px]" : "text-[30px]"}`}>{title}</h2>
+        <h2 className={`font-display font-black leading-[1.05] tracking-[-0.01em] ${side ? "pr-6 text-[22px]" : page ? "text-[34px]" : "text-[30px]"}`}>{title}</h2>
         <p className="mt-2.5 font-mono text-[12px] font-medium uppercase leading-snug tracking-[0.04em] text-cream [text-wrap:balance]">{line}</p>
         <p className="mt-1 font-body text-[14px] text-dim">{event.venue_name}</p>
         {pill && (
@@ -149,6 +179,27 @@ function EventSheet({ event, fix, userId, checkedIn, busy, onCheckIn, onClose, i
           </p>
         )}
         {lead && <p className="hint mt-3">Community lead. Times and prices can move, so check the listing before you go.</p>}
+        {page ? (
+          <p className="mt-3">
+            <a
+              href={`https://www.google.com/maps/dir/?api=1&destination=${event.lat},${event.lng}`}
+              target="_blank"
+              rel="noreferrer noopener"
+              className="inline-flex min-h-[44px] items-center gap-1.5 font-mono text-[11px] font-medium uppercase tracking-[0.08em] text-cream underline decoration-orange decoration-2 underline-offset-4"
+            >
+              DIRECTIONS <ArrowRight size={14} className="text-orange" aria-hidden />
+            </a>
+          </p>
+        ) : side && (onPrev || onNext) ? null : (
+        <p className="mt-3">
+          <Link
+            href={`/event/${event.id}`}
+            className="inline-flex min-h-[44px] items-center gap-1.5 font-mono text-[11px] font-medium uppercase tracking-[0.08em] text-cream underline decoration-orange decoration-2 underline-offset-4"
+          >
+            FULL LISTING <ArrowRight size={14} className="text-orange" aria-hidden />
+          </Link>
+        </p>
+        )}
       </div>
 
       {showCheckIn && (

@@ -23,8 +23,11 @@ export default function DayRail({
   onChange,
   counts,
   slim = false,
+  lead,
   className,
 }: {
+  /** A chip before the days, e.g. the Map's NEXT 20. Selected when `on`. */
+  lead?: { label: string; sub: string; aria: string; on: boolean; onClick: () => void };
   value: DateFilter;
   onChange: (f: DateFilter) => void;
   /** Events per day key (countByDay). */
@@ -53,6 +56,24 @@ export default function DayRail({
         aria-label="Day"
         className="-my-1 flex min-w-0 flex-1 gap-1.5 overflow-x-auto py-1 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
       >
+        {lead && (
+          <button
+            role="radio"
+            aria-checked={lead.on}
+            aria-label={lead.aria}
+            onClick={lead.onClick}
+            className={clsx(
+              "flex flex-none flex-col items-center justify-center rounded-hz border transition-[transform,box-shadow] duration-75",
+              slim ? "min-w-[52px] px-1.5 py-1" : "min-w-[58px] px-2 py-1.5",
+              lead.on ? "border-orange bg-orange text-brand-ink shadow-chunk active:translate-y-1 active:shadow-none" : "border-line bg-ink-2 text-cream"
+            )}
+          >
+            <span className={clsx("font-mono font-medium tracking-[0.08em]", slim ? "text-[9.5px]" : "text-[10px]", lead.on ? "text-brand-ink" : "text-dim")}>
+              {lead.label}
+            </span>
+            <span className={clsx("num", slim ? "text-[17px]" : "text-[22px]")}>{lead.sub}</span>
+          </button>
+        )}
         {days.map((d) => {
           const on = d.date === selected;
           const n = counts[d.date] ?? 0;

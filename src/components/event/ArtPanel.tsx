@@ -17,7 +17,10 @@ export default function ArtPanel({
   alt,
   vibe,
   tone,
+  tall = false,
 }: {
+  /** The full event page: a hero, not a strip. */
+  tall?: boolean;
   flyer: string | null;
   alt: string;
   vibe: string;
@@ -55,7 +58,7 @@ export default function ArtPanel({
         onClick={() => setZoom(true)}
         aria-label="Open the flyer full size"
         className="relative block w-full flex-none overflow-hidden border-y border-line bg-ink-3"
-        style={{ height: "clamp(140px, 23svh, 210px)" }}
+        style={{ height: tall ? "clamp(240px, 46svh, 460px)" : "clamp(140px, 23svh, 210px)" }}
       >
         <img src={flyer} alt="" aria-hidden className="absolute inset-0 h-full w-full scale-125 object-cover opacity-50 blur-xl" />
         <img src={flyer} alt={alt} onError={() => setBroken(true)} className="relative h-full w-full object-contain" />
