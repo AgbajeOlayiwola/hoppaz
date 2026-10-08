@@ -98,6 +98,11 @@
 .maplibregl-canvas:focus {
   outline: none;
 }
+/* Zoom buttons sit under the top HUD and its filter chip; the bottom HUD would cover them */
+.maplibregl-ctrl-top-right {
+  top: calc(6.25rem + env(safe-area-inset-top, 0px));
+  right: 4px;
+}
 
 /* ------------------------------------------------- title sequence ----- */
 /* Timings: START 0.5s, PAN 9s. Keep in step with TitleSequence.tsx. */

@@ -48,6 +48,11 @@ must not be mistaken for a live event feed. Keep demo fixtures out of production
    the tables, PostGIS functions, RLS policies, private photo bucket, and Realtime
    publication entries. Do not run `supabase/seed.sql` in production: it contains
    sample events and test data. Add verified Lagos events through the staff queue.
+   Then run `supabase/chat_accounts.sql` (handles, accounts, temporary rooms,
+   event group chats, chat pictures). It is safe to run again, and an existing
+   project needs it before deploying the chat and account changes. Set
+   `CRON_SECRET` in Vercel too: the daily job in `vercel.json` deletes event
+   rooms for good three days after the event.
 3. **Authentication → Sign In / Providers → turn on Anonymous sign-ins.** Keep
    anonymous identity enabled; there is no mandatory email registration.
 4. Configure the app's Production environment in Vercel with

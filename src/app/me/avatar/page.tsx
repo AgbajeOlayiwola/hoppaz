@@ -9,11 +9,11 @@ import Avatar from "@/components/Avatar";
 import { useSession } from "@/lib/useSession";
 import { useHoppaz, useToast } from "@/lib/store";
 import {
-  BEARDS, BODIES, EARS, EYES, GLASSES, HAIR, HAIR_COLORS, LABELS, MOUTHS, NECKS, SKINS, WARDROBE,
-  normalizeLook, randomLook, type Item, type Look, type Slot,
+  BEARDS, BODIES, EARS, EYE_COLORS, EYES, FRAMES, GLASSES, HAIR, HAIR_COLORS, LABELS, LIPS, MOUTHS, NECKS, SKINS,
+  WARDROBE, normalizeLook, randomLook, type Item, type Look, type Slot,
 } from "@/lib/avatar";
 
-const TABS = ["SKIN", "HAIR", "FACE", "FITS", "KICKS", "EXTRAS"] as const;
+const TABS = ["BODY", "HAIR", "FACE", "FITS", "KICKS", "EXTRAS"] as const;
 type Tab = (typeof TABS)[number];
 
 const FIT_SLOTS: ReadonlyArray<[Slot, string]> = [
@@ -21,6 +21,13 @@ const FIT_SLOTS: ReadonlyArray<[Slot, string]> = [
   ["bottom", "Bottoms"],
   ["head", "Headwear"],
 ];
+
+// Skins are stored by index and new tones were appended, so show them deep to light.
+const lum = (hex: string) => {
+  const n = parseInt(hex.slice(1), 16);
+  return 0.299 * (n >> 16) + 0.587 * ((n >> 8) & 255) + 0.114 * (n & 255);
+};
+const SKIN_ORDER = SKINS.map((hex, i) => ({ hex, i })).sort((a, b) => lum(a.hex) - lum(b.hex));
 
 export default function AvatarEditor() {
   const router = useRouter();
@@ -35,7 +42,7 @@ export default function AvatarEditor() {
   const look = draft ?? initial;
   const set = (patch: Partial<Look>) => setDraft({ ...look, ...patch });
 
-  const [tab, setTab] = useState<Tab>("FITS");
+  const [tab, setTab] = useState<Tab>("BODY");
   const [label, setLabel] = useState<string>("all");
 
   const save = async () => {
@@ -96,12 +103,25 @@ export default function AvatarEditor() {
       </div>
 
       <div className="min-h-0 flex-1 overflow-y-auto px-4 py-4">
-        {tab === "SKIN" && (
+        {tab === "BODY" && (
           <>
+            <Section title="Frame">
+              {FRAMES.map(([k, name]) => (
+                <Tile
+                  key={k}
+                  on={look.frame === k}
+                  // Switching frame also suggests a build; build stays its own pick below.
+                  onClick={() => set({ frame: k, body: k === "female" ? "curvy" : "straight" })}
+                  name={name}
+                >
+                  <Avatar look={{ ...look, frame: k, body: k === "female" ? "curvy" : "straight" }} crop="head" />
+                </Tile>
+              ))}
+            </Section>
             <p className="label">Skin</p>
             <div className="mb-5 flex flex-wrap gap-2.5">
-              {SKINS.map((hex, i) => (
-                <Swatch key={hex} hex={hex} on={look.skin === i} onClick={() => set({ skin: i })} label={`Skin tone ${i + 1}`} />
+              {SKIN_ORDER.map(({ hex, i }, n) => (
+                <Swatch key={hex} hex={hex} on={look.skin === i} onClick={() => set({ skin: i })} label={`Skin tone ${n + 1}`} />
               ))}
             </div>
             <p className="label">Build</p>
@@ -137,10 +157,23 @@ export default function AvatarEditor() {
                 </Tile>
               ))}
             </Section>
+            <p className="label">Eye colour</p>
+            <div className="mb-5 flex flex-wrap gap-2.5">
+              {EYE_COLORS.map((c, i) => (
+                <Swatch key={c.key} hex={c.hex} on={look.eyeColor === i} onClick={() => set({ eyeColor: i })} label={`${c.key} eyes`} />
+              ))}
+            </div>
             <Section title="Mouth">
               {MOUTHS.map(([k, name]) => (
                 <Tile key={k} on={look.mouth === k} onClick={() => set({ mouth: k })} name={name}>
                   <Avatar look={{ ...look, mouth: k }} crop="head" />
+                </Tile>
+              ))}
+            </Section>
+            <Section title="Lips">
+              {LIPS.map(([k, name]) => (
+                <Tile key={k} on={look.lips === k} onClick={() => set({ lips: k })} name={name}>
+                  <Avatar look={{ ...look, lips: k }} crop="head" />
                 </Tile>
               ))}
             </Section>

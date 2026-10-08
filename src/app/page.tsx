@@ -34,6 +34,9 @@ const NightMap = dynamic(() => import("@/components/map/NightMap"), {
   ),
 });
 
+// One stable empty list: a fresh [] each render would rebuild every face marker.
+const NO_CREW: never[] = [];
+
 export default function MapPage() {
   const {
     fix, radiusKm, setRadius, showCrew, toggleCrew, seenIntro, markIntroSeen, seenTitle, setSeenTitle, look,
@@ -124,7 +127,7 @@ export default function MapPage() {
         hopStops={hop?.stops ?? []}
         fix={fix}
         radiusKm={radiusKm}
-        crew={showCrew ? crew : []}
+        crew={showCrew ? crew : NO_CREW}
         myLook={profile?.avatar ?? look}
         bus={bus}
         busFocus={busFocus}

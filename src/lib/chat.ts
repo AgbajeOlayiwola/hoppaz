@@ -1,8 +1,9 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { getSupabase } from "./supabase/client";
-import type { DmMessage, DmThread, Message, Wave } from "./types";
+import { shrink } from "./image";
+import type { DmMessage, DmThread, Message, Person, Wave } from "./types";
 
 /**
  * Chat, the client half. Everything that touches who-is-who (waves, DMs,
@@ -10,7 +11,41 @@ import type { DmMessage, DmThread, Message, Wave } from "./types";
  * browser only ever holds opaque keys and aliases. See the chat section there.
  */
 
-const MSG_COLS = "id, channel, body, created_at, author_key, author_name, author_look, anon";
+const MSG_COLS = "id, channel, body, created_at, author_key, author_name, author_look, author_handle, anon, image_path";
+const IMAGES = "chat-images";
+
+/** Shrink and upload a chat picture under the given folder. Returns its path, or null. */
+async function uploadImage(folder: string, file: File): Promise<string | null> {
+  const sb = getSupabase();
+  if (!sb) return null;
+  try {
+    const blob = await shrink(file);
+    const path = `${folder}/${crypto.randomUUID()}.jpg`;
+    const { error } = await sb.storage.from(IMAGES).upload(path, blob, { contentType: "image/jpeg" });
+    return error ? null : path;
+  } catch {
+    return null;
+  }
+}
+
+/** Signed URLs for chat pictures (the bucket is private), fetched once per path. */
+export function useChatImages(paths: (string | null | undefined)[]) {
+  const [urls, setUrls] = useState<Record<string, string>>({});
+  const asked = useRef(new Set<string>());
+  const key = useMemo(() => [...new Set(paths.filter((p): p is string => !!p))].sort().join("|"), [paths]);
+  useEffect(() => {
+    const sb = getSupabase();
+    const missing = (key ? key.split("|") : []).filter((p) => !asked.current.has(p));
+    if (!sb || !missing.length) return;
+    missing.forEach((p) => asked.current.add(p));
+    void sb.storage.from(IMAGES).createSignedUrls(missing, 60 * 60).then(({ data }) => {
+      if (!data) return;
+      const signed = data.flatMap((d) => (d.signedUrl && d.path ? [[d.path, d.signedUrl] as const] : []));
+      setUrls((now) => ({ ...now, ...Object.fromEntries(signed) }));
+    });
+  }, [key]);
+  return urls;
+}
 
 /** Turn a database error into a line for the toast. */
 export function chatError(message: string | undefined) {
@@ -18,6 +53,11 @@ export function chatError(message: string | undefined) {
   if (message.includes("slow_down")) return "EASY. TOO MANY MESSAGES, WAIT A FEW SECONDS";
   if (message.includes("no_session")) return "NOT SIGNED IN YET";
   if (message.includes("not_in_dm")) return "THIS CHAT IS CLOSED";
+  if (message.includes("need_account")) return "MAKE AN ACCOUNT TO CHAT PRIVATELY";
+  if (message.includes("bad_image")) return "THAT PICTURE DID NOT SEND";
+  if (message.includes("not_at_event")) return "CHECK IN AT THE EVENT TO JOIN ITS ROOM";
+  if (message.includes("not_in_group")) return "JOIN THE GROUP CHAT FIRST";
+  if (message.includes("room_closed")) return "THIS ROOM HAS CLOSED";
   return "DID NOT SEND";
 }
 
@@ -71,9 +111,10 @@ export function useRoom(channel: string, userId: string | null) {
 
   /** Returns an error line, or null when sent. */
   const send = useCallback(
-    async (body: string, anon: boolean): Promise<string | null> => {
+    async (body: string, anon: boolean, image?: File | null): Promise<string | null> => {
       const sb = getSupabase();
       if (!sb || !userId) {
+        if (image) return "PICTURES NEED A CONNECTION";
         // Demo: show it locally so the room still feels alive, and say so.
         setMsgs((m) => [
           ...m,
@@ -82,8 +123,16 @@ export function useRoom(channel: string, userId: string | null) {
         setMine((s) => new Set(s).add("me"));
         return null;
       }
-      const { data, error } = await sb.from("messages").insert({ channel, body, anon }).select(MSG_COLS).single();
-      if (error) return chatError(error.message);
+      let image_path: string | null = null;
+      if (image) {
+        image_path = await uploadImage(`room/${userId}`, image);
+        if (!image_path) return "THAT PICTURE DID NOT UPLOAD";
+      }
+      const { data, error } = await sb.from("messages").insert({ channel, body, anon, image_path }).select(MSG_COLS).single();
+      if (error) {
+        if (image_path) void sb.storage.from(IMAGES).remove([image_path]);
+        return chatError(error.message);
+      }
       const m = data as Message;
       if (m.author_key) setMine((s) => new Set(s).add(m.author_key!));
       setMsgs((prev) => (prev.some((x) => x.id === m.id) ? prev : [...prev, m]));
@@ -100,13 +149,77 @@ export function useRoom(channel: string, userId: string | null) {
 const WAVE_TEXT: Record<string, string> = {
   sent: "WAVE SENT. IF THEY WAVE BACK, YOU CAN CHAT",
   already: "ALREADY WAVED",
-  not_met: "YOU CAN ONLY WAVE AT PEOPLE YOU'VE BEEN OUT WITH",
+  not_met: "YOU CAN WAVE AT PEOPLE AT THE SAME PARTY OR IN YOUR GROUP CHATS",
   blocked: "YOU BLOCKED THEM",
   slow_down: "THAT'S A LOT OF WAVES TODAY. TRY TOMORROW",
   self: "THAT'S YOU",
   gone: "THEY'RE NOT AROUND ANY MORE",
   no_session: "NOT SIGNED IN YET",
+  need_account: "MAKE AN ACCOUNT TO WAVE",
 };
+
+const CREW_TEXT: Record<string, string> = {
+  added: "ADDED TO YOUR CREW",
+  already: "ALREADY IN YOUR CREW",
+  self: "THAT'S YOU",
+  gone: "THEY'RE NOT AROUND ANY MORE",
+  blocked: "YOU BLOCKED THEM",
+  no_session: "NOT SIGNED IN YET",
+  need_account: "MAKE AN ACCOUNT TO ADD PEOPLE",
+};
+
+/** Add the person behind a room key to your crew: they show on your map. */
+export async function addToCrew(key: string): Promise<{ ok: boolean; text: string }> {
+  const sb = getSupabase();
+  if (!sb) return { ok: false, text: "NOT CONNECTED" };
+  const { data, error } = await sb.rpc("add_to_crew", { p_key: key });
+  if (error) return { ok: false, text: "COULD NOT ADD" };
+  const r = String(data);
+  return { ok: r === "added" || r === "already", text: CREW_TEXT[r] ?? "COULD NOT ADD" };
+}
+
+
+export type EventRoom = { id: string; title: string; closesAt: number };
+
+const HOUR = 3.6e6;
+/** When an event's room closes for good: three days after it ends (as the server decides). */
+export const roomClosesAt = (e: { starts_at: string; ends_at?: string | null }) =>
+  Date.parse(e.ends_at ?? new Date(Date.parse(e.starts_at) + 8 * HOUR).toISOString()) + 72 * HOUR;
+
+/**
+ * The event rooms this Hopper is in: every event they checked in at, until its
+ * room closes. Nobody adds you; checking in is the way in. (Saying you're going
+ * is what gets you the group chat invite instead.)
+ */
+export function useMyEventRooms(userId: string | null) {
+  const [rooms, setRooms] = useState<EventRoom[]>([]);
+  useEffect(() => {
+    const sb = getSupabase();
+    if (!sb || !userId) return;
+    let cancelled = false;
+    const since = new Date(Date.now() - 6 * 24 * HOUR).toISOString();
+    type Row = { event_id: string; events: { title: string; starts_at: string; ends_at: string | null } | null };
+    void sb
+      .from("checkins")
+      .select("event_id, events(title, starts_at, ends_at)")
+      .eq("user_id", userId)
+      .gt("created_at", since)
+      .then(({ data }) => {
+        if (cancelled) return;
+        const now = Date.now();
+        setRooms(
+          ((data ?? []) as unknown as Row[])
+            .flatMap((r) => (r.events ? [{ id: r.event_id, title: r.events.title, closesAt: roomClosesAt(r.events) }] : []))
+            .filter((r) => now < r.closesAt)
+            .sort((x, y) => x.closesAt - y.closesAt)
+        );
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [userId]);
+  return rooms;
+}
 
 /** Wave at the person behind a room key. matched means they had already waved: the DM is open. */
 export async function wave(key: string): Promise<{ text: string; dm?: string }> {
@@ -133,16 +246,23 @@ export async function reportThing(kind: "room" | "dm" | "person", ref: string, r
   return !!data;
 }
 
-export function useWhosHere(eventId: string | null, enabled: boolean) {
-  const [people, setPeople] = useState<{ key: string; alias: string; waved: boolean }[]>([]);
+export type PeopleOf = { kind: "event" | "group"; eventId: string };
+
+/** Who you can see in a room: everyone checked in at the event, or everyone in the group chat. */
+export function usePeople(room: PeopleOf | null, userId: string | null) {
+  const [people, setPeople] = useState<Person[]>([]);
+  const ref = room?.eventId ?? null;
+  const kind = room?.kind ?? null;
   const load = useCallback(async () => {
     const sb = getSupabase();
-    if (!sb || !eventId || !enabled || eventId.startsWith("demo-")) return setPeople([]);
-    const { data } = await sb.rpc("whos_here", { p_event: eventId });
-    setPeople((data ?? []) as { key: string; alias: string; waved: boolean }[]);
-  }, [eventId, enabled]);
+    if (!sb || !userId || !ref || ref.startsWith("demo-")) return setPeople([]);
+    const { data } = await sb.rpc(kind === "group" ? "group_members" : "whos_here", { p_event: ref });
+    setPeople((data ?? []) as Person[]);
+  }, [kind, ref, userId]);
   useEffect(() => {
     void load();
+    const t = setInterval(load, 60_000);
+    return () => clearInterval(t);
   }, [load]);
   return { people, reload: load };
 }
@@ -178,12 +298,13 @@ export function useInbox(userId: string | null) {
   }, [load, userId]);
 
   const respond = useCallback(
-    async (id: string, accept: boolean): Promise<string | null> => {
+    async (id: string, accept: boolean): Promise<{ dm: string | null; needAccount?: boolean }> => {
       const sb = getSupabase();
-      if (!sb) return null;
-      const { data } = await sb.rpc("respond_wave", { p_wave: id, p_accept: accept });
+      if (!sb) return { dm: null };
+      const { data, error } = await sb.rpc("respond_wave", { p_wave: id, p_accept: accept });
+      if (error?.message.includes("need_account")) return { dm: null, needAccount: true };
       await load();
-      return (data as string | null) ?? null;
+      return { dm: (data as string | null) ?? null };
     },
     [load]
   );
@@ -231,18 +352,26 @@ export function useDm(dmId: string, userId: string | null) {
   }, [dmId, userId, loadThread]);
 
   const send = useCallback(
-    async (body: string): Promise<string | null> => {
+    async (body: string, image?: File | null): Promise<string | null> => {
       const sb = getSupabase();
-      if (!sb || !thread) return "NOT CONNECTED";
-      const { data, error } = await sb.rpc("send_dm", { p_dm: dmId, p_body: body });
-      if (error) return chatError(error.message);
+      if (!sb || !thread || !userId) return "NOT CONNECTED";
+      let image_path: string | null = null;
+      if (image) {
+        image_path = await uploadImage(`dm/${dmId}/${userId}`, image);
+        if (!image_path) return "THAT PICTURE DID NOT UPLOAD";
+      }
+      const { data, error } = await sb.rpc("send_dm", { p_dm: dmId, p_body: body, p_image: image_path });
+      if (error) {
+        if (image_path) void sb.storage.from(IMAGES).remove([image_path]);
+        return chatError(error.message);
+      }
       const id = String(data);
       setMsgs((prev) =>
-        prev.some((x) => x.id === id) ? prev : [...prev, { id, dm_id: dmId, from_a: thread.i_am_a, body, created_at: new Date().toISOString() }]
+        prev.some((x) => x.id === id) ? prev : [...prev, { id, dm_id: dmId, from_a: thread.i_am_a, body, image_path, created_at: new Date().toISOString() }]
       );
       return null;
     },
-    [dmId, thread]
+    [dmId, thread, userId]
   );
 
   const reveal = useCallback(async () => {
@@ -253,4 +382,71 @@ export function useDm(dmId: string, userId: string | null) {
   }, [dmId, loadThread]);
 
   return { msgs, thread, missing, send, reveal };
+}
+
+/* -------------------------------------------------- event group chats ---- */
+
+export type EventGroup = {
+  event_id: string;
+  title: string;
+  starts_at: string;
+  status: "invited" | "joined";
+  members: number;
+  last_body: string | null;
+  last_at: string;
+};
+
+export const groupChannel = (eventId: string) => `group:${eventId}`;
+
+/** Group chat invites (from saying you're going) and the group chats you're in. */
+export function useEventGroups(userId: string | null) {
+  const [groups, setGroups] = useState<EventGroup[]>([]);
+  const load = useCallback(async () => {
+    const sb = getSupabase();
+    if (!sb || !userId) return;
+    const { data } = await sb.rpc("my_groups");
+    setGroups((data ?? []) as EventGroup[]);
+  }, [userId]);
+  useEffect(() => {
+    void load();
+  }, [load]);
+  const join = useCallback(async (eventId: string) => {
+    const sb = getSupabase();
+    const { data } = (await sb?.rpc("join_group", { p_event: eventId })) ?? { data: false };
+    await load();
+    return !!data;
+  }, [load]);
+  const leave = useCallback(async (eventId: string) => {
+    const sb = getSupabase();
+    await sb?.rpc("leave_group", { p_event: eventId });
+    await load();
+  }, [load]);
+  return { groups, join, leave, reload: load };
+}
+
+/** "I'm going": the same as swiping in. It invites you to the event's group chat; the room itself opens when you check in. */
+export function useGoing(eventId: string, userId: string | null) {
+  const [going, setGoing] = useState(false);
+  useEffect(() => {
+    const sb = getSupabase();
+    setGoing(false);
+    if (!sb || !userId || eventId.startsWith("demo-")) return;
+    let cancelled = false;
+    void sb.from("swipes").select("decision").eq("user_id", userId).eq("event_id", eventId).maybeSingle().then(({ data }) => {
+      if (!cancelled) setGoing((data as { decision: string } | null)?.decision === "in");
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [eventId, userId]);
+  const set = useCallback(async (on: boolean) => {
+    const sb = getSupabase();
+    if (!sb || !userId) return false;
+    // Swipes can be inserted and deleted but not updated, so an earlier "pass" is cleared first.
+    const cleared = await sb.from("swipes").delete().eq("user_id", userId).eq("event_id", eventId);
+    const { error } = on ? await sb.from("swipes").insert({ user_id: userId, event_id: eventId, decision: "in" }) : cleared;
+    if (!error) setGoing(on);
+    return !error;
+  }, [eventId, userId]);
+  return { going, set };
 }

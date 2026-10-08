@@ -70,12 +70,3 @@ export function timeSlots(events: EventRow[], now = Date.now()): Array<{ at: num
   }
   return slots;
 }
-
-/** Expected crowd for each hour of the event's night, for the card's little chart. */
-export function nightProfile(e: EventRow) {
-  const start = Date.parse(e.starts_at);
-  return Array.from({ length: 8 }, (_, i) => {
-    const at = start - HOUR + i * HOUR;
-    return { at, label: clockShort(new Date(at).toISOString()), score: crowdAt(e, at, false) };
-  });
-}

@@ -11,7 +11,23 @@
  * clothes are the rider, not the brand, the same way photos carry the chroma.
  */
 
-export const SKINS = ["#3B2219", "#4E2C1E", "#5F3524", "#77452E", "#8D5A3B", "#A8714A", "#C68A5E"] as const;
+// Stored by index, so new tones go on the end; the editor shows them deep to light.
+export const SKINS = ["#3B2219", "#4E2C1E", "#5F3524", "#77452E", "#8D5A3B", "#A8714A", "#C68A5E", "#2C1812", "#DDA67C"] as const;
+
+/** Body frame. Drives jaw, lashes, brows and shoulders; build (BODIES) stays separate. */
+export const FRAMES = [
+  ["female", "Female"],
+  ["male", "Male"],
+] as const;
+
+export const EYE_COLORS = [
+  { key: "dark brown", hex: "#2E1B12" },
+  { key: "brown", hex: "#5C3520" },
+  { key: "hazel", hex: "#7D5E2C" },
+  { key: "amber", hex: "#B5722A" },
+  { key: "grey", hex: "#6C7A84" },
+  { key: "green", hex: "#3E6E4C" },
+] as const;
 
 export const HAIR_COLORS = [
   { key: "black", hex: "#1A1210" },
@@ -32,6 +48,14 @@ export const HAIR = [
   ["bantu", "Bantu knots"],
   ["cornrows", "Cornrows"],
   ["bald", "Clean"],
+  ["long", "Long straight"],
+  ["curls", "Long curls"],
+  ["ponytail", "Ponytail"],
+  ["bob", "Bob"],
+  ["twinpuffs", "Twin puffs"],
+  ["twintails", "Twintails"],
+  ["bun", "Top bun"],
+  ["spiky", "Spiky"],
 ] as const;
 
 export const EYES = [
@@ -39,6 +63,9 @@ export const EYES = [
   ["happy", "Happy"],
   ["wink", "Wink"],
   ["sleepy", "3am"],
+  ["sparkle", "Sparkle"],
+  ["sharp", "Cool"],
+  ["closed", "Content"],
 ] as const;
 
 export const MOUTHS = [
@@ -46,6 +73,15 @@ export const MOUTHS = [
   ["grin", "Grin"],
   ["smirk", "Smirk"],
   ["oh", "Oh"],
+  ["cat", "Cat"],
+  ["laugh", "Laugh"],
+  ["tongue", "Tongue"],
+] as const;
+
+export const LIPS = [
+  ["natural", "Natural"],
+  ["tint", "Tint"],
+  ["berry", "Berry"],
 ] as const;
 
 export const BEARDS = [
@@ -194,12 +230,15 @@ export const itemById = (id: string | null | undefined) => (id ? BY_ID.get(id) ?
 
 export type Look = {
   v: 1;
+  frame: Key<typeof FRAMES>;
   skin: number;
   hairColor: number;
+  eyeColor: number;
   body: Key<typeof BODIES>;
   hair: Key<typeof HAIR>;
   eyes: Key<typeof EYES>;
   mouth: Key<typeof MOUTHS>;
+  lips: Key<typeof LIPS>;
   beard: Key<typeof BEARDS>;
   glasses: Key<typeof GLASSES>;
   ears: Key<typeof EARS>;
@@ -212,12 +251,15 @@ export type Look = {
 
 export const DEFAULT_LOOK: Look = {
   v: 1,
+  frame: "male",
   skin: 3,
   hairColor: 0,
+  eyeColor: 0,
   body: "straight",
   hair: "fade",
   eyes: "open",
   mouth: "smile",
+  lips: "natural",
   beard: "none",
   glasses: "none",
   ears: "none",
@@ -246,14 +288,19 @@ export function normalizeLook(raw: unknown): Look {
   const r = (raw && typeof raw === "object" ? raw : {}) as Record<string, unknown>;
   const d = DEFAULT_LOOK;
   const head = typeof r.head === "string" ? BY_ID.get(r.head) : undefined;
+  const body = pick(BODIES, r.body, d.body);
   return {
     v: 1,
+    // Looks saved before frames existed: a curvy build reads as female.
+    frame: pick(FRAMES, r.frame, body === "curvy" ? "female" : "male"),
     skin: index(SKINS.length, r.skin, d.skin),
     hairColor: index(HAIR_COLORS.length, r.hairColor, d.hairColor),
-    body: pick(BODIES, r.body, d.body),
+    eyeColor: index(EYE_COLORS.length, r.eyeColor, d.eyeColor),
+    body,
     hair: pick(HAIR, r.hair, d.hair),
     eyes: pick(EYES, r.eyes, d.eyes),
     mouth: pick(MOUTHS, r.mouth, d.mouth),
+    lips: pick(LIPS, r.lips, d.lips),
     beard: pick(BEARDS, r.beard, d.beard),
     glasses: pick(GLASSES, r.glasses, d.glasses),
     ears: pick(EARS, r.ears, d.ears),
@@ -268,15 +315,21 @@ export function normalizeLook(raw: unknown): Look {
 export function randomLook(rand: () => number = Math.random): Look {
   const any = <T,>(xs: ReadonlyArray<T>) => xs[Math.floor(rand() * xs.length)];
   const of = (slot: Slot) => WARDROBE.filter((i) => i.slot === slot).map((i) => i.id);
+  const frame = any(FRAMES)[0];
+  const female = frame === "female";
   return {
     v: 1,
+    frame,
     skin: Math.floor(rand() * SKINS.length),
     hairColor: rand() < 0.7 ? 0 : Math.floor(rand() * HAIR_COLORS.length),
-    body: any(BODIES)[0],
+    eyeColor: rand() < 0.75 ? Math.floor(rand() * 2) : Math.floor(rand() * EYE_COLORS.length),
+    body: rand() < (female ? 0.75 : 0.15) ? "curvy" : "straight",
     hair: any(HAIR)[0],
     eyes: any(EYES)[0],
     mouth: any(MOUTHS)[0],
-    beard: rand() < 0.6 ? "none" : any(BEARDS)[0],
+    lips: female && rand() < 0.6 ? any(LIPS)[0] : "natural",
+    // Still choosable on any frame; random just keeps it rare on female.
+    beard: rand() < (female ? 0.95 : 0.6) ? "none" : any(BEARDS)[0],
     glasses: rand() < 0.6 ? "none" : any(GLASSES)[0],
     ears: any(EARS)[0],
     neck: any(NECKS)[0],

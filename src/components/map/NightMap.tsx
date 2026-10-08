@@ -54,6 +54,8 @@ type Sign = {
 
 /** Room left between two billboards, px. */
 const SIGN_GAP = 4;
+/** The top HUD (wordmark, XP, buttons) covers this much of the map, px. */
+const HUD_TOP = 60;
 /** From here in, venues are 3D lots: dots fade and signs float over the roofs. */
 const STREET_ZOOM = 14.6;
 
@@ -157,7 +159,7 @@ export default function NightMap({
         console.error("[hoppaz] map error:", event.error);
       });
       created.touchZoomRotate.disableRotation();
-      created.addControl(new maplibregl.NavigationControl({ showCompass: false }), "bottom-right");
+      created.addControl(new maplibregl.NavigationControl({ showCompass: false }), "top-right");
 
       m.on("load", () => {
         if (!m) return;
@@ -497,7 +499,18 @@ export default function NightMap({
       const p = m.project([busRef.current.lng, busRef.current.lat]);
       taken.push([p.x - 40, p.y, p.x + 40, p.y + 56]);
     }
+    // And the zoom buttons.
+    const ctrl = holder.current?.querySelector(".maplibregl-ctrl-top-right .maplibregl-ctrl-group");
+    if (ctrl && holder.current) {
+      const c = ctrl.getBoundingClientRect();
+      const h = holder.current.getBoundingClientRect();
+      taken.push([c.left - h.left, c.top - h.top, c.right - h.left, c.bottom - h.top]);
+    }
+    // A board cut off by the screen edge or tucked under the top HUD reads as broken:
+    // only show it if it fits, otherwise it drops to its tag, then its dot.
+    const { clientWidth: vw, clientHeight: vh } = m.getContainer();
     const free = (x0: number, y0: number, x1: number, y1: number) =>
+      x0 >= SIGN_GAP && x1 <= vw - SIGN_GAP && y0 >= HUD_TOP && y1 <= vh &&
       !taken.some(([a0, b0, a1, b1]) => x0 < a1 + SIGN_GAP && x1 + SIGN_GAP > a0 && y0 < b1 + SIGN_GAP && y1 + SIGN_GAP > b0);
     [...signs.current.values()]
       .sort((a, b) => a.rank - b.rank)
@@ -594,7 +607,8 @@ export default function NightMap({
           const full = document.createElement("span");
           full.className = "hz-full block whitespace-nowrap rounded-sm px-2 py-1 text-center leading-none shadow-chunk-sm";
           const title = document.createElement("b");
-          title.className = "block font-display text-[10px] font-black";
+          // Capped so a long title cannot make a board half the screen wide; the card has it in full.
+          title.className = "mx-auto block max-w-[150px] truncate font-display text-[10px] font-black";
           title.textContent = `${isEventLead(e) ? "LEAD · " : ""}${eventTitle(e).toUpperCase()}`; // textContent: titles come from Hoppers
           const collectible = document.createElement("span");
           collectible.className = "hz-collectible-label";
@@ -661,8 +675,7 @@ export default function NightMap({
     };
     if (ready.current) place();
     else m.once("hoppaz:ready" as never, place);
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- showPeek/hidePeek read refs
-  }, [loaded, events, fix, radiusKm, selectedId, at, live]);
+  }, [loaded, events, collectibleEventIds, fix, radiusKm, selectedId, at, live]);
 
   /* --------------------------------------- frame the filtered events ---- */
   const lastFit = useRef(fitKey);
@@ -682,10 +695,20 @@ export default function NightMap({
   /* ------------------------------------------- fly to the picked venue -- */
   // Down into the street so the venue's lot stands up in 3D, nudged up so the
   // card at the bottom does not cover it.
+  // Closing the card puts the camera back where it was, rather than leaving
+  // the Hopper stranded at street level with no idea where everything else is.
+  const before = useRef<{ center: maplibregl.LngLat; zoom: number; pitch: number; bearing: number } | null>(null);
   useEffect(() => {
     const m = map.current;
+    if (!m || !ready.current) return;
     const e = events.find((x) => x.id === selectedId);
-    if (!m || !e) return;
+    if (!e) {
+      if (before.current) m.easeTo({ ...before.current, duration: 800 });
+      before.current = null;
+      return;
+    }
+    // Hopping from one venue to the next keeps the view from before the first.
+    before.current ??= { center: m.getCenter(), zoom: m.getZoom(), pitch: m.getPitch(), bearing: m.getBearing() };
     m.easeTo({
       center: [e.lng, e.lat],
       zoom: Math.max(m.getZoom(), 15.6),
@@ -741,6 +764,7 @@ export default function NightMap({
   useEffect(() => {
     const m = map.current;
     if (!m || !busFocus || !bus) return;
+    before.current = null; // the Hopper chose a new view; closing a card should not undo it
     m.flyTo({ center: [bus.lng, bus.lat], zoom: Math.max(m.getZoom(), 13), pitch: 50, duration: 1600 });
     // Fly on the button press only, not every time the bus moves.
     // eslint-disable-next-line react-hooks/exhaustive-deps

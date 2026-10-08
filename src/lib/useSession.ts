@@ -11,6 +11,8 @@ import type { Profile } from "./types";
  */
 export function useSession() {
   const [userId, setUserId] = useState<string | null>(null);
+  /** Set once the Hopper has made an account (email + password); null while anonymous. */
+  const [email, setEmail] = useState<string | null>(null);
   const [profile, setProfile] = useState<Profile | null>(null);
   const [state, setState] = useState<"loading" | "ready" | "offline">("loading");
 
@@ -32,6 +34,7 @@ export function useSession() {
     (async () => {
       const { data: got } = await sb.auth.getSession();
       let id = got.session?.user.id ?? null;
+      if (!cancelled) setEmail(got.session?.user.email || null);
       if (!id) {
         const { data, error } = await sb.auth.signInAnonymously();
         if (error) {
@@ -68,5 +71,5 @@ export function useSession() {
     if (userId) void loadProfile(userId);
   }, [userId, loadProfile]);
 
-  return { userId, profile, state, patchProfile, refresh };
+  return { userId, email, hasAccount: !!email, profile, state, patchProfile, refresh };
 }

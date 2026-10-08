@@ -34,6 +34,8 @@ export type Profile = {
   area: string | null;
   xp: number;
   is_admin: boolean;
+  /** Auto-generated and unique (JollofRaver4821): how Hoppers tell each other apart in chat. */
+  handle?: string | null;
   /** Raw jsonb from the database. Always pass through normalizeLook() before use. */
   avatar?: unknown;
 };
@@ -73,13 +75,17 @@ export type Message = {
   author_key: string | null;
   author_name: string | null;
   author_look: unknown;
+  author_handle?: string | null;
   anon: boolean;
+  /** Storage path in the chat-images bucket; sign it before showing. */
+  image_path?: string | null;
 };
 
 export type DmThread = {
   id: string;
   i_am_a: boolean;
   other_name: string;
+  other_handle: string | null;
   other_look: unknown;
   revealed: boolean;
   me_revealed: boolean;
@@ -90,9 +96,12 @@ export type DmThread = {
   last_at: string;
 };
 
-export type DmMessage = { id: string; dm_id: string; from_a: boolean; body: string; created_at: string };
+export type DmMessage = { id: string; dm_id: string; from_a: boolean; body: string; image_path?: string | null; created_at: string };
 
-export type Wave = { id: string; from_alias: string; event_title: string | null; created_at: string };
+export type Wave = { id: string; from_alias: string; from_look: unknown; event_title: string | null; created_at: string };
+
+/** Someone in the same area or at the same party, as "who's near" and "who's here" list them. */
+export type Person = { key: string; handle: string | null; name: string; look: unknown; waved: boolean; in_crew: boolean; };
 
 export type CheckinClaim =
   | { ok: true; xp: number; distance_m: number; badges: string[] }

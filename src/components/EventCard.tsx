@@ -9,9 +9,10 @@ import { useEventFeed } from "@/lib/useEventFeed";
 import { useToast } from "@/lib/store";
 import { useEventCollectibles } from "@/lib/useCollectibles";
 import { useGameDrops } from "@/lib/game";
+import { useGoing } from "@/lib/chat";
 import QrScanner from "@/components/QrScanner";
 import EventQuestList from "@/components/EventQuestList";
-import { crowdAt, crowdLevel, nightProfile, TONE_HEX } from "@/lib/crowd";
+import { crowdAt, crowdLevel, TONE_HEX } from "@/lib/crowd";
 import { areaByName, clockLagos, clockShort, dayLagos, eventPrice, eventTitle, isEventLead, travelEstimate } from "@/lib/geo";
 import type { EventRow } from "@/lib/types";
 
@@ -52,6 +53,7 @@ export default function EventCard({
   const { photos, chat, uploading, upload } = useEventFeed(event.id, userId);
   const { drops, claimed, busy: collecting, collect } = useEventCollectibles(event.id, userId);
   const { drops: gameDrops, busy: dropBusy, claim: claimDrop } = useGameDrops(event.id);
+  const { going, set: setGoing } = useGoing(event.id, userId);
   const [dropCode, setDropCode] = useState("");
   const [scanDrop,setScanDrop] = useState(false);
   const [dropReward, setDropReward] = useState<{title:string;description:string;code?:string}|null>(null);
@@ -74,8 +76,6 @@ export default function EventCard({
   const now = Date.now();
   const score = crowdAt(event, now, true);
   const level = crowdLevel(event, now, score);
-  const profile = nightProfile(event);
-  const peak = Math.max(1, ...profile.map((p) => p.score));
 
   return (
     <div
@@ -110,10 +110,19 @@ export default function EventCard({
         </div>
 
         <div className="mt-2.5 flex gap-2">
-          {isEventLead(event) ? <button className="btn flex-1" disabled>VERIFY DETAILS BEFORE CHECK-IN</button> : <button className="btn flex-1" onClick={onCheckIn} disabled={checkedIn || !closeEnough || busy}>
-            {checkedIn ? "CHECKED IN ✓" : busy ? "CHECKING…" : closeEnough ? "CHECK IN · +50 XP" : "GET CLOSER TO CHECK IN"}
-          </button>}
-          <Link href={`/chat?c=${event.id}`} className="btn btn-ghost flex-none" aria-label="Event chat">
+          <button
+            className={clsx("btn flex-1", going ? "btn-ghost" : "")}
+            aria-pressed={going}
+            disabled={!userId}
+            onClick={async () => {
+              const ok = await setGoing(!going);
+              if (!ok) say("COULD NOT SAVE THAT");
+              else say(going ? "NOT GOING ANY MORE" : "YOU'RE GOING · YOUR GROUP CHAT INVITE IS IN CREW", going ? "orange" : "violet");
+            }}
+          >
+            {going ? "GOING ✓" : "I'M GOING"}
+          </button>
+          <Link href={`/chat?c=${event.id}`} className="btn btn-ghost flex-none" aria-label="Event room">
             <MessageSquare size={14} />
           </Link>
           {event.ig_url && (
@@ -121,6 +130,12 @@ export default function EventCard({
               <ExternalLink size={14} />
             </a>
           )}
+        </div>
+
+        <div className="mt-2 flex gap-2">
+          {isEventLead(event) ? <button className="btn flex-1" disabled>VERIFY DETAILS BEFORE CHECK-IN</button> : <button className="btn flex-1" onClick={onCheckIn} disabled={checkedIn || !closeEnough || busy}>
+            {checkedIn ? "CHECKED IN ✓" : busy ? "CHECKING…" : closeEnough ? "CHECK IN · +50 XP" : "GET CLOSER TO CHECK IN"}
+          </button>}
         </div>
       </div>
 
@@ -165,29 +180,6 @@ export default function EventCard({
             ))}
           </section>
         )}
-
-        {/* How the night goes: expected crowd hour by hour */}
-        <p className="seclabel mt-4">How the night goes · expected</p>
-        <div className="mt-2 flex h-20 items-end gap-1" aria-label="Expected crowd through the night">
-          {profile.map((p) => {
-            const isNow = now >= p.at && now < p.at + 3.6e6;
-            return (
-              <div key={p.at} className="flex flex-1 flex-col items-center gap-1">
-                <span
-                  className={clsx("w-full rounded-t-sm", isNow ? "bg-cream" : p.score >= 60 ? "bg-orange" : "bg-orange-ember")}
-                  style={{ height: `${Math.max(4, (p.score / peak) * 56)}px` }}
-                  title={`${p.label}: ${crowdLevel(event, p.at, p.score).label}`}
-                />
-                <span className={clsx("font-mono text-[8px] font-bold", isNow ? "text-cream" : "text-dim")}>{p.label}</span>
-              </div>
-            );
-          })}
-        </div>
-        <p className="hint mt-1.5">
-          Built from how many Hoppers swiped in and how Lagos nights usually run. Peaks around{" "}
-          {clockShort(new Date(profile.reduce((a, b) => (b.score > a.score ? b : a)).at).toISOString())}.
-          {(event.checkins ?? 0) > 0 && ` ${event.checkins} checked in tonight so far.`}
-        </p>
 
         {/* Pictures */}
         <div className="mt-5 flex items-center justify-between">

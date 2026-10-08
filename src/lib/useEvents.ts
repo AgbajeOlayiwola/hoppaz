@@ -31,15 +31,25 @@ export function useEvents(fix: Fix, radiusKm: number) {
     }
     setLoading(true);
     const from = fix ?? LAGOS_CENTER;
-    const { data, error } = await sb.rpc("events_near", {
-      p_lat: from.lat,
-      p_lng: from.lng,
-      // Always pull a wide net; the radius only decides what is revealed.
-      p_radius_m: Math.max(radiusKm, 45) * 1000,
-      // Keep upcoming listings available for calendar browsing, including
-      // event calendars spanning the rest of the month. The map narrows them.
-      p_to: new Date(Date.now() + 45 * 24 * 3.6e6).toISOString(),
-    });
+    const fetchNear = () =>
+      sb.rpc("events_near", {
+        p_lat: from.lat,
+        p_lng: from.lng,
+        // Always pull a wide net; the radius only decides what is revealed.
+        p_radius_m: Math.max(radiusKm, 45) * 1000,
+        // Keep upcoming listings available for calendar browsing, including
+        // event calendars spanning the rest of the month. The map narrows them.
+        p_to: new Date(Date.now() + 45 * 24 * 3.6e6).toISOString(),
+      });
+    let { data, error } = await fetchNear();
+    // A stored session that went stale while the tab slept makes every request
+    // fail with "JWT expired" and strands the Hopper on the demo night.
+    // Refresh it and try again; if it cannot be refreshed, drop it (events are public).
+    if (error && /jwt/i.test(error.message)) {
+      const { error: refreshError } = await sb.auth.refreshSession();
+      if (refreshError) await sb.auth.signOut({ scope: "local" });
+      ({ data, error } = await fetchNear());
+    }
     setLoading(false);
     if (error || !data) {
       console.warn("[hoppaz] events_near failed, showing the demo night:", error?.message);

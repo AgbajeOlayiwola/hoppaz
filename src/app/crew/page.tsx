@@ -1,6 +1,10 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
+import Link from "next/link";
+import { MessageSquare } from "lucide-react";
+import { useEventGroups } from "@/lib/chat";
+import { dayLagos } from "@/lib/geo";
 import { Search, UserMinus, UserPlus } from "lucide-react";
 import { useSession } from "@/lib/useSession";
 import { useCrew } from "@/lib/useCrew";
@@ -17,6 +21,9 @@ export default function CrewPage() {
   const { userId, profile } = useSession();
   const { crew, add, remove, search } = useCrew(userId);
   const { groups, openGroups, create: createGroup, join: joinGroup, plan, rsvp } = useGroups(userId);
+  const { groups: chats, join: joinChat, leave: leaveChat } = useEventGroups(userId);
+  const invites = chats.filter((g) => g.status === "invited");
+  const joined = chats.filter((g) => g.status === "joined");
   const { fix, look } = useHoppaz();
   const { events } = useEvents(fix,45);
   const say = useToast((s) => s.say);
@@ -61,6 +68,31 @@ export default function CrewPage() {
         <h1 className="font-display text-2xl font-black leading-none">Your crew</h1>
         <p className="seclabel mt-1.5">Who is out and where they are</p>
       </header>
+
+      <section className="card mb-4 p-3" aria-label="Event group chats">
+        <div className="flex items-center justify-between"><p className="seclabel text-orange">EVENT GROUP CHATS</p><span className="tag">{invites.length ? `${invites.length} INVITE${invites.length === 1 ? "" : "S"}` : "STAY IN TOUCH"}</span></div>
+        {chats.length === 0 && <p className="hint mt-2">Say you&apos;re going to an event and you&apos;re invited to its group chat. Unlike the event room, it stays after the night.</p>}
+        {invites.map((g) => (
+          <div key={g.event_id} className="mt-3 flex items-center gap-2 border-t border-line pt-3">
+            <span className="min-w-0 flex-1">
+              <b className="block truncate font-display">{g.title}</b>
+              <span className="hint">{dayLagos(g.starts_at)} · {g.members} in the chat · you&apos;re invited</span>
+            </span>
+            <button className="btn px-3 py-2" onClick={async () => say((await joinChat(g.event_id)) ? "YOU'RE IN THE GROUP CHAT" : "COULD NOT JOIN", "violet")}>JOIN</button>
+            <button className="btn btn-ghost px-3 py-2" onClick={() => void leaveChat(g.event_id)} aria-label={`No thanks to ${g.title}`}>NO</button>
+          </div>
+        ))}
+        {joined.map((g) => (
+          <Link key={g.event_id} href={`/crew/group/${g.event_id}`} className="mt-3 flex items-center gap-3 border-t border-line pt-3">
+            <span className="grid h-9 w-9 flex-none place-items-center rounded bg-violet text-cream"><MessageSquare size={15} /></span>
+            <span className="min-w-0 flex-1">
+              <b className="block truncate font-display">{g.title}</b>
+              <span className="hint block truncate">{g.last_body ?? `${g.members} in the chat · say hi`}</span>
+            </span>
+            <span className="flex-none font-mono text-[9px] font-bold text-orange">OPEN →</span>
+          </Link>
+        ))}
+      </section>
 
       <section className="card mb-4 p-3">
         <div className="flex items-center justify-between"><p className="seclabel text-orange">YOUR CREWS</p><span className="tag">LONG-TERM GROUPS</span></div>

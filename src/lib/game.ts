@@ -4,7 +4,7 @@ import { useCallback, useEffect, useState } from "react";
 import { getSupabase } from "./supabase/client";
 
 export type Quest = { id: string; key: string; title: string; description: string; quest_type: "checkin"|"photo"|"qr"|"insight"|"group"; event_id: string|null; starts_at: string; ends_at: string|null; repeat_period: string; xp_reward: number; badge_key: string|null; group_size: number };
-export type GameDrop = { id: string; title: string; description: string; partner_id: string|null; event_id: string|null; area: string|null; opens_at: string; closes_at: string; radius_m: number; claim_method: "proximity"|"qr"|"either"; reward_model: "fixed"|"random"; partner?: { name: string; logo_url: string|null }|null };
+export type GameDrop = { id: string; title: string; description: string; partner_id: string|null; event_id: string|null; area: string|null; geog: unknown; opens_at: string; closes_at: string; radius_m: number; claim_method: "proximity"|"qr"|"either"; reward_model: "fixed"|"random"; partner?: { name: string; logo_url: string|null }|null };
 export type CrewGroup = { id: string; name: string; visibility: "open"|"private"; invite_code: string; created_by: string; crew_moves?: CrewMove[] };
 export type CrewMove = { id: string; crew_id: string; title: string; meetup: string|null; starts_at: string; note: string; event_id: string|null };
 
@@ -18,7 +18,7 @@ export function useQuests(userId: string|null) {
 
 export function useGameDrops(eventId?:string) {
   const [drops,setDrops]=useState<GameDrop[]>([]); const [busy,setBusy]=useState<string|null>(null);
-  const reload=useCallback(async()=>{const sb=getSupabase();if(!sb)return;let q=sb.from("game_drops").select("id,title,description,partner_id,event_id,area,opens_at,closes_at,radius_m,claim_method,reward_model,partner:partners(name,logo_url)").eq("active",true).gt("closes_at",new Date().toISOString()).order("opens_at");if(eventId)q=q.eq("event_id",eventId);const {data}=await q;setDrops((data??[]) as unknown as GameDrop[]);},[eventId]);
+  const reload=useCallback(async()=>{const sb=getSupabase();if(!sb)return;let q=sb.from("game_drops").select("id,title,description,partner_id,event_id,area,geog,opens_at,closes_at,radius_m,claim_method,reward_model,partner:partners(name,logo_url)").eq("active",true).gt("closes_at",new Date().toISOString()).order("opens_at");if(eventId)q=q.eq("event_id",eventId);const {data}=await q;setDrops((data??[]) as unknown as GameDrop[]);},[eventId]);
   useEffect(()=>{void reload();},[reload]);
   const claim=useCallback(async(drop:GameDrop,fix:{lat:number;lng:number}|null,code?:string)=>{const sb=getSupabase();if(!sb)return {error:"NOT CONNECTED"};setBusy(drop.id);const {data,error}=await sb.rpc("claim_game_drop",{p_drop:drop.id,p_lat:fix?.lat??null,p_lng:fix?.lng??null,p_code:code?.trim()||null});setBusy(null);if(error)return {error:"COULD NOT CLAIM"};const r=data as {ok:boolean;reason?:string;reward?:string;description?:string;code?:string;xp?:number};if(!r.ok)return {error:({closed:"DROP IS CLOSED",sold_out:"ALL REWARDS HAVE BEEN CLAIMED",invalid_code:"QR CODE NOT VALID",code_required:"SCAN THE DROP QR CODE",location_required:"TURN ON LOCATION TO CLAIM",too_far:"GET CLOSER TO THE DROP",already:"YOU ALREADY CLAIMED THIS DROP"} as Record<string,string>)[r.reason??""]??"COULD NOT CLAIM"};await reload();return {reward:r.reward,description:r.description,code:r.code,xp:r.xp};},[reload]);
   return {drops,busy,claim,reload};

@@ -12,11 +12,14 @@ import { BADGES, levelFor } from "@/lib/brand";
 import { dayLagos } from "@/lib/geo";
 import AreaPicker from "@/components/AreaPicker";
 import { useGameDashboard } from "@/lib/game";
+import { useNextAsk } from "@/lib/account";
 
 type Visit = { event_id: string; created_at: string; title: string; venue: string; area: string | null };
 
 export default function MePage() {
-  const { userId, profile, patchProfile, state } = useSession();
+  const { userId, email, hasAccount, profile, patchProfile, state } = useSession();
+  const ask = useNextAsk(userId, hasAccount);
+  const [birthday, setBirthday] = useState("");
   const { stats: gameStats } = useGameDashboard(userId);
   const { fix, look, setSeenTitle } = useHoppaz();
   const say = useToast((s) => s.say);
@@ -89,6 +92,7 @@ export default function MePage() {
             <h1 className="truncate font-display text-2xl font-black leading-none">
               {profile?.display_name || "Hopper"}
             </h1>
+            {profile?.handle && <p className="mt-1 truncate font-mono text-[10px] font-bold text-orange">@{profile.handle}</p>}
             <p className="seclabel mt-1.5">
               {lvl.name} · {xp} XP · {visits.length} check-ins
             </p>
@@ -118,7 +122,7 @@ export default function MePage() {
             autoComplete="off"
           />
           <p className="hint mt-2">
-            No sign-up, no phone number. The name is what your crew searches for.
+            The name is what your crew searches for. In chat you also show as @{profile?.handle ?? "your handle"}, so people know it&apos;s you.
           </p>
           <div className="mt-3 flex gap-2">
             <button
@@ -137,6 +141,43 @@ export default function MePage() {
           </div>
         </div>
       )}
+
+      {ask.next?.key === "birthday" && (
+        <form
+          className="card mb-4 border-orange/60"
+          onSubmit={async (e) => {
+            e.preventDefault();
+            if (!birthday) return;
+            say((await ask.answer({ birthday })) ? "SAVED · WE'LL REMEMBER IT" : "THAT DATE DIDN'T WORK");
+          }}
+        >
+          <p className="font-display font-black">When&apos;s your birthday?</p>
+          <p className="hint mt-0.5">So the bus can do something for it. Only you see this.</p>
+          <input type="date" value={birthday} onChange={(e) => setBirthday(e.target.value)} max={new Date().toISOString().slice(0, 10)} aria-label="Your birthday" className="mt-3 [color-scheme:dark]" />
+          <div className="mt-3 flex gap-2">
+            <button type="submit" className="btn flex-1" disabled={!birthday}>SAVE</button>
+            <button type="button" className="btn btn-ghost flex-none" onClick={ask.later}>LATER</button>
+          </div>
+        </form>
+      )}
+
+      {state !== "loading" && (hasAccount ? (
+        <Link href="/account" className="card mb-4 flex items-center gap-3">
+          <span className="min-w-0 flex-1">
+            <p className="label mb-0.5">Account</p>
+            <p className="truncate font-display text-sm font-black">{email}</p>
+          </span>
+          <span className="flex-none font-mono text-[9px] font-bold tracking-widest text-dim">MANAGE →</span>
+        </Link>
+      ) : (
+        <Link href="/account" className="card mb-4 flex items-center gap-3 border-orange/60">
+          <span className="min-w-0 flex-1">
+            <p className="font-display font-black">Make an account</p>
+            <p className="hint mt-0.5">Wave at people, add them to your crew and chat privately. Your XP comes with you.</p>
+          </span>
+          <span className="flex-none font-mono text-[9px] font-bold tracking-widest text-orange">SIGN UP →</span>
+        </Link>
+      ))}
 
       <Link href="/me/avatar" className="card mb-4 flex items-center gap-3 overflow-hidden py-0 pr-0">
         <div className="min-w-0 flex-1 py-4">

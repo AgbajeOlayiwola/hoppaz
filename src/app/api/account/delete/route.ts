@@ -15,6 +15,12 @@ export async function POST(req:Request){
   const {data:dirs}=await admin.storage.from("event-photos").list(user.id,{limit:1000});
   const paths:string[]=[];for(const dir of dirs??[]){if(dir.id===null){const {data:files}=await admin.storage.from("event-photos").list(`${user.id}/${dir.name}`,{limit:1000});(files??[]).forEach(f=>{if(f.id!==null)paths.push(`${user.id}/${dir.name}/${f.name}`)});}else paths.push(`${user.id}/${dir.name}`);}
   if(paths.length){const {error}=await admin.storage.from("event-photos").remove(paths);if(error)return NextResponse.json({error:"Could not remove stored photos"},{status:500});}
+  // Chat pictures: room/<user>/<file> and dm/<dm>/<user>/<file>.
+  const chatPaths:string[]=[];
+  const {data:roomFiles}=await admin.storage.from("chat-images").list(`room/${user.id}`,{limit:1000});(roomFiles??[]).forEach(f=>{if(f.id!==null)chatPaths.push(`room/${user.id}/${f.name}`)});
+  const {data:dms}=await admin.from("dms").select("id").or(`a.eq.${user.id},b.eq.${user.id}`);
+  for(const dm of dms??[]){const {data:files}=await admin.storage.from("chat-images").list(`dm/${dm.id}/${user.id}`,{limit:1000});(files??[]).forEach(f=>{if(f.id!==null)chatPaths.push(`dm/${dm.id}/${user.id}/${f.name}`)});}
+  if(chatPaths.length){const {error}=await admin.storage.from("chat-images").remove(chatPaths);if(error)return NextResponse.json({error:"Could not remove chat pictures"},{status:500});}
   const {data:identities}=await admin.from("room_identities").select("id").eq("user_id",user.id);
   const keys=(identities??[]).map(x=>x.id);if(keys.length){const {error}=await admin.from("messages").delete().in("author_key",keys);if(error)return NextResponse.json({error:"Could not remove chat history"},{status:500});}
   const {error}=await admin.auth.admin.deleteUser(user.id);if(error)return NextResponse.json({error:"Could not delete account"},{status:500});
