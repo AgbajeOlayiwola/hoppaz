@@ -2,27 +2,42 @@
 
 import { useState } from "react";
 import { Crosshair } from "lucide-react";
-import clsx from "clsx";
 import Sheet from "./Sheet";
 import { AREAS, nearestArea } from "@/lib/geo";
 import { useHoppaz, useToast } from "@/lib/store";
 
+/** How far a Hopper will go. Plain choices, in kilometres: setRadius takes any number. */
+const REACH: Array<{ km: number; name: string; unit: string }> = [
+  { km: 3, name: "Walkable", unit: "3 km" },
+  { km: 8, name: "My side", unit: "8 km" },
+  { km: 20, name: "Across the bridge", unit: "20 km" },
+  { km: 60, name: "All Lagos", unit: "" },
+];
+
+/**
+ * The location sheet: where you are, how to set it, and (on the map) how far
+ * you will go. Radius and "You are in" used to be two panels stacked on the
+ * map; they live here now.
+ */
 export default function AreaPicker({
   open,
   onClose,
   onPicked,
+  showRadius = false,
 }: {
   open: boolean;
   onClose: () => void;
   onPicked?: (area: string | null) => void;
+  /** The map turns this on. Other screens only want the where-are-you part. */
+  showRadius?: boolean;
 }) {
-  const { fix, setFix } = useHoppaz();
+  const { fix, setFix, radiusKm, setRadius } = useHoppaz();
   const say = useToast((s) => s.say);
   const [locating, setLocating] = useState(false);
 
   const useGps = () => {
     if (!("geolocation" in navigator)) {
-      say("THIS BROWSER WILL NOT SHARE LOCATION");
+      say("This browser won't share your location.", "error");
       return;
     }
     setLocating(true);
@@ -33,46 +48,70 @@ export default function AreaPicker({
         const near = nearestArea(lat, lng);
         setFix({ lat, lng, source: "gps", area: near.name });
         onPicked?.(near.name);
-        say(`LOCKED ON · ${near.name.toUpperCase()}`);
+        say(`Locked on. ${near.name}.`, "ok");
         onClose();
       },
       () => {
         setLocating(false);
-        say("LOCATION DENIED · PICK YOUR AREA");
+        say("Location is off. Pick your area below.", "error");
       },
       { enableHighAccuracy: true, timeout: 10000, maximumAge: 60000 }
     );
   };
 
+  // A radius left over from the old slider (say 12 km) lights the nearest choice.
+  const reach = REACH.reduce((best, r) => (Math.abs(r.km - radiusKm) < Math.abs(best.km - radiusKm) ? r : best), REACH[0]);
+
   return (
     <Sheet open={open} onClose={onClose} label="Set your location">
-      <p className="seclabel">Where are you right now</p>
-      <p className="hint mb-3 mt-1">
-        Turn on location and the map works off your real position. Deny it and pick your area
-        instead: everything still works, just from the centre of that area.
-      </p>
-      <button className="btn btn-ghost mb-4 w-full" onClick={useGps} disabled={locating}>
-        <Crosshair size={14} />
-        {locating ? "FINDING YOU…" : "USE MY LOCATION"}
+      <p className="seclabel">You are in</p>
+      <p className="mt-1 font-display text-xl font-black">{fix?.area ?? "Nowhere yet"}</p>
+
+      <button className="btn mt-3 w-full" onClick={useGps} disabled={locating}>
+        <Crosshair size={15} aria-hidden />
+        {locating ? "Finding you…" : "Use my location"}
       </button>
-      <div className="flex flex-wrap gap-1.5">
+      <p className="hint mt-2">
+        Location on: the map works off where you really are. Location off: pick your area and it
+        works from the centre of it.
+      </p>
+
+      <div className="mt-3 flex flex-wrap gap-1.5">
         {AREAS.map((a) => (
           <button
             key={a.name}
+            aria-pressed={fix?.area === a.name}
             onClick={() => {
               setFix({ lat: a.lat, lng: a.lng, source: "area", area: a.name });
               onPicked?.(a.name);
               onClose();
             }}
-            className={clsx(
-              "tag cursor-pointer px-2.5 py-2 text-[10px]",
-              fix?.area === a.name && "tag-o"
-            )}
+            className="chip"
           >
-            {a.name.toUpperCase()}
+            {a.name}
           </button>
         ))}
       </div>
+
+      {showRadius && (
+        <>
+          <p className="seclabel mt-5">How far you&apos;ll go</p>
+          <div className="mt-2 flex flex-col gap-1.5">
+            {REACH.map((r) => (
+              <button
+                key={r.km}
+                aria-pressed={reach.km === r.km}
+                aria-label={`${r.name} ${r.unit}`.trim()}
+                onClick={() => setRadius(r.km)}
+                className="chip w-full justify-between"
+              >
+                <span>{r.name}</span>
+                <span>{r.unit}</span>
+              </button>
+            ))}
+          </div>
+        </>
+      )}
     </Sheet>
   );
 }

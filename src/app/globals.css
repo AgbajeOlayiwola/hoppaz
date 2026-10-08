@@ -195,15 +195,26 @@
   }
 }
 
-/* MapLibre: strip the light default chrome, keep attribution legible */
+/* MapLibre: strip the light default chrome. The map credit stays on screen as a tiny mono line,
+   above the page's bottom chrome (NightMap sets --hz-inset-top / --hz-inset-bottom from hudTop / hudBottom). */
 .maplibregl-ctrl-attrib {
-  background: rgb(var(--ground) / 0.78) !important;
+  background: rgb(var(--ground) / 0.72) !important;
   color: rgb(var(--dim)) !important;
   font-family: var(--font-mono), monospace !important;
-  font-size: 9px !important;
+  font-size: 10px !important;
+  line-height: 1.5 !important;
+  border-radius: 4px;
 }
 .maplibregl-ctrl-attrib a {
   color: rgb(var(--dim)) !important;
+  text-decoration: none;
+}
+.maplibregl-ctrl-attrib a:hover {
+  text-decoration: underline;
+}
+.maplibregl-ctrl-bottom-left {
+  bottom: calc(var(--hz-inset-bottom, 96px) + 2px);
+  left: 0;
 }
 .maplibregl-ctrl-group {
   background: rgb(var(--raised)) !important;
@@ -226,49 +237,51 @@
 .maplibregl-canvas:focus {
   outline: none;
 }
-/* Zoom buttons sit under the top HUD and its filter chip; the bottom HUD would cover them */
+/* Zoom buttons sit just under the page's top chrome (the night rail) */
 .maplibregl-ctrl-top-right {
-  top: calc(6.25rem + env(safe-area-inset-top, 0px));
+  top: calc(var(--hz-inset-top, 132px) + 8px);
   right: 4px;
 }
 
 /* ------------------------------------------------- title sequence ----- */
-/* Timings: START 0.5s, PAN 9s. Keep in step with TitleSequence.tsx. */
+/*
+ * Timings: START 0.3s, PAN 3.4s, about 4.5s in all with the hold on the lockup.
+ * TitleSequence.tsx owns the numbers and hands them down as --ts-start / --ts-pan;
+ * the fallbacks here are the same values, so the two stay in step.
+ * Stamps, not springs: every curve is a hard ease-out, nothing overshoots.
+ */
 .ts-cam {
-  animation: ts-pan 9s cubic-bezier(0.37, 0, 0.63, 1) 0.5s both;
+  animation: ts-pan var(--ts-pan, 3.4s) cubic-bezier(0.37, 0, 0.63, 1) var(--ts-start, 0.3s) both;
 }
 .ts-cam-back {
-  animation: ts-pan-back 9s cubic-bezier(0.37, 0, 0.63, 1) 0.5s both;
+  animation: ts-pan-back var(--ts-pan, 3.4s) cubic-bezier(0.37, 0, 0.63, 1) var(--ts-start, 0.3s) both;
 }
 .ts-rise {
   transform-box: fill-box;
   transform-origin: 50% 100%;
-  animation: ts-rise 0.55s cubic-bezier(0.34, 1.56, 0.64, 1) var(--d) both;
+  animation: ts-rise 0.26s cubic-bezier(0.2, 0.9, 0.3, 1) var(--d) both;
 }
 .ts-pop {
   transform-box: fill-box;
   transform-origin: 50% 100%;
-  animation: ts-pop 0.45s cubic-bezier(0.34, 1.8, 0.64, 1) var(--d) both;
+  animation: ts-pop 0.18s cubic-bezier(0.2, 0.9, 0.3, 1) var(--d) both;
 }
 /* A rooftop sign that flips to another name, like the logos in the show */
 .ts-pop.ts-flip-out {
   animation:
-    ts-pop 0.45s cubic-bezier(0.34, 1.8, 0.64, 1) var(--d) both,
-    ts-flip 0.2s ease-in var(--d2) forwards;
+    ts-pop 0.18s cubic-bezier(0.2, 0.9, 0.3, 1) var(--d) both,
+    ts-flip 0.14s cubic-bezier(0.2, 0.9, 0.3, 1) var(--d2) forwards;
 }
 .ts-draw {
   stroke-dasharray: 1;
   stroke-dashoffset: 1;
-  animation: ts-draw 0.8s ease-out var(--d) forwards;
+  animation: ts-draw 0.4s cubic-bezier(0.2, 0.9, 0.3, 1) var(--d) forwards;
 }
 .ts-bus {
-  animation: ts-drive 3.6s cubic-bezier(0.3, 0, 0.7, 1) var(--d) both;
+  animation: ts-drive 2.2s cubic-bezier(0.3, 0, 0.7, 1) var(--d) both;
 }
 .ts-blimp {
-  animation: ts-drift 7s ease-in-out both;
-}
-.ts-twinkle {
-  animation: pulse2 1.6s ease-in-out infinite;
+  animation: ts-drift 3.6s ease-in-out both;
 }
 @keyframes ts-pan {
   to {
@@ -288,12 +301,15 @@
     transform: scaleY(1);
   }
 }
+/* A sign stamps onto its roof: lands from a little above and a little off square. */
 @keyframes ts-pop {
   from {
-    transform: scale(0);
+    opacity: 0;
+    transform: scale(1.4) rotate(-3deg);
   }
   to {
-    transform: scale(1);
+    opacity: 1;
+    transform: none;
   }
 }
 @keyframes ts-flip {
@@ -322,27 +338,150 @@
     transform: translate(80px, -6px);
   }
 }
+/* The lockup: wordmark, then mascot. Scales down hard, lands a degree off square. */
 @keyframes ts-stamp {
   from {
     opacity: 0;
-    transform: scale(1.8) rotate(-6deg);
+    transform: scale(1.5) rotate(-4deg);
   }
   to {
     opacity: 1;
-    transform: none;
+    transform: rotate(-1deg);
   }
 }
 
 /* ------------------------------------------------------- map signs ---- */
-/* Event billboards on the night map pop up the way the intro's signs do */
+/*
+ * An event on the map: a dot (the "pins" circle layer) with a banner over it, a
+ * card-colour block with the name and one mono line. From street zoom the banner
+ * becomes a card with the flyer on top. NightMap's declutter sets data-mode on
+ * each sign: card | banner | mini (price only) | off (just the dot).
+ * Colours are the theme tokens, so the same rules are right on cream and on black.
+ * Signs simply appear (fade 160ms at most): no pop, no spring, no stagger.
+ */
 .hz-sign {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  margin: 0;
+  padding: 0;
+  border: 0;
+  background: none;
+  font: inherit;
+  text-align: left;
+  color: rgb(var(--text));
   cursor: pointer;
 }
-/* Signs simply appear: no spring, no stagger. Restraint buys the drop reveal its impact. */
-.hz-sign-board {
-  display: block;
-  transform-origin: 50% 100%;
+.hz-board {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
   animation: fade 0.16s ease both;
+}
+.hz-face,
+.hz-mini {
+  background: rgb(var(--card));
+  border: 1px solid rgb(var(--hairline));
+  border-radius: 6px;
+  box-shadow: 0 3px 10px rgb(var(--shadow) / 0.35);
+}
+.hz-face {
+  display: block;
+  padding: 4px 7px 5px;
+}
+.hz-name {
+  display: block;
+  max-width: 150px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-family: var(--font-poppins), system-ui, sans-serif;
+  font-weight: 900;
+  font-size: 11px;
+  line-height: 1.2;
+  color: rgb(var(--text));
+}
+.hz-meta {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-top: 1px;
+  white-space: nowrap;
+  font-family: var(--font-mono), monospace;
+  font-weight: 500;
+  font-size: 10px;
+  line-height: 1.35;
+  letter-spacing: 0.02em;
+  color: rgb(var(--text));
+}
+/* A live drop: violet text and a violet border, no fill. The only violet on a sign. */
+.hz-drop {
+  padding: 0 4px;
+  border: 1px solid rgb(var(--violet));
+  border-radius: 4px;
+  letter-spacing: 0.08em;
+  color: rgb(var(--violet));
+}
+.hz-drop[hidden] {
+  display: none;
+}
+.hz-art,
+.hz-mini {
+  display: none;
+}
+.hz-mini {
+  padding: 2px 6px;
+  font-family: var(--font-mono), monospace;
+  font-weight: 500;
+  font-size: 10px;
+  line-height: 1.3;
+  white-space: nowrap;
+  color: rgb(var(--text));
+}
+.hz-stem {
+  display: block;
+  width: 1px;
+  height: 6px;
+  background: rgb(var(--text) / 0.55);
+}
+/* The flyer, or a clean branded block (the H mark and the vibe) when there is none. */
+.hz-art {
+  position: relative;
+  height: 72px;
+  overflow: hidden;
+  background: rgb(var(--raised));
+  border-bottom: 1px solid rgb(var(--hairline));
+}
+.hz-art::before {
+  content: "";
+  position: absolute;
+  left: 50%;
+  top: 45%;
+  width: 26px;
+  height: 32px;
+  transform: translate(-50%, -50%);
+  background: rgb(var(--dim) / 0.5);
+  -webkit-mask: url(/brand/mark-cream.png) center / contain no-repeat;
+  mask: url(/brand/mark-cream.png) center / contain no-repeat;
+}
+.hz-art::after {
+  content: attr(data-vibe);
+  position: absolute;
+  left: 8px;
+  bottom: 5px;
+  font-family: var(--font-mono), monospace;
+  font-size: 10px;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: rgb(var(--dim));
+}
+.hz-art img {
+  position: absolute;
+  inset: 0;
+  z-index: 1;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
 }
 @keyframes fade {
   from {
@@ -352,63 +491,72 @@
     opacity: 1;
   }
 }
-.hz-sign .hz-full,
-.hz-sign .hz-tag {
-  background: #f5ebdd;
-  color: #0e0b0a;
+/* Modes, set by declutter */
+.hz-sign[data-mode="off"] {
+  visibility: hidden;
 }
-.hz-sign .hz-meta {
-  color: #b83600;
+.hz-sign[data-mode="mini"] .hz-face {
+  display: none;
 }
-.hz-collectible-label {
+.hz-sign[data-mode="mini"] .hz-mini {
   display: block;
-  margin-bottom: 2px;
-  color: #6f42d8;
-  font-family: var(--font-mono), monospace;
-  font-size: 7px;
-  font-weight: 700;
-  letter-spacing: 0.12em;
 }
-.hz-collectible-label[hidden] { display: none; }
-.hz-sign.hz-on .hz-collectible-label { color: #0e0b0a; }
-.hz-sign.hz-on .hz-full,
-.hz-sign.hz-on .hz-tag {
-  background: #ff4d00;
-  color: #f5ebdd;
+.hz-sign[data-mode="card"] .hz-face {
+  width: 132px;
+  padding: 0;
+  overflow: hidden;
 }
-.hz-sign.hz-on .hz-meta {
-  color: #0e0b0a;
+.hz-sign[data-mode="card"] .hz-art {
+  display: block;
+}
+.hz-sign[data-mode="card"] .hz-text {
+  display: block;
+  padding: 6px 8px 7px;
+}
+.hz-sign[data-mode="card"] .hz-name {
+  display: -webkit-box;
+  max-width: none;
+  white-space: normal;
+  font-size: 12.5px;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+}
+.hz-sign[data-mode="card"] .hz-meta {
+  flex-wrap: wrap;
+  row-gap: 3px;
+  margin-top: 3px;
 }
 /* Outside your radius: still there, still priced, just quieter */
 .hz-sign.hz-far {
   opacity: 0.55;
 }
-.hz-sign[data-mode="full"] .hz-tag,
-.hz-sign[data-mode="tag"] .hz-full {
-  display: none;
-}
-/* Street zoom: the sign floats above its venue's 3D lot instead of sitting on it */
-.hz-street .hz-sign {
-  transform-origin: 50% 100%;
-}
-.hz-street .hz-sign-board {
-  translate: 0 calc(-1 * var(--hz-lift, 0px));
-}
-.hz-sign[data-mode="off"] {
-  visibility: hidden;
-}
+/* The one you picked: an orange 2px edge and the ember lip, never a solid orange fill */
 .hz-sign.hz-on {
   visibility: visible;
+  opacity: 1;
+}
+.hz-sign.hz-on .hz-face,
+.hz-sign.hz-on .hz-mini {
+  border-color: #ff4d00;
+  box-shadow:
+    0 0 0 1px #ff4d00,
+    0 4px 0 1px #b83600;
+}
+.hz-sign.hz-on .hz-stem {
+  background: #ff4d00;
 }
 
-/* Desktop hover card over an event */
+/* Desktop hover card over an event: above every banner, the bus and your dot (their z-index is 1 to 6) */
+.hz-peek {
+  z-index: 8;
+}
 .hz-peek .maplibregl-popup-content {
-  background: rgb(var(--raised));
+  background: rgb(var(--card));
   color: rgb(var(--text));
   border: 1px solid rgb(var(--hairline));
   border-radius: 6px;
   padding: 10px 12px;
-  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.5);
+  box-shadow: 0 8px 24px rgb(var(--shadow) / 0.45);
 }
 .hz-peek.maplibregl-popup-anchor-bottom .maplibregl-popup-tip {
   border-top-color: rgb(var(--hairline));
@@ -416,10 +564,113 @@
 .hz-peek.maplibregl-popup-anchor-top .maplibregl-popup-tip {
   border-bottom-color: rgb(var(--hairline));
 }
+.hz-peek-title {
+  font-family: var(--font-poppins), system-ui, sans-serif;
+  font-weight: 900;
+  font-size: 14px;
+  line-height: 1.2;
+  color: rgb(var(--text));
+}
+.hz-peek-sub {
+  margin-top: 2px;
+  font-family: var(--font-mono), monospace;
+  font-size: 10px;
+  color: rgb(var(--dim));
+}
+.hz-peek-meta {
+  margin-top: 6px;
+  font-family: var(--font-mono), monospace;
+  font-weight: 500;
+  font-size: 11px;
+  color: rgb(var(--text));
+}
 
-/* The Hop bus: its own marker. It glides between stops; it does not bob. */
-.hz-bus {
+/* The Hop on the map: a plain dashed route, numbered stops, and a card-colour bus. No violet, no bob. */
+/* No position here: MapLibre's .maplibregl-marker is already absolute, and a marker that is
+   relative stacks in flow and lands far from its point. It is also the containing block below. */
+.hz-stop {
+  display: grid;
+  place-items: center;
+  width: 22px;
+  height: 22px;
+  padding: 0;
+  border-radius: 9999px;
+  border: 1.5px solid rgb(var(--text));
+  background: rgb(var(--card));
+  box-shadow: 0 2px 6px rgb(var(--shadow) / 0.35);
+  font-family: var(--font-poppins), system-ui, sans-serif;
+  font-weight: 900;
+  font-size: 11px;
+  line-height: 1;
+  color: rgb(var(--text));
   cursor: pointer;
+}
+/* 44px to tap, 22px to see */
+.hz-stop::after {
+  content: "";
+  position: absolute;
+  inset: -11px;
+}
+.hz-bus {
+  display: block;
+  width: 36px;
+  height: 28px;
+  padding: 0;
+  border: 0;
+  background: none;
+  color: rgb(var(--text));
+  cursor: pointer;
+}
+.hz-bus-body {
+  display: grid;
+  place-items: center;
+  width: 36px;
+  height: 28px;
+  border-radius: 6px;
+  border: 1.5px solid rgb(var(--text));
+  background: rgb(var(--card));
+  box-shadow: 0 3px 10px rgb(var(--shadow) / 0.35);
+}
+.hz-bus-label {
+  position: absolute;
+  bottom: calc(100% + 5px);
+  left: 0;
+  padding: 2px 6px;
+  border: 1px solid rgb(var(--hairline));
+  border-radius: 4px;
+  background: rgb(var(--card));
+  box-shadow: 0 3px 10px rgb(var(--shadow) / 0.35);
+  white-space: nowrap;
+  font-family: var(--font-mono), monospace;
+  font-weight: 500;
+  font-size: 10px;
+  line-height: 1.35;
+  letter-spacing: 0.06em;
+  color: rgb(var(--text));
+}
+/* near the right edge the label grows leftwards instead of running off the map */
+.hz-bus[data-align="right"] .hz-bus-label {
+  left: auto;
+  right: 0;
+}
+/* Your own position: a plain dot, ring in the text colour (cream at night, ink by day). Not tappable. */
+.hz-me {
+  display: grid;
+  place-items: center;
+  width: 18px;
+  height: 18px;
+  border-radius: 9999px;
+  border: 2px solid rgb(var(--text));
+  background: rgb(var(--ground));
+  box-shadow: 0 2px 8px rgb(var(--shadow) / 0.4);
+  pointer-events: none;
+}
+.hz-me::after {
+  content: "";
+  width: 6px;
+  height: 6px;
+  border-radius: 9999px;
+  background: rgb(var(--text));
 }
 
 @media (prefers-reduced-motion: reduce) {
@@ -567,4 +818,70 @@ svg.rig.poke #character { animation: rig-poke 0.42s cubic-bezier(0.3, 1.6, 0.5, 
   svg.rig * {
     animation: none !important;
   }
+}
+
+/* ------------------------------------------------ app-wide states ------ */
+/* Appended by the appwide pass: install sheet, offline line, share poster, links. */
+
+/* A text link: orange to tap on the night ground, Ember on cream where orange would fail contrast. */
+.hz-link {
+  color: #ff4d00;
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+[data-theme="day"] .hz-link {
+  color: #b83600;
+}
+
+/* The offline line sits under the status bar and already clears the notch. */
+.hz-offline .pad-top {
+  padding-top: 0.75rem;
+}
+
+/*
+ * The mascot's body is cream, so on the cream day ground a ground-colour keyline
+ * would make it vanish. By day the keyline is ink (the sticker edge) everywhere.
+ */
+[data-theme="day"] svg.rig {
+  --rig-edge: #0e0b0a;
+}
+/* The mascot on a raised night surface (a sheet): its keyline matches the surface, not the ground. */
+:root:not([data-theme="day"]) svg.rig.rig-on-raised {
+  --rig-edge: rgb(var(--raised));
+}
+
+/*
+ * Loud-layer pages (the title sequence, the shared month poster) are always the
+ * night set, whatever the Lagos clock says: their art is drawn for it.
+ */
+.hz-night,
+.hz-poster {
+  color-scheme: dark;
+  --ground: 14 11 10;
+  --raised: 23 18 16;
+  --card: 34 26 23;
+  --hairline: 46 35 32;
+  --text: 245 235 221;
+  --dim: 156 144 135;
+  --keke: 47 211 92;
+  --lagoon: 34 184 240;
+  --danfo: 255 196 0;
+  --violet: 157 129 255;
+  --fireant: 229 72 77;
+  --shadow: 0 0 0;
+  background: rgb(var(--ground));
+  color: rgb(var(--text));
+}
+
+/* Paper grain for the loud layer: fine noise, multiplied in very faintly. */
+.hz-grain {
+  opacity: 0.06;
+  mix-blend-mode: screen;
+  background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='160' height='160'><filter id='n'><feTurbulence type='fractalNoise' baseFrequency='.9' numOctaves='2' stitchTiles='stitch'/><feColorMatrix values='0 0 0 0 1  0 0 0 0 1  0 0 0 0 1  0 0 0 .9 0'/></filter><rect width='100%' height='100%' filter='url(%23n)'/></svg>");
+}
+
+/* A torn scrap of cream paper behind the mascot, so its ink keyline reads as a sticker edge. */
+.hz-scrap {
+  background: #f5ebdd;
+  clip-path: polygon(2% 8%, 14% 3%, 27% 7%, 41% 2%, 55% 6%, 70% 1%, 84% 5%, 97% 3%, 99% 20%, 96% 36%, 100% 52%, 97% 70%, 99% 88%, 86% 96%, 71% 92%, 56% 98%, 40% 93%, 26% 99%, 12% 94%, 3% 97%, 1% 80%, 4% 62%, 0% 45%, 3% 28%);
 }

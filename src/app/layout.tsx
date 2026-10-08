@@ -15,6 +15,8 @@ import "./globals.css";
 import BottomNav from "@/components/BottomNav";
 import Toaster from "@/components/Toaster";
 import ThemeClock from "@/components/ThemeClock";
+import OfflineLine from "@/components/app/OfflineLine";
+import InstallSheet from "@/components/app/InstallSheet";
 import { THEME_BOOT_SCRIPT } from "@/lib/theme";
 
 export const metadata: Metadata = {
@@ -52,10 +54,12 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
       <body className="overflow-hidden">
         <ThemeClock />
         <div className="fixed inset-0 flex flex-col">
+          <OfflineLine />
           <main className="relative flex-1 min-h-0">{children}</main>
           <BottomNav />
         </div>
         <Toaster />
+        <InstallSheet />
       </body>
     </html>
   );
