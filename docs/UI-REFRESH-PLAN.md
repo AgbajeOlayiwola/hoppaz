@@ -123,6 +123,26 @@ Hoppaz as a listing and community place for organisers, staged so nothing heavy 
 
 **Notifications:** organiser updates need push, which only works on iPhone after the app is installed to the home screen. The install sheet comes first; WhatsApp stays the reliable channel.
 
+## 4b. Brand quest builder (after the UI launch)
+
+The differentiator. Research on 8 Oct 2026 found no ticketing platform with one self-serve builder where organisers and brands set both pre-event and post-event quests and fund the rewards. What exists is referral cashback (Posh Kickback, Shotgun Cashback, Tixr Rewards, Ticket Fairy, Skiddle Reps), conference app quest builders (Eventify, Amego, POAP Journey) and one-off festival builds (Coachella Quests 2024, Defqon.1 The Path). Nothing like it in Lagos or Africa. Jae ran social questing at Absinthe Labs; the model carries over from web3 to events.
+
+**Roles:** brands and organisers set the quest line and fund the rewards; Hoppaz builds the quest line, verifies actions, and can power ticket rewards. Hoppaz adds XP and badges on top, and they carry across organisers (nobody else does that).
+
+**Quest line, by phase:**
+- Pre-event: say you're going; follow the brand on X or Instagram (and Hoppaz); like or repost the announcement; share your referral link (Hoppaz tracks referrals for events hosted on Hoppaz); bring your crew.
+- At the event: check in (server-verified location, already built); scan the sponsor's QR (already built); photo tasks set by the organiser ("snap a picture with four people", "snap the DJ"); post on X or Instagram tagging the brand.
+- Post-event: recap photo (only after a verified check-in); rate the night; say you're going to their next one; buy the merch.
+
+**Verification:**
+- Hoppaz-native actions (going, check-in, QR, photos, referrals): verified by the app itself.
+- X: follow, like, repost and mention checks through the X API (tier and cost: see research notes below).
+- Instagram: tags and story mentions through Meta's APIs where the brand connects its professional account; follows and likes by screenshot, checked by a cheap vision model (Groq) with a human review queue for low-confidence cases.
+
+**Guardrails (from the evidence):** real rewards only for verified actions, capped per person; shares and invites earn XP, not brand rewards; brands deposit reward codes or stock before a quest goes live (same as drops today); no prize draws without a promotional permit (fixed rewards for actions instead); fraud defences on screenshots (handle must match the linked account, freshness, duplicate-image detection, spot checks, re-checks).
+
+**Builds on what exists:** quest types (check-in, photo, venue code or QR, text, crew) and reward types (XP, badge, discount, ticket, upgrade, collectible) are already in the schema and the admin desk. The builder exposes that to organisers, adds social quest types, and adds the verification pipeline.
+
 ## 5. Card of the Day
 
 - Daily content using the deck. Only signed, place or public-domain cards are featured.
