@@ -954,3 +954,128 @@ svg.rig.poke #character { animation: rig-poke 0.42s cubic-bezier(0.3, 1.6, 0.5, 
     transform: none;
   }
 }
+
+/* ------------------------------------------------------- drop reveal ---- */
+/*
+ * The one extravagance (Reveal.tsx): four sealed boxes, one torn open by hand,
+ * the contents pulled out face up. Everything else in the app stamps and holds
+ * still; this is the moment that is allowed to move.
+ */
+.hz-box {
+  border-radius: 10px;
+  background: #f5ebdd;
+  box-shadow:
+    0 6px 0 #b83600,
+    0 18px 40px rgb(0 0 0 / 0.45);
+}
+.hz-box-lid {
+  border-radius: 10px 10px 0 0;
+  background: #ece0cd;
+  border-bottom: 2px solid rgb(14 11 10 / 0.12);
+}
+.hz-box-mark {
+  background: #ff4d00;
+  -webkit-mask: url(/brand/mark-cream.png) center / contain no-repeat;
+  mask: url(/brand/mark-cream.png) center / contain no-repeat;
+}
+.hz-tape-l,
+.hz-tape-r {
+  background: #5b2eff;
+}
+/* The torn end peels up off the box; the rest still holds, with a ragged edge where it parts. */
+.hz-tape-l {
+  transform-origin: 100% 50%;
+  transform: translateY(-7px) rotate(-5deg);
+  box-shadow: 0 6px 10px rgb(0 0 0 / 0.35);
+}
+.hz-tape-r {
+  clip-path: polygon(0 0, 100% 0, 100% 100%, 0 100%, 4px 82%, 0 64%, 5px 46%, 0 28%, 4px 12%);
+}
+.hz-tape-word {
+  font-family: var(--font-mono), monospace;
+  font-weight: 500;
+  font-size: 10px;
+  letter-spacing: 0.16em;
+  color: #f5ebdd;
+}
+.hz-box-torn .hz-tape-l {
+  animation: hz-tape-off 0.42s cubic-bezier(0.3, 0, 0.6, 1) forwards;
+}
+.hz-box-torn .hz-tape-word {
+  opacity: 0;
+}
+.hz-box-torn .hz-box-lid {
+  animation: hz-lid-off 0.46s cubic-bezier(0.3, 0, 0.6, 1) 0.06s forwards;
+}
+@keyframes hz-tape-off {
+  to {
+    transform: translate(-60px, -140px) rotate(-38deg);
+    opacity: 0;
+  }
+}
+@keyframes hz-lid-off {
+  to {
+    transform: translate(30px, -170px) rotate(18deg);
+    opacity: 0;
+  }
+}
+/* Four boxes land one after another. */
+.hz-box-in {
+  animation: hz-box-in 0.42s cubic-bezier(0.34, 1.56, 0.64, 1) var(--d, 0s) backwards;
+}
+@keyframes hz-box-in {
+  from {
+    transform: translateY(26px) scale(0.8);
+    opacity: 0;
+  }
+}
+/* The picked box comes forward. */
+.hz-box-forward {
+  animation: hz-box-forward 0.32s cubic-bezier(0.2, 0.9, 0.3, 1.15) backwards;
+}
+@keyframes hz-box-forward {
+  from {
+    transform: scale(0.6);
+  }
+}
+/* Waiting on the server after the tear: the box rattles. A refusal rattles once. */
+.hz-box-shake {
+  animation: hz-box-shake 0.5s ease-in-out infinite;
+}
+.hz-box-shake-once {
+  animation: hz-box-shake 0.45s ease-in-out 1;
+}
+@keyframes hz-box-shake {
+  0%,
+  100% {
+    transform: none;
+  }
+  25% {
+    transform: translateX(-4px) rotate(-1.5deg);
+  }
+  75% {
+    transform: translateX(4px) rotate(1.5deg);
+  }
+}
+.hz-sun {
+  opacity: 0.92;
+  animation: hz-sun-in 0.5s cubic-bezier(0.2, 0.9, 0.3, 1) backwards;
+}
+@keyframes hz-sun-in {
+  from {
+    transform: scale(0);
+  }
+}
+/* What comes out rises face up. "backwards" so a drag can move it once it has landed. */
+.hz-pull-in {
+  animation: hz-pull-in 0.4s cubic-bezier(0.2, 0.9, 0.3, 1.2) backwards;
+}
+@keyframes hz-pull-in {
+  from {
+    transform: translateY(90px) scale(0.6) rotate(-4deg);
+    opacity: 0;
+  }
+}
+.hz-pulled-art {
+  background: #ff4d00 url(/brand/mark-cream.png) center / auto 46px no-repeat;
+}

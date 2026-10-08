@@ -4,6 +4,8 @@ import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
 import { Camera, Lock, MapPin } from "lucide-react";
 import QrScanner from "@/components/QrScanner";
+import Reveal, { type RevealItem, type RevealOutcome } from "@/components/reveal/Reveal";
+import { sentence } from "@/components/event/copy";
 import PerforatedStub from "@/components/me/PerforatedStub";
 import Serial from "@/components/me/Serial";
 import SpotMascot from "@/components/me/SpotMascot";
@@ -40,7 +42,8 @@ export default function DropsPage() {
   const [codes, setCodes] = useState<Record<string, string>>({});
   const [scanning, setScanning] = useState<string | null>(null);
   const [revealed, setRevealed] = useState<Record<string, Reveal>>({});
-  const [busy, setBusy] = useState<string | null>(null);
+  /** The drop being opened in the reveal. */
+  const [opening, setOpening] = useState<GameDrop | null>(null);
   /** Drops you had already claimed when you opened the page (they sort last and stay put while you claim). */
   const [had, setHad] = useState<Set<string>>(new Set());
   /** Claimed in this visit. */
@@ -76,17 +79,15 @@ export default function DropsPage() {
     };
   }, [drops, now, had]);
 
-  const claim = async (d: GameDrop) => {
-    setBusy(d.id);
+  /** Runs the claim for the reveal. What you got also stays on the stub once the reveal closes. */
+  const claim = async (d: GameDrop): Promise<RevealOutcome> => {
     const result: Reveal & { error?: string } = DEMO ? demoReveal() : await live.claim(d, fix, codes[d.id]);
-    setBusy(null);
-    if (result.error) {
-      say(result.error, "error");
-      return;
-    }
+    if (result.error) return { error: sentence(result.error) };
     setRevealed((r) => ({ ...r, [d.id]: result }));
     setJustNow((c) => new Set(c).add(d.id));
-    say("Drop opened.", "violet");
+    const items: RevealItem[] = [{ kind: "reward", title: result.reward ?? "Your reward", line: result.description, code: result.code }];
+    if (result.xp) items.push({ kind: "xp", title: `+${result.xp} XP`, line: "Added to your XP." });
+    return { items };
   };
 
   const card = (d: GameDrop, phase: "open" | "sealed") => {
@@ -162,8 +163,8 @@ export default function DropsPage() {
                   </button>
                 </div>
               )}
-              <button type="button" disabled={busy === d.id} className="btn w-full" onClick={() => void claim(d)}>
-                {busy === d.id ? "OPENING" : "CLAIM"}
+              <button type="button" className="btn w-full" onClick={() => setOpening(d)}>
+                OPEN IT
               </button>
             </>
           )
@@ -202,6 +203,15 @@ export default function DropsPage() {
             </section>
           )}
         </>
+      )}
+
+      {opening && (
+        <Reveal
+          label={opening.title}
+          where={opening.partner?.name ?? opening.area}
+          open={() => claim(opening)}
+          onClose={() => setOpening(null)}
+        />
       )}
 
       {scanning && (

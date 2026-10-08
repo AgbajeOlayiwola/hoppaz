@@ -165,6 +165,7 @@ function EventSheet({ event, fix, userId, checkedIn, busy, onCheckIn, onClose, i
       <EventQuestList eventId={event.id} userId={userId} checkedIn={checkedIn} hasPhoto={hasPhoto} onAddPhoto={picker.open} uploading={uploading} />
 
       <DropRow
+        where={title}
         closeEnough={closeEnough}
         gameDrops={gameDrops}
         gameBusy={dropBusy}
