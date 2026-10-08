@@ -8,7 +8,8 @@ import type { EventRow } from "@/lib/types";
 
 /**
  * The nights you said you are going to, soonest first, as small stubs you can
- * tap. Rebuilt from your saved choices every time, so it is still there after
+ * tap. Labelled YOU'RE GOING, like the button, so it never reads as Me's
+ * YOUR NIGHTS (the nights you have been out). Rebuilt from your saved choices every time, so it is still there after
  * a reload. The page decides when it shows (only when there is something in
  * the next 14 days).
  */
@@ -22,8 +23,8 @@ export default function YourDays({
   onOpen: (event: EventRow) => void;
 }) {
   return (
-    <section aria-label="Your days" className="mt-5">
-      <p className="seclabel mb-2 px-4">YOUR DAYS</p>
+    <section aria-label="You're going" className="mt-5">
+      <p className="seclabel mb-2 px-4">YOU&apos;RE GOING</p>
       <ul className="flex gap-2.5 overflow-x-auto px-4 pb-1 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
         {events.map((e) => {
           const day = themeForEvent(e.starts_at) === "day";
