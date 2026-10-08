@@ -5,23 +5,14 @@ import { Camera, Compass, LocateFixed, X } from "lucide-react";
 import type { GameDrop } from "@/lib/game";
 import Hunt3D from "@/components/Hunt3D";
 import { huntItem, RARITY } from "@/lib/huntItems";
+import { pointFromGeog as readPoint } from "@/lib/geo";
 
 type Point = { lat: number; lng: number };
 type ClaimResult = { error?: string; reward?: string; description?: string; code?: string };
 
+/** The drop's own spot if it has one (any format the API sends), else the event's. */
 function pointFromGeog(value: unknown, fallback: Point): Point {
-  if (value && typeof value === "object" && "coordinates" in value) {
-    const coordinates = (value as { coordinates?: unknown }).coordinates;
-    if (Array.isArray(coordinates) && coordinates.length >= 2) {
-      const [lng, lat] = coordinates.map(Number);
-      if (Number.isFinite(lat) && Number.isFinite(lng)) return { lat, lng };
-    }
-  }
-  if (typeof value === "string") {
-    const match = value.match(/POINT\s*\(\s*(-?[\d.]+)\s+(-?[\d.]+)\s*\)/i);
-    if (match) return { lng: Number(match[1]), lat: Number(match[2]) };
-  }
-  return fallback;
+  return readPoint(value) ?? fallback;
 }
 
 function distanceMeters(a: Point, b: Point) {

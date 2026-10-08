@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useState } from "react";
 import { getSupabase } from "./supabase/client";
 import { demoEvents, demoHop } from "./demoData";
-import { haversineKm, LAGOS_CENTER } from "./geo";
+import { haversineKm, LAGOS_CENTER, pointFromGeog } from "./geo";
 import type { EventRow, Hop } from "./types";
 
 type Fix = { lat: number; lng: number } | null;
@@ -151,9 +151,9 @@ export function useHop() {
           idx: Number(s.idx),
           name: String(s.name),
           area: (s.area as string) ?? null,
-          // PostGIS geography comes back as GeoJSON when selected directly
-          lat: Number((s.geog as { coordinates?: number[] })?.coordinates?.[1] ?? 0),
-          lng: Number((s.geog as { coordinates?: number[] })?.coordinates?.[0] ?? 0),
+          // PostGIS geography comes back as hex EWKB from the REST API; pointFromGeog reads it.
+          lat: pointFromGeog(s.geog)?.lat ?? 0,
+          lng: pointFromGeog(s.geog)?.lng ?? 0,
           stop_time: String(s.stop_time),
           role: String(s.role),
         }))

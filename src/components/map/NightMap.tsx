@@ -420,7 +420,8 @@ export default function NightMap({
   const showPeek = (id: string) => {
     const m = map.current;
     const e = eventsRef.current.find((x) => x.id === id);
-    if (!m || !e || !window.matchMedia("(hover: hover)").matches) return;
+    // The open event already has its card; a hover card over it would cover the house.
+    if (!m || !e || id === selectedRef.current || !window.matchMedia("(hover: hover)").matches) return;
     const box = make("div", "hz-peek-body");
     const line = (cls: string, text: string) => box.append(make("p", cls, text));
     line("hz-peek-title", `${isEventLead(e) ? "LEAD · " : ""}${eventTitle(e)}`);
@@ -918,8 +919,13 @@ export default function NightMap({
     if (!m || !ready.current || fitKey === lastFit.current) return;
     lastFit.current = fitKey;
     if (!events.length) return;
+    // Frame what is within your reach, so a day spread from Ikeja to Tarkwa Bay does not shrink
+    // into one blob where no sign fits. Fewer than two in reach: the whole day. Hop day keeps its route in.
+    const f = fixRef.current;
+    const near = f ? eventsRef.current.filter((e) => e.distance_m / 1000 <= radiusRef.current) : [];
+    const pts = near.length >= 2 ? [...near, ...(showHopRef.current ? stopsRef.current : [])] : framePoints();
     // Keep the swoop's tilt and angle: fitBounds would otherwise turn the map back north.
-    m.fitBounds(boundsOf(framePoints()), { padding: framePadding(insetsRef.current), maxZoom: 14, bearing: m.getBearing(), duration: ms(900) });
+    m.fitBounds(boundsOf(pts), { padding: framePadding(insetsRef.current), maxZoom: 14, bearing: m.getBearing(), duration: ms(900) });
     // events is read at the moment the filter changes, on purpose.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [epoch, fitKey]);
@@ -934,6 +940,8 @@ export default function NightMap({
   useEffect(() => {
     const m = map.current;
     if (!m || !ready.current) return;
+    // The camera is about to fly the venue under the cursor: drop any hover card first.
+    peek.current.hide();
     const e = eventsRef.current.find((x) => x.id === selectedId);
     if (!e) {
       if (before.current) m.easeTo({ ...before.current, duration: ms(800) });
