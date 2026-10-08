@@ -112,7 +112,7 @@ export default function DropsPage() {
               ) : done ? (
                 <span className="pill pill-keke flex-none">CLAIMED</span>
               ) : (
-                <span className={`pill flex-none ${soon ? "pill-danfo" : ""}`}>{closesLabel(d.closes_at)}</span>
+                <span className={`pill flex-none ${soon ? "pill-danfo" : ""}`}>{closesLabel(d.closes_at, now ?? undefined)}</span>
               )}
             </div>
             <h2 className="mt-2.5 font-display text-[21px] font-black leading-tight">{d.title}</h2>

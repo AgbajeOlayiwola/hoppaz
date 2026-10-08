@@ -49,9 +49,18 @@ export function opensLabel(opensAt: string, now: number) {
   return `OPENS ${when} ${clock12(at)}`;
 }
 
-/** "CLOSES 11:30PM", in the same 12-hour clock as every other time in the app. */
-export function closesLabel(closesAt: string) {
-  return `CLOSES ${clock12(Date.parse(closesAt))}`;
+/**
+ * "CLOSES 11:30PM" when it closes before the night is out, "CLOSES SUN 12:17AM"
+ * when it runs past it, so a drop open for days never reads as closing tonight.
+ * The night runs to 6am Lagos time, like the day rail.
+ */
+export function closesLabel(closesAt: string, now = Date.now()) {
+  const at = Date.parse(closesAt);
+  const night = (ms: number) => new Date(ms + HOUR - 6 * HOUR).toISOString().slice(0, 10);
+  if (night(at) === night(now)) return `CLOSES ${clock12(at)}`;
+  const t = new Date(at + HOUR);
+  const far = at - now > 6 * 24 * HOUR;
+  return `CLOSES ${far ? `${t.getUTCDate()} ${MONTHS[t.getUTCMonth()]}` : DAYS[t.getUTCDay()]} ${clock12(at)}`;
 }
 
 /** "3 OCT" in Lagos, for stamps and receipts. */
