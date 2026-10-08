@@ -55,9 +55,9 @@ const IS_DEV = process.env.NODE_ENV !== "production";
 export default function MapPage() {
   const {
     fix, radiusKm, seenIntro, markIntroSeen, seenTitle, setSeenTitle,
-    dateFilter, setDateFilter, types, setTypes,
+    dateFilter, setDateFilter, types, setTypes, look,
   } = useHoppaz();
-  const { userId, refresh } = useSession();
+  const { userId, refresh, profile } = useSession();
   const { events: allEvents, demo, ready, failed, reload } = useEvents(fix, radiusKm);
   const hop = useHop();
   const { done, checkedAt, busy, checkIn } = useCheckin(userId, refresh);
@@ -262,7 +262,11 @@ export default function MapPage() {
   const showEmpty = ready && !noLiveEvents && events.length === 0 && !filtering && !event;
 
   return (
-    <div className="absolute inset-0 overflow-hidden">
+    <div
+      className="absolute inset-0 overflow-hidden"
+      // An open event docks on the right, from just under the top chrome.
+      style={{ ["--hz-side-top" as string]: `${hud.top + 4}px` }}
+    >
       <NightMap
         events={events}
         collectibleEventIds={dropIds}
@@ -283,6 +287,9 @@ export default function MapPage() {
         onBus={() => setHopOpen(true)}
         hudTop={hud.top}
         hudBottom={hud.bottom}
+        play={mounted && seenTitle}
+        myLook={profile?.avatar ?? look}
+        sidePanel={!!event}
       />
 
       {/* The chrome is all "now" (today's rail, the clock), so it draws on the client only: a page
@@ -364,6 +371,7 @@ export default function MapPage() {
           onCheckIn={() => checkIn(event, fix)}
           onClose={closeCard}
           isHopStop={isHopStop}
+          placement="side"
         />
       )}
       {filtering && (

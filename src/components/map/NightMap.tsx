@@ -3,8 +3,11 @@
 import { useEffect, useRef, useState } from "react";
 import * as maplibregl from "maplibre-gl";
 import type { ExpressionSpecification, GeoJSONSource, Map as MLMap, StyleSpecification } from "maplibre-gl";
-import { MAP_PALETTE, addCityLayer, fallbackStyle, loadBrandStyle, CITY_LAYER } from "@/lib/mapStyle";
+import { BRAND } from "@/lib/brand";
+import { MAP_PALETTE, addCityLayer, fallbackStyle, loadBrandStyle, riseCity, CITY_LAYER } from "@/lib/mapStyle";
 import { hopDayLabel, type BusFix } from "@/lib/busPosition";
+import { normalizeLook } from "@/lib/avatar";
+import { avatarSvg } from "@/lib/avatarSvg";
 import {
   LAGOS_BOUNDS,
   LAGOS_CENTER,
@@ -17,10 +20,12 @@ import {
   travelEstimate,
 } from "@/lib/geo";
 import { dayLabel } from "@/lib/filters";
-import { crowdAt } from "@/lib/crowd";
+import { crowdAt, crowdLevel, TONE_HEX } from "@/lib/crowd";
+import { lotFeatures } from "@/lib/eventLots";
 import { useTheme } from "@/lib/useTheme";
 import type { Theme } from "@/lib/theme";
 import type { EventRow, HopStop } from "@/lib/types";
+import { SIDE_PANEL, sidePanelWidth } from "@/components/event/side";
 import { mountVenueModels, updateVenueModels } from "./venueModels";
 
 // Next's app bundlers cannot infer MapLibre's dynamically resolved module-worker
@@ -29,24 +34,23 @@ maplibregl.setWorkerUrl("/maplibre-gl-worker.mjs");
 
 export type NightMapProps = {
   events: EventRow[];
-  /** Events with a live drop: they get a violet DROP pill and a violet dot. */
+  /** Events with a live drop: their sign carries a DROP pill. */
   collectibleEventIds?: string[];
   hopStops: HopStop[];
-  /** `source` is "gps" or "area". Your own dot only draws for "gps". */
   fix: { lat: number; lng: number; area?: string | null; source?: "gps" | "area" } | null;
   radiusKm: number;
   /** The moment the heat map shows: now (live) or a slot later in the night (expected). */
   at: number;
   live: boolean;
-  /** @deprecated Crew faces are no longer drawn (their positions were invented). Kept so callers compile. */
+  /** @deprecated Crew faces are not drawn on the map. Kept so callers compile. */
   crew?: unknown[];
-  /** @deprecated Your own position is a plain dot now, not a face. Kept so callers compile. */
+  /** The Hopper's own look, drawn as their pin. */
   myLook?: unknown;
   /** Where the Hop bus is (estimated from the schedule), drawn as its own marker. */
   bus: BusFix | null;
-  /** Bumped by the bus button in the HUD: the camera pans, flat, to the bus. */
+  /** Bumped by the bus button in the HUD: fly to the bus. */
   busFocus?: number;
-  /** @deprecated The map no longer swoops in. Kept so callers compile. */
+  /** Flips true once the intro is out of the way: the camera then swoops in. */
   play?: boolean;
   selectedId: string | null;
   onSelect: (id: string) => void;
@@ -56,9 +60,9 @@ export type NightMapProps = {
   /** A tap on empty map: close whatever card is open. */
   onClear: () => void;
   /**
-   * True when the selected day is the Hop's date: the route, numbered stops and
-   * the moving bus show. False: the bus parks at stop 1 under a "NEXT HOP" banner.
-   * Omitted: today's behaviour (always show the route).
+   * True when the selected day is the Hop's date: the purple route, its stops and
+   * the moving bus show. False: no purple, the bus parks at stop 1 under a
+   * "NEXT HOP" banner. Omitted: always show the route.
    */
   hopActive?: boolean;
   /** The Hop's date, "YYYY-MM-DD", for the "NEXT HOP · SAT 18" banner. Falls back to bus.hopDate. */
@@ -67,11 +71,15 @@ export type NightMapProps = {
   onBus?: () => void;
   /**
    * How much of the map the page's own chrome covers, px from the top and bottom
-   * edges. Banners never sit under it, the camera frames inside it, and the zoom
-   * buttons and the map credit stay clear of it.
+   * edges. Signs never sit under it and the camera frames inside it.
    */
   hudTop?: number;
   hudBottom?: number;
+  /**
+   * The open event docks on the right (see components/event/side.ts). The camera
+   * then pulls in and stands the venue's house in the strip of map to its left.
+   */
+  sidePanel?: boolean;
 };
 
 type Mode = "card" | "banner" | "mini";
@@ -85,29 +93,33 @@ type Sign = {
   sig: string;
 };
 
-/** Room left between two banners, px. */
+/** Room left between two billboards, px. */
 const GAP = 4;
-/** What the page's chrome covers when it does not say: the night rail above, the scrubber below. */
+/** What the page's chrome covers when it does not say: the day rail above, the scrubber below. */
 const DEFAULT_HUD = { top: 132, bottom: 96 };
-/** From here in, a banner becomes a card with the event image on top. */
+/** From here in, venues are 3D houses: dots fade, and signs become cards floating over the roofs. */
 const STREET_ZOOM = 14.6;
-/** The banner stands this far above its dot, px. */
+/** A sign stands this far above its dot, px. Up close it is lifted past the house instead. */
 const MARKER_LIFT = 10;
+/** A house with its floating diamond is about this tall, metres (see eventLots.ts). */
+const HOUSE_TOP_M = 95;
+/** Picking an event pulls the camera in to at least this zoom, tilted, so the house stands up. */
+const PICK_ZOOM = 15.6;
+/** With the card docked on the right the house has a narrow strip, so the camera comes in closer. */
+const PICK_ZOOM_SIDE = 16;
 const NO_IDS: string[] = [];
 
 const SRC = {
   heat: "hoppaz-heat",
   pins: "hoppaz-pins",
   hop: "hoppaz-hop",
+  lots: "hoppaz-lots",
   radius: "hoppaz-radius",
 } as const;
 
-/** Lucide's bus, inline: markers are plain DOM, so there is no React icon here. */
-const BUS_ICON =
-  '<svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">' +
-  '<path d="M8 6v6"/><path d="M15 6v6"/><path d="M2 12h19.6"/>' +
-  '<path d="M18 18h3s.5-1.7.8-2.8c.1-.4.2-.8.2-1.2 0-.4-.1-.8-.2-1.2l-1.4-5C20.1 6.8 19.1 6 18 6H4a2 2 0 0 0-2 2v10h3"/>' +
-  '<circle cx="7" cy="18" r="2"/><path d="M9 18h5"/><circle cx="16" cy="18" r="2"/></svg>';
+/** The little Hop bus from the intro: cream body, orange windows. */
+const BUS_ART =
+  '<svg viewBox="0 0 32 20" width="28" height="18" aria-hidden="true"><rect x="1" y="1" width="30" height="14" rx="3" fill="#F5EBDD"/><rect x="4" y="4" width="6" height="5" rx="1" fill="#FF4D00"/><rect x="12" y="4" width="6" height="5" rx="1" fill="#FF4D00"/><rect x="20" y="4" width="8" height="7" rx="1" fill="#0E0B0A"/><circle cx="8" cy="16" r="3" fill="#0E0B0A"/><circle cx="24" cy="16" r="3" fill="#0E0B0A"/></svg>';
 
 const fc = (features: GeoJSON.Feature[]): GeoJSON.FeatureCollection => ({
   type: "FeatureCollection",
@@ -132,12 +144,28 @@ const make = <K extends keyof HTMLElementTagNameMap>(tag: K, cls: string, text?:
   return el;
 };
 
+/** A Hopper's face in a ring with a little pointer, as a map marker element. */
+function faceMarker(look: unknown, uid: string, ring: string) {
+  const el = document.createElement("div");
+  el.className = "pointer-events-none flex flex-col items-center";
+  const face = document.createElement("div");
+  face.className = "h-9 w-9 overflow-hidden rounded-full border-2 bg-orange shadow-chunk-sm";
+  face.style.borderColor = ring;
+  // Safe: normalizeLook() whitelists every field, so no stored text reaches the markup.
+  face.innerHTML = avatarSvg(normalizeLook(look), { uid, crop: "head" });
+  const tip = document.createElement("div");
+  tip.className = "h-0 w-0 border-x-[5px] border-t-[6px] border-x-transparent";
+  tip.style.borderTopColor = ring;
+  el.append(face, tip);
+  return el;
+}
+
 const reducedMotion = () => window.matchMedia("(prefers-reduced-motion: reduce)").matches;
 /** Camera durations drop to zero for anyone who asked their phone for less motion. */
 const ms = (n: number) => (reducedMotion() ? 0 : n);
 
 const MONTHS = /\s(JAN|FEB|MAR|APR|MAY|JUN|JUL|AUG|SEP|OCT|NOV|DEC)\b/;
-/** "11PM" tonight, "SAT 18 · 10PM" on another day: dayLabel without the month, for a small banner. */
+/** "11PM" tonight, "SAT 18 · 10PM" on another day: dayLabel without the month, for a small sign. */
 function whenShort(e: EventRow) {
   if (isEventLead(e)) return "CHECK DETAILS";
   const label = dayLabel(e.starts_at);
@@ -146,7 +174,7 @@ function whenShort(e: EventRow) {
 }
 
 const framePadding = (ins: { top: number; bottom: number }) => ({
-  // Banners stand above their dots, so the top needs more room than the bottom.
+  // Signs stand above their dots, so the top needs more room than the bottom.
   top: ins.top + 56,
   bottom: ins.bottom + 44,
   left: 36,
@@ -164,73 +192,106 @@ function boundsOf(points: Array<{ lat: number; lng: number }>) {
  * MapLibre's setStyle drops all of it, so this runs on first load and again
  * after every day/night swap. Each add is guarded, so it is safe to call twice.
  */
-function setupLayers(m: MLMap, theme: Theme) {
+function setupLayers(m: MLMap, theme: Theme, cityGrown: boolean) {
   const P = MAP_PALETTE[theme];
+  const night = theme === "night";
 
-  /* ---- the 3D city, under the basemap labels: neutral concrete, simply there from z13 ---- */
+  /* ---- the 3D city, under the basemap labels: neutral concrete, grows in the first time ---- */
   const firstSymbol = m.getStyle().layers.find((l) => l.type === "symbol")?.id;
-  if (!m.getLayer(CITY_LAYER)) addCityLayer(m, firstSymbol, theme);
-  // Phase 4: the Campus Twin venue models mount here (see venueModels.ts).
+  if (!m.getLayer(CITY_LAYER)) addCityLayer(m, firstSymbol, theme, cityGrown);
+  // Later: the Campus Twin venue models mount here and take the houses' place (see venueModels.ts).
   mountVenueModels(m, theme);
 
-  /* ---- heat: the first thing you see, gone by street zoom ---- */
+  /* ---- venues as Sims houses: walls, stepped roof, a floating diamond ---- */
+  if (!m.getSource(SRC.lots)) m.addSource(SRC.lots, { type: "geojson", data: fc([]) });
+  if (!m.getLayer("lots")) {
+    m.addLayer(
+      {
+        id: "lots",
+        type: "fill-extrusion",
+        source: SRC.lots,
+        minzoom: 13,
+        paint: {
+          "fill-extrusion-color": ["get", "color"],
+          "fill-extrusion-base": ["get", "base"],
+          "fill-extrusion-height": ["get", "top"],
+          "fill-extrusion-vertical-gradient": false,
+          "fill-extrusion-opacity": ["interpolate", ["linear"], ["zoom"], 13, 0, 13.6, 1],
+        },
+      },
+      firstSymbol
+    );
+  }
+
+  /* ---- heat: the first thing you see, before any individual pin ---- */
   if (!m.getSource(SRC.heat)) m.addSource(SRC.heat, { type: "geojson", data: fc([]) });
   if (!m.getLayer("heat-blur")) {
+    // Night: ember, orange, then a cream core where the night is. No violet edge.
+    // Day: the cream core would vanish on a cream map, so it peaks at orange.
+    const ramp = night
+      ? [0, "rgba(14,11,10,0)", 0.18, "rgba(184,54,0,0.22)", 0.42, "rgba(184,54,0,0.55)", 0.7, "rgba(255,77,0,0.78)", 1, "rgba(245,235,221,0.92)"]
+      : [0, P.heat[0], 0.2, P.heat[1], 0.55, P.heat[2], 1, P.heat[3]];
     m.addLayer({
       id: "heat-blur",
       type: "heatmap",
       source: SRC.heat,
-      maxzoom: 15,
+      maxzoom: 16,
       paint: {
         "heatmap-weight": ["interpolate", ["linear"], ["get", "crowd"], 0, 0, 100, 1],
-        "heatmap-intensity": ["interpolate", ["linear"], ["zoom"], 9, 0.9, 14, 2],
-        "heatmap-radius": ["interpolate", ["linear"], ["zoom"], 9, 22, 13, 48, 15, 80],
-        // Fades out by about zoom 14.5, where the banners turn into cards.
-        "heatmap-opacity": ["interpolate", ["linear"], ["zoom"], 9, P.heatOpacity, 13, P.heatOpacity * 0.75, 14.5, 0],
-        // Transparent, to ember, to orange. No violet edge, no cream core.
-        "heatmap-color": [
-          "interpolate",
-          ["linear"],
-          ["heatmap-density"],
-          0, P.heat[0],
-          0.2, P.heat[1],
-          0.55, P.heat[2],
-          1, P.heat[3],
-        ] as ExpressionSpecification,
+        "heatmap-intensity": ["interpolate", ["linear"], ["zoom"], 9, 0.9, 15, 2.4],
+        "heatmap-radius": ["interpolate", ["linear"], ["zoom"], 9, 22, 13, 48, 16, 90],
+        "heatmap-opacity": ["interpolate", ["linear"], ["zoom"], 9, 0.75, 15.5, 0.35, 16, 0],
+        "heatmap-color": ["interpolate", ["linear"], ["heatmap-density"], ...ramp] as ExpressionSpecification,
       },
     });
   }
 
-  /* ---- radius ring: a thin dim hairline, no fill ---- */
+  /* ---- radius ring ---- */
   if (!m.getSource(SRC.radius)) m.addSource(SRC.radius, { type: "geojson", data: fc([]) });
+  if (!m.getLayer("radius-fill")) {
+    m.addLayer({
+      id: "radius-fill",
+      type: "fill",
+      source: SRC.radius,
+      paint: { "fill-color": BRAND.orange, "fill-opacity": 0.04 },
+    });
+  }
   if (!m.getLayer("radius-line")) {
     m.addLayer({
       id: "radius-line",
       type: "line",
       source: SRC.radius,
-      paint: { "line-color": P.dim, "line-width": 1, "line-opacity": 0.6 },
+      paint: { "line-color": BRAND.orange, "line-width": 1.5, "line-opacity": 0.5, "line-dasharray": [3, 4] },
     });
   }
 
-  /* ---- the Hop route: a plain dashed line. Numbered stops and the bus are DOM markers ---- */
+  /* ---- the Hop route: violet, and only on the Hop's day. Numbered stops are DOM markers ---- */
   if (!m.getSource(SRC.hop)) m.addSource(SRC.hop, { type: "geojson", data: fc([]) });
   if (!m.getLayer("hop-line")) {
     m.addLayer({
       id: "hop-line",
       type: "line",
       source: SRC.hop,
-      paint: {
-        "line-color": P.text,
-        "line-width": 2,
-        "line-opacity": 0.85,
-        "line-dasharray": [2, 2],
-      },
-      layout: { "line-cap": "butt", "line-join": "round" },
+      paint: { "line-color": BRAND.violet, "line-width": 3, "line-opacity": 0.85 },
+      layout: { "line-cap": "round", "line-join": "round" },
     });
   }
 
-  /* ---- event dots: tap targets and the far-out marker. Banners and cards are DOM ---- */
+  /* ---- event pins: hot ones glow orange; up close the house takes over ---- */
   if (!m.getSource(SRC.pins)) m.addSource(SRC.pins, { type: "geojson", data: fc([]) });
+  if (!m.getLayer("pins-halo")) {
+    m.addLayer({
+      id: "pins-halo",
+      type: "circle",
+      source: SRC.pins,
+      filter: [">=", ["get", "heat"], 55],
+      paint: {
+        "circle-radius": ["interpolate", ["linear"], ["get", "heat"], 55, 18, 100, 30],
+        "circle-color": BRAND.orange,
+        "circle-opacity": ["interpolate", ["linear"], ["zoom"], STREET_ZOOM - 0.6, 0.14, STREET_ZOOM, 0],
+      },
+    });
+  }
   if (!m.getLayer("pins")) {
     m.addLayer({
       id: "pins",
@@ -238,14 +299,21 @@ function setupLayers(m: MLMap, theme: Theme) {
       source: SRC.pins,
       paint: {
         "circle-radius": [
-          "interpolate", ["linear"], ["zoom"],
-          9, ["case", ["get", "inRange"], 3.5, 2.5],
-          15, ["case", ["get", "inRange"], 6, 4],
+          "case",
+          ["get", "inRange"],
+          ["interpolate", ["linear"], ["get", "heat"], 0, 7, 100, 12],
+          6,
         ] as ExpressionSpecification,
-        // Neutral. Only a live drop gets colour, and that colour is violet.
-        "circle-color": ["case", ["get", "drop"], P.violet, ["get", "inRange"], P.text, P.dim] as ExpressionSpecification,
-        "circle-stroke-color": ["case", ["get", "selected"], "#FF4D00", P.ground] as ExpressionSpecification,
-        "circle-stroke-width": ["case", ["get", "selected"], 2, 1.5] as ExpressionSpecification,
+        "circle-color": [
+          "case",
+          ["!", ["get", "inRange"]], night ? "#2C2017" : "#CDBEA9",
+          [">=", ["get", "heat"], 55], BRAND.orange,
+          "#6E4433",
+        ] as ExpressionSpecification,
+        "circle-stroke-color": ["case", ["get", "selected"], P.text, P.ground] as ExpressionSpecification,
+        "circle-stroke-width": 2,
+        "circle-opacity": ["interpolate", ["linear"], ["zoom"], STREET_ZOOM - 0.6, 1, STREET_ZOOM, 0],
+        "circle-stroke-opacity": ["interpolate", ["linear"], ["zoom"], STREET_ZOOM - 0.6, 1, STREET_ZOOM, 0],
       },
     });
   }
@@ -259,8 +327,10 @@ export default function NightMap({
   radiusKm,
   at,
   live,
+  myLook,
   bus,
   busFocus = 0,
+  play = true,
   selectedId,
   onSelect,
   onHopSelect,
@@ -271,6 +341,7 @@ export default function NightMap({
   onBus,
   hudTop = DEFAULT_HUD.top,
   hudBottom = DEFAULT_HUD.bottom,
+  sidePanel = false,
 }: NightMapProps) {
   const holder = useRef<HTMLDivElement>(null);
   const map = useRef<MLMap | null>(null);
@@ -278,9 +349,9 @@ export default function NightMap({
   const ready = useRef(false);
   /** Bumps each time our layers are (re)built, so data and markers repaint. 0 = nothing yet. */
   const [epoch, setEpoch] = useState(0);
-  /** Bumps when web fonts land, so banners are measured in their real font. */
+  /** Bumps when web fonts land, so signs are measured in their real font. */
   const [fontsEpoch, setFontsEpoch] = useState(0);
-  /** Bumps every minute so "TODAY" and "ENDED" on the banners do not go stale. */
+  /** Bumps every minute so "TODAY" and "ENDED" on the signs do not go stale. */
   const [minute, setMinute] = useState(0);
   useEffect(() => {
     const t = setInterval(() => setMinute((n) => n + 1), 60_000);
@@ -294,6 +365,8 @@ export default function NightMap({
   const styleTheme = useRef<Theme | null>(null);
   const swapping = useRef(false);
   const swapToken = useRef(0);
+  /** The city has risen once; a day/night swap rebuilds it standing. */
+  const cityGrown = useRef(false);
 
   const cbs = useRef({ onSelect, onHopSelect, onClear, onBus });
   cbs.current = { onSelect, onHopSelect, onClear, onBus };
@@ -307,6 +380,8 @@ export default function NightMap({
   insetsRef.current = { top: hudTop, bottom: hudBottom };
   const selectedRef = useRef(selectedId);
   selectedRef.current = selectedId;
+  const sideRef = useRef(sidePanel);
+  sideRef.current = sidePanel;
   const stopsRef = useRef(hopStops);
   stopsRef.current = hopStops;
 
@@ -328,7 +403,7 @@ export default function NightMap({
         });
   const showHopRef = useRef(showHop);
   showHopRef.current = showHop;
-  /** What the camera frames: tonight's events, plus the Hop's stops on the Hop's night. */
+  /** What the camera frames: the day's events, plus the Hop's stops on the Hop's day. */
   const framePoints = () => [...eventsRef.current, ...(showHopRef.current ? stopsRef.current : [])];
   const busRef = useRef(busShown);
   busRef.current = busShown;
@@ -340,9 +415,6 @@ export default function NightMap({
   const meMk = useRef<maplibregl.Marker | null>(null);
   const hover = useRef<maplibregl.Popup | null>(null);
   const declutter = useRef(() => {});
-  const framed = useRef(false);
-  /** True while the camera is where our own framing put it: no gesture, no picked event since. */
-  const autoFramed = useRef(false);
 
   /* ------------------------------------------------------------ hover card -- */
   const showPeek = (id: string) => {
@@ -378,15 +450,21 @@ export default function NightMap({
   const peek = useRef({ show: showPeek, hide: hidePeek });
   peek.current = { show: showPeek, hide: hidePeek };
 
-  /* ------------------------------------------------- declutter the banners -- */
-  // Every event stands on the map as a banner (name, price and time) over its
-  // dot; from street zoom it is a card with the flyer on top. Where they would
+  /* ------------------------------------------------- declutter the signs -- */
+  // Every event stands on the map as a rooftop billboard over its dot; up close it
+  // is a card with the flyer on top, floating over its house. Where signs would
   // overlap, the lower-ranked one shrinks to a price tag, then to just its dot.
   // Runs on every move.
   declutter.current = () => {
     const m = map.current;
     if (!m) return;
     const street = m.getZoom() >= STREET_ZOOM;
+    // Up close the house stands under the sign, so the sign floats above its roof and diamond.
+    const mpp = (156543.03 * Math.cos((m.getCenter().lat * Math.PI) / 180)) / 2 ** m.getZoom();
+    const lift = street ? Math.round(18 + (HOUSE_TOP_M / mpp) * Math.sin((m.getPitch() * Math.PI) / 180)) : MARKER_LIFT;
+    holder.current?.classList.toggle("hz-street", street);
+    holder.current?.style.setProperty("--hz-lift", `${lift - MARKER_LIFT}px`);
+
     const { top, bottom } = insetsRef.current;
     const { clientWidth: vw, clientHeight: vh } = m.getContainer();
     const taken: Box[] = [];
@@ -394,35 +472,31 @@ export default function NightMap({
       const p = m.project([lng, lat]);
       taken.push([p.x - left, p.y - up, p.x + right, p.y + down]);
     };
-    // The bus and its label, the numbered stops, and the zoom buttons stay clear.
-    // (Your own dot is small and sits on top: it does not push banners around.)
+    // The open event's card covers the right of the map: nothing else may hide under it.
+    const side = sideRef.current && !!selectedRef.current;
+    if (side) taken.push([vw - sidePanelWidth(vw) - SIDE_PANEL.gap * 2, 0, vw, vh]);
+    // Your face sits above your point, the bus hangs below its own, the stops and zoom buttons stay clear.
+    const me = meMk.current?.getLngLat();
+    if (me) reserve(me.lng, me.lat, 20, 46, 20, 0);
     const h0 = holder.current?.getBoundingClientRect();
     const busEl = busMk.current?.getElement();
     if (busEl && h0) {
-      // The bus sits up and to the left of its point, its label above it. Keep the label on screen.
-      const p = m.project(busMk.current!.getLngLat());
-      busEl.dataset.align = p.x > vw - 150 ? "right" : "left";
-      const rects = [busEl.getBoundingClientRect(), busEl.querySelector(".hz-bus-label")?.getBoundingClientRect()];
-      // A bus (or its label) tucked under the page's chrome or off the edge reads as broken: hide it until it clears.
-      const fits = rects.every((r) => !r || !r.width || (r.top - h0.top >= top && r.bottom - h0.top <= vh - bottom && r.left - h0.left >= 0 && r.right - h0.left <= vw));
+      const r = busEl.getBoundingClientRect();
+      // A bus tucked under the page's chrome reads as broken: hide it until it clears.
+      const fits = !r.width || (r.top - h0.top >= top && r.bottom - h0.top <= vh - bottom);
       busEl.style.visibility = fits ? "" : "hidden";
-      if (fits) {
-        for (const r of rects) {
-          if (r && r.width) taken.push([r.left - h0.left, r.top - h0.top, r.right - h0.left, r.bottom - h0.top]);
-        }
-      }
+      if (fits && r.width) taken.push([r.left - h0.left, r.top - h0.top, r.right - h0.left, r.bottom - h0.top]);
     }
     stopMks.current.forEach((mk) => {
       const ll = mk.getLngLat();
       reserve(ll.lng, ll.lat, 14, 14, 14, 14);
     });
     const ctrl = holder.current?.querySelector(".maplibregl-ctrl-top-right .maplibregl-ctrl-group");
-    if (ctrl && holder.current) {
+    if (ctrl && h0) {
       const c = ctrl.getBoundingClientRect();
-      const h = holder.current.getBoundingClientRect();
-      if (c.width) taken.push([c.left - h.left, c.top - h.top, c.right - h.left, c.bottom - h.top]);
+      if (c.width) taken.push([c.left - h0.left, c.top - h0.top, c.right - h0.left, c.bottom - h0.top]);
     }
-    // A banner cut off by the screen edge or tucked under the chrome reads as broken:
+    // A sign cut off by the screen edge or tucked under the chrome reads as broken:
     // it only shows if it fits, otherwise it drops to its price tag, then its dot.
     const free = (x0: number, y0: number, x1: number, y1: number) =>
       x0 >= GAP && x1 <= vw - GAP && y0 >= top && y1 <= vh - bottom &&
@@ -439,10 +513,10 @@ export default function NightMap({
           const size = sg.size[name];
           if (!size) continue;
           const [w, h] = size;
-          const box: Box = [p.x - w / 2, p.y - MARKER_LIFT - h, p.x + w / 2, p.y - MARKER_LIFT];
+          const box: Box = [p.x - w / 2, p.y - lift - h, p.x + w / 2, p.y - lift];
           // The one you picked always shows, in the fullest form that clears the top chrome;
           // everything else has to fit and avoid it.
-          const ok = picked ? box[1] >= top || name === "banner" : free(...box);
+          const ok = picked ? box[1] >= top || name === "mini" : free(...box);
           if (ok) {
             taken.push(box);
             mode = name;
@@ -478,21 +552,16 @@ export default function NightMap({
       if (ac.signal.aborted || !holder.current) return;
       styleTheme.current = t;
 
-      // No swoop: the map is simply there, flat, framed on the events (or on you).
-      const evs = eventsRef.current;
-      const ins = insetsRef.current;
-      const start = fixRef.current ?? LAGOS_CENTER;
+      // The map opens high over Lagos; the swoop (below) brings it down once the intro is done.
       const created = new maplibregl.Map({
         container: holder.current,
         style,
-        ...(evs.length
-          ? { bounds: boundsOf(framePoints()), fitBoundsOptions: { padding: framePadding(ins), maxZoom: 14 } }
-          : { center: [start.lng, start.lat] as [number, number], zoom: fixRef.current ? 12 : 10.6 }),
-        pitch: 0,
+        center: [LAGOS_CENTER.lng, LAGOS_CENTER.lat],
+        zoom: 10.6,
         minZoom: 9,
         maxZoom: 17,
         maxBounds: LAGOS_BOUNDS, // Lagos only, for now
-        maxPitch: 45,
+        maxPitch: 60,
         // The credit is added below, as plain text clear of the bottom chrome.
         attributionControl: false,
         dragRotate: false,
@@ -500,14 +569,6 @@ export default function NightMap({
       });
       m = created;
       map.current = created;
-      framed.current = evs.length > 0;
-      autoFramed.current = framed.current;
-      // Any gesture of the Hopper's own takes the camera out of our hands.
-      for (const ev of ["dragstart", "zoomstart", "pitchstart"] as const) {
-        created.on(ev, (e) => {
-          if ("originalEvent" in e && e.originalEvent) autoFramed.current = false;
-        });
-      }
       created.on("error", (event) => {
         console.warn("[hoppaz] map:", event.error);
       });
@@ -519,7 +580,7 @@ export default function NightMap({
       created.on("style.load", () => {
         if (!swapping.current || map.current !== created) return;
         swapping.current = false;
-        setupLayers(created, themeRef.current);
+        setupLayers(created, themeRef.current, cityGrown.current);
         styleTheme.current = themeRef.current;
         ready.current = true;
         setEpoch((n) => n + 1);
@@ -527,24 +588,44 @@ export default function NightMap({
 
       created.on("load", () => {
         if (!m) return;
-        setupLayers(m, styleTheme.current ?? themeRef.current);
+        setupLayers(m, styleTheme.current ?? themeRef.current, false);
+
+        // Buildings only exist from z13; grow them the first time they show.
+        if (m.getLayer(CITY_LAYER)) {
+          const grow = () => {
+            if (m!.getZoom() < 13.4) return;
+            m!.off("moveend", grow);
+            cityGrown.current = true;
+            riseCity(m!, ms(1100));
+          };
+          m.on("moveend", grow);
+        } else {
+          cityGrown.current = true;
+        }
 
         /* ---- interaction ---- */
-        m.on("mouseenter", "pins", () => {
-          m!.getCanvas().style.cursor = "pointer";
-        });
-        m.on("mouseleave", "pins", () => {
-          m!.getCanvas().style.cursor = "";
-          peek.current.hide();
-        });
+        for (const layer of ["pins", "lots"]) {
+          m.on("mouseenter", layer, () => {
+            m!.getCanvas().style.cursor = "pointer";
+          });
+          m.on("mouseleave", layer, () => {
+            m!.getCanvas().style.cursor = "";
+            peek.current.hide();
+          });
+        }
         m.on("mousemove", "pins", (e) => {
           const id = e.features?.[0]?.properties?.id;
           if (id) peek.current.show(String(id));
         });
-        // A dot is small: tapping near one counts. Tap on nothing closes the card.
-        // The banners, stops and bus are markers and stop their own clicks.
+        // A dot is small: tapping near one counts, and so does tapping a house.
+        // Tap on nothing closes the card. Signs, stops and the bus are markers and stop their own clicks.
         m.on("click", (e) => {
           if (!m!.getLayer("pins")) return;
+          const house = m!.getLayer("lots") ? m!.queryRenderedFeatures(e.point, { layers: ["lots"] })[0] : undefined;
+          if (house) {
+            cbs.current.onSelect(String(house.properties?.id));
+            return;
+          }
           const pad = 12;
           const hits = m!.queryRenderedFeatures(
             [[e.point.x - pad, e.point.y - pad], [e.point.x + pad, e.point.y + pad]],
@@ -568,7 +649,7 @@ export default function NightMap({
           cbs.current.onSelect(String(best.properties?.id));
         });
 
-        // Banners re-sort themselves so they never pile into one blob.
+        // Signs re-sort themselves so they never pile into one blob.
         let queued = false;
         m.on("move", () => {
           if (queued) return;
@@ -599,7 +680,7 @@ export default function NightMap({
     };
   }, []);
 
-  // Web fonts land after first paint; banners measured before that are the wrong width.
+  // Web fonts land after first paint; signs measured before that are the wrong width.
   useEffect(() => {
     let live = true;
     document.fonts?.ready.then(() => live && setFontsEpoch((n) => n + 1));
@@ -609,8 +690,8 @@ export default function NightMap({
   }, []);
 
   /* ------------------------------------------------ day / night basemap ---- */
-  // Day is positron on cream, night is dark-matter on Night Black. When the Lagos
-  // clock flips the theme while the map is open, swap the basemap and rebuild.
+  // Day is positron on cream, night is the original Hoppaz night paint. When the
+  // Lagos clock flips the theme while the map is open, swap the basemap and rebuild.
   useEffect(() => {
     const m = map.current;
     if (!m || epoch === 0 || styleTheme.current === theme) return;
@@ -643,7 +724,6 @@ export default function NightMap({
   useEffect(() => {
     const m = map.current;
     if (!m || !ready.current || !m.getSource(SRC.pins)) return;
-    const drops = new Set(collectibleEventIds);
     const inRange = (e: EventRow) => !fix || e.distance_m / 1000 <= radiusKm;
 
     (m.getSource(SRC.heat) as GeoJSONSource).setData(
@@ -656,17 +736,26 @@ export default function NightMap({
       )
     );
 
+    (m.getSource(SRC.lots) as GeoJSONSource).setData(
+      fc(
+        events.flatMap((e) => {
+          const tone = crowdLevel(e, at, crowdAt(e, at, live)).tone;
+          return lotFeatures(e, tone, e.id === selectedId);
+        })
+      )
+    );
+
     (m.getSource(SRC.pins) as GeoJSONSource).setData(
       fc(
         events.map((e) => ({
           type: "Feature",
           geometry: { type: "Point", coordinates: [e.lng, e.lat] },
-          properties: { id: e.id, inRange: inRange(e), selected: e.id === selectedId, drop: drops.has(e.id) },
+          properties: { id: e.id, heat: e.heat, inRange: inRange(e), selected: e.id === selectedId },
         }))
       )
     );
 
-    // The route only draws on the Hop's night.
+    // The purple route only draws on the Hop's day.
     const stops = hopStops.slice().sort((a, b) => a.idx - b.idx);
     (m.getSource(SRC.hop) as GeoJSONSource).setData(
       fc(
@@ -696,11 +785,11 @@ export default function NightMap({
       )
     );
 
-    // Phase 4: the venue models follow the same events and selection.
+    // Later: the venue models follow the same events and selection.
     updateVenueModels(m, { theme: themeRef.current, events, selectedId });
-  }, [epoch, events, collectibleEventIds, hopStops, showHop, fix, radiusKm, selectedId, at, live]);
+  }, [epoch, events, hopStops, showHop, fix, radiusKm, selectedId, at, live]);
 
-  /* --------------------------------------------------- event banners/cards -- */
+  /* -------------------------------------------------------- event signs -- */
   useEffect(() => {
     const m = map.current;
     if (!m || !ready.current) return;
@@ -725,18 +814,22 @@ export default function NightMap({
     order.forEach((e, rank) => {
       let sg = signs.current.get(e.id);
       if (!sg) {
-        // button > board > (face: art + text) + mini price tag + stem
+        // button > board > (face: art + text) + price tag + two posts
         const el = make("button", "hz-sign");
         el.type = "button";
         const board = make("span", "hz-board");
+        // Signs pop up one after another, the way the intro's signs do.
+        board.style.setProperty("--d", `${Math.min(rank, 20) * 0.06}s`);
         const face = make("span", "hz-face");
         const art = make("span", "hz-art");
         const text = make("span", "hz-text");
         const meta = make("span", "hz-meta");
-        meta.append(make("span", "hz-when"), make("span", "hz-drop", "DROP"));
+        meta.append(make("i", "hz-gem"), make("span", "hz-when"), make("span", "hz-drop", "DROP"));
         text.append(make("b", "hz-name"), meta);
         face.append(art, text);
-        board.append(face, make("span", "hz-mini"), make("i", "hz-stem"));
+        const posts = make("span", "hz-posts");
+        posts.append(make("i", ""), make("i", ""));
+        board.append(face, make("span", "hz-mini"), posts);
         el.append(board);
         el.addEventListener("click", (ev) => {
           ev.stopPropagation();
@@ -759,14 +852,20 @@ export default function NightMap({
       const name = `${lead ? "LEAD · " : ""}${eventTitle(e)}`;
       const when = whenShort(e);
       const price = eventPriceShort(e);
-      const line = lead ? when : `${price} · ${when}`;
+      const trip = fix
+        ? travelEstimate({ ...fix, side: areaByName(fix.area ?? null)?.side }, { lat: e.lat, lng: e.lng, side: areaByName(e.area)?.side })
+        : null;
+      const line = `${lead ? when : `${price} · ${when}`}${trip ? ` · ${trip.minutes}MIN` : ""}`;
       const flyer = e.flyer_url && /^https?:\/\//i.test(e.flyer_url) ? e.flyer_url : "";
+      const tone = crowdLevel(e, at, crowdAt(e, at, live)).tone;
 
       el.classList.toggle("hz-on", on);
       el.classList.toggle("hz-far", !inRange(e));
       el.classList.toggle("hz-has-drop", hasDrop);
       el.style.zIndex = on ? "4" : String(Math.max(1, 3 - Math.floor(rank / 10)));
       el.setAttribute("aria-label", `${name}, ${lead ? "event lead; verify details" : `${eventPrice(e)}, ${when}`}${hasDrop ? ", drop live" : ""}`);
+      // The diamond's colour says how busy it is, the same diamond that floats over the house.
+      (el.querySelector(".hz-gem") as HTMLElement).style.background = TONE_HEX[tone];
 
       // Re-measure only when the content changed: it costs a layout per mode.
       const sig = `${name}|${line}|${hasDrop}|${flyer}|${e.vibe}|${fontsEpoch}`;
@@ -797,7 +896,20 @@ export default function NightMap({
       }
     });
     declutter.current();
-  }, [epoch, events, collectibleEventIds, fix, radiusKm, selectedId, fontsEpoch, minute]);
+  }, [epoch, events, collectibleEventIds, fix, radiusKm, selectedId, at, live, fontsEpoch, minute]);
+
+  /* ------------------------------------------------------- the swoop ---- */
+  // After the titles: start high and flat over Lagos, then sweep down into a
+  // pitched, illustrated city at an angle. Once per visit to the map.
+  const swooped = useRef(false);
+  useEffect(() => {
+    const m = map.current;
+    if (!m || !ready.current || !play || swooped.current) return;
+    swooped.current = true;
+    const to = fixRef.current ?? LAGOS_CENTER;
+    m.jumpTo({ center: [LAGOS_CENTER.lng - 0.08, LAGOS_CENTER.lat + 0.03], zoom: 9.6, pitch: 0, bearing: 0 });
+    m.flyTo({ center: [to.lng, to.lat], zoom: fixRef.current ? 12.2 : 11.2, pitch: 50, bearing: -14, duration: ms(3400), curve: 1.3 });
+  }, [epoch, play]);
 
   /* -------------------------------------------- frame the filtered events ---- */
   const lastFit = useRef(fitKey);
@@ -806,77 +918,54 @@ export default function NightMap({
     if (!m || !ready.current || fitKey === lastFit.current) return;
     lastFit.current = fitKey;
     if (!events.length) return;
-    framed.current = true;
-    autoFramed.current = true;
-    m.fitBounds(boundsOf(framePoints()), { padding: framePadding(insetsRef.current), maxZoom: 14, pitch: 0, duration: ms(700) });
+    // Keep the swoop's tilt and angle: fitBounds would otherwise turn the map back north.
+    m.fitBounds(boundsOf(framePoints()), { padding: framePadding(insetsRef.current), maxZoom: 14, bearing: m.getBearing(), duration: ms(900) });
     // events is read at the moment the filter changes, on purpose.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [epoch, fitKey]);
 
-  // Events that arrive after the map opened (a slow connection) get framed once, instantly.
-  useEffect(() => {
-    const m = map.current;
-    if (!m || !ready.current || framed.current || !events.length) return;
-    framed.current = true;
-    autoFramed.current = true;
-    m.fitBounds(boundsOf(framePoints()), { padding: framePadding(insetsRef.current), maxZoom: 14, duration: 0 });
-  }, [epoch, events]);
-
-  // The page's chrome is measured after the map opens and can grow (a notice, a type chip row).
-  // If nobody has touched the camera yet, frame again inside the real free space.
-  useEffect(() => {
-    const m = map.current;
-    if (!m || !ready.current || !autoFramed.current || selectedRef.current) return;
-    const pts = framePoints();
-    if (!pts.length) return;
-    m.fitBounds(boundsOf(pts), { padding: framePadding({ top: hudTop, bottom: hudBottom }), maxZoom: 14, duration: 0 });
-  }, [hudTop, hudBottom]);
-
-  /* ------------------------------------------- ease to the picked event ---- */
-  // Browsing stays flat. Picking an event eases to it, above the card, at zoom 15
-  // and a gentle tilt so the venue stands up; closing the card eases back, flat.
-  const before = useRef<{ center: maplibregl.LngLat; zoom: number; auto: boolean } | null>(null);
+  /* ------------------------------------------- fly to the picked venue -- */
+  // Down into the street so the venue's house stands up in 3D. With the card
+  // docked on the right, the house lands in the strip of map to its left;
+  // otherwise it is nudged up so a bottom card does not cover it. Closing the
+  // card puts the camera back where it was, rather than leaving the Hopper
+  // stranded at street level with no idea where everything else is.
+  const before = useRef<{ center: maplibregl.LngLat; zoom: number; pitch: number; bearing: number } | null>(null);
   useEffect(() => {
     const m = map.current;
     if (!m || !ready.current) return;
     const e = eventsRef.current.find((x) => x.id === selectedId);
     if (!e) {
-      if (before.current) {
-        const { center, zoom, auto } = before.current;
-        m.easeTo({ center, zoom, pitch: 0, bearing: 0, duration: ms(600) });
-        autoFramed.current = auto;
-      } else if (m.getPitch() > 0) {
-        m.easeTo({ pitch: 0, duration: ms(400) });
-      }
+      if (before.current) m.easeTo({ ...before.current, duration: ms(800) });
       before.current = null;
       return;
     }
-    // Hopping from one event to the next keeps the view from before the first.
-    before.current ??= { center: m.getCenter(), zoom: m.getZoom(), auto: autoFramed.current };
-    autoFramed.current = false;
-    // Land the venue's dot so its card stands clear of the top chrome and the sheet comes up below it.
-    const H = m.getContainer().clientHeight;
-    const cardH = signs.current.get(e.id)?.size.card?.[1] ?? 60;
-    const dotY = Math.min(Math.max(insetsRef.current.top + cardH + MARKER_LIFT + 6, H * 0.26), H * 0.42);
-    m.easeTo({
-      center: [e.lng, e.lat],
-      zoom: Math.max(m.getZoom(), 15),
-      pitch: 40,
-      offset: [0, Math.round(dotY - H / 2)],
-      duration: ms(600),
-    });
+    // Hopping from one venue to the next keeps the view from before the first.
+    before.current ??= { center: m.getCenter(), zoom: m.getZoom(), pitch: m.getPitch(), bearing: m.getBearing() };
+    const { clientWidth: W, clientHeight: H } = m.getContainer();
+    let offset: [number, number] = [0, -Math.round(H * 0.22)];
+    let zoom = PICK_ZOOM;
+    if (sideRef.current) {
+      const strip = W - sidePanelWidth(W) - SIDE_PANEL.gap * 3;
+      const x = SIDE_PANEL.gap + strip / 2;
+      const top = insetsRef.current.top;
+      // Low in the strip, so the house and the card floating over it both have room above.
+      const y = top + (H - top) * 0.64;
+      offset = [Math.round(x - W / 2), Math.round(y - H / 2)];
+      zoom = PICK_ZOOM_SIDE;
+    }
+    m.easeTo({ center: [e.lng, e.lat], zoom: Math.max(m.getZoom(), zoom), pitch: 55, offset, duration: ms(900) });
     // Only when the pick changes, not when the event list refreshes.
   }, [epoch, selectedId]);
 
-  /* ----------------------------------------------- the bus button: pan flat -- */
+  /* -------------------------------------------------------- the bus ----- */
   useEffect(() => {
     const m = map.current;
     const b = busRef.current;
     if (!m || !busFocus || !b) return;
     before.current = null; // the Hopper chose a new view; closing a card should not undo it
-    autoFramed.current = false;
-    m.easeTo({ center: [b.lng, b.lat], zoom: Math.max(m.getZoom(), 13), pitch: 0, duration: ms(600) });
-    // Pan on the button press only, not every time the bus moves.
+    m.flyTo({ center: [b.lng, b.lat], zoom: Math.max(m.getZoom(), 13), pitch: 50, duration: ms(1600) });
+    // Fly on the button press only, not every time the bus moves.
   }, [busFocus]);
 
   /* --------------------------------------------- the Hop: numbered stops ---- */
@@ -903,7 +992,6 @@ export default function NightMap({
     declutter.current();
   }, [epoch, hopStops, showHop]);
 
-  /* -------------------------------------------------------- the bus ----- */
   useEffect(() => {
     const m = map.current;
     if (!m || !ready.current) return;
@@ -918,15 +1006,14 @@ export default function NightMap({
       const el = make("button", "hz-bus");
       el.type = "button";
       const body = make("span", "hz-bus-body");
-      body.innerHTML = BUS_ICON; // a constant string, no stored text
+      body.innerHTML = BUS_ART; // a constant string, no stored text
       el.append(body, make("span", "hz-bus-label"));
       el.addEventListener("click", (ev) => {
         ev.stopPropagation();
         (cbs.current.onBus ?? cbs.current.onHopSelect)();
       });
       el.style.zIndex = "5";
-      // Up and to the left of its point, so the event dot at a stop stays visible and tappable.
-      busMk.current = new maplibregl.Marker({ element: el, anchor: "bottom-right", offset: [-10, -10] }).setLngLat([b.lng, b.lat]).addTo(m);
+      busMk.current = new maplibregl.Marker({ element: el, anchor: "top", offset: [0, 4] }).setLngLat([b.lng, b.lat]).addTo(m);
     }
     const el = busMk.current.getElement();
     (el.querySelector(".hz-bus-label") as HTMLElement).textContent = b.label;
@@ -935,6 +1022,7 @@ export default function NightMap({
       b.parked ? `The Hop bus, parked at stop 1. ${b.label.toLowerCase()}. Opens the Hop.` : `The Hop bus: ${b.label.toLowerCase()}`
     );
     el.classList.toggle("hz-bus-moving", b.moving);
+    // Not the Hop's day: no purple until the Hop.
     el.classList.toggle("hz-bus-parked", b.parked);
     busMk.current.setLngLat([b.lng, b.lat]);
     declutter.current();
@@ -942,37 +1030,32 @@ export default function NightMap({
   }, [epoch, busKey]);
 
   /* ------------------------------------------------------------- me ---- */
-  // A plain dot, only when the position really is GPS. An area you picked is not a fix.
-  const gpsKey = fix?.source === "gps" ? `${fix.lat},${fix.lng}` : "";
+  const lookKey = JSON.stringify(myLook ?? null);
+  const fixKey = fix ? `${fix.lat.toFixed(5)},${fix.lng.toFixed(5)}` : "";
   useEffect(() => {
     const m = map.current;
     if (!m || !ready.current) return;
-    if (!gpsKey) {
-      meMk.current?.remove();
-      meMk.current = null;
-      declutter.current();
-      return;
-    }
-    const [lat, lng] = gpsKey.split(",").map(Number);
-    if (!meMk.current) {
-      const el = make("div", "hz-me");
+    meMk.current?.remove();
+    meMk.current = null;
+    const f = fixRef.current;
+    if (f) {
+      const el = faceMarker(myLook, "me", BRAND.orange);
+      el.style.zIndex = "3";
       el.setAttribute("role", "img");
-      el.setAttribute("aria-label", "You are here");
-      el.style.zIndex = "6";
-      meMk.current = new maplibregl.Marker({ element: el, anchor: "center" }).setLngLat([lng, lat]).addTo(m);
-    } else {
-      meMk.current.setLngLat([lng, lat]);
+      el.setAttribute("aria-label", "You");
+      meMk.current = new maplibregl.Marker({ element: el, anchor: "bottom" }).setLngLat([f.lng, f.lat]).addTo(m);
     }
     declutter.current();
-  }, [epoch, gpsKey]);
+    // lookKey stands in for myLook, fixKey for fix.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [epoch, lookKey, fixKey]);
 
   /* ----------------------------------------------------- recenter on a new fix */
-  const fixKey = fix ? `${fix.lat.toFixed(3)},${fix.lng.toFixed(3)}` : "";
   const lastFix = useRef<string | null>(null);
   useEffect(() => {
     const m = map.current;
     if (!m || !ready.current) return;
-    // First time the map is up, the framing it opened with stands.
+    // The first fix is the swoop's destination.
     if (lastFix.current === null) {
       lastFix.current = fixKey;
       return;
@@ -981,7 +1064,7 @@ export default function NightMap({
     if (!f || fixKey === lastFix.current) return;
     lastFix.current = fixKey;
     if (selectedRef.current) return;
-    m.easeTo({ center: [f.lng, f.lat], zoom: Math.max(m.getZoom(), 11.4), pitch: 0, duration: ms(600) });
+    m.easeTo({ center: [f.lng, f.lat], zoom: Math.max(m.getZoom(), 11.4), duration: ms(700) });
   }, [epoch, fixKey]);
 
   return <div ref={holder} className="absolute inset-0" aria-label="Lagos map" />;

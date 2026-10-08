@@ -4,6 +4,7 @@ import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import clsx from "clsx";
 import { X } from "lucide-react";
 import type { Theme } from "@/lib/theme";
+import { SIDE_PANEL, SIDE_PANEL_CSS_WIDTH } from "./side";
 
 /**
  * The one sheet the event page and the Hop share: a tall ticket stub that rises
@@ -16,12 +17,17 @@ import type { Theme } from "@/lib/theme";
  *
  * theme forces the stub's own day or night colours (a card follows its event);
  * leave it out to follow the page.
+ *
+ * placement "side" docks it on the right of the map instead (side.ts sizes it,
+ * the page sets --hz-side-top under its own chrome): it slides in from the edge,
+ * has no grab handle, and closes with X or Escape.
  */
 export default function StubSheet({
   label,
   theme,
   onClose,
   closeOnEscape = true,
+  placement = "sheet",
   footer,
   children,
 }: {
@@ -29,6 +35,7 @@ export default function StubSheet({
   theme?: Theme;
   onClose: () => void;
   closeOnEscape?: boolean;
+  placement?: "sheet" | "side";
   footer?: React.ReactNode;
   children: React.ReactNode;
 }) {
@@ -39,6 +46,7 @@ export default function StubSheet({
   const [dy, setDy] = useState(0);
   const drag = useRef<{ y: number; t: number } | null>(null);
   const hasFooter = !!footer;
+  const side = placement === "side";
 
   useEffect(() => {
     shell.current?.focus({ preventScroll: true });
@@ -90,25 +98,41 @@ export default function StubSheet({
       role="dialog"
       aria-label={label}
       tabIndex={-1}
-      className="absolute inset-x-2 bottom-0 z-40 mx-auto flex max-h-[85%] max-w-[600px] flex-col rounded-t-[14px] outline-none animate-rise"
-      // "translate" is its own property, so the rise animation (which owns "transform") cannot undo a drag.
-      style={{ translate: dy ? `0 ${dy}px` : undefined, transition: drag.current ? "none" : "translate .18s ease-out" }}
+      className={
+        side
+          ? "hz-slide-in absolute z-40 flex flex-col rounded-[14px] outline-none"
+          : "absolute inset-x-2 bottom-0 z-40 mx-auto flex max-h-[85%] max-w-[600px] flex-col rounded-t-[14px] outline-none animate-rise"
+      }
+      style={
+        side
+          ? { top: "var(--hz-side-top, 140px)", bottom: SIDE_PANEL.gap, right: SIDE_PANEL.gap, width: SIDE_PANEL_CSS_WIDTH }
+          : // "translate" is its own property, so the rise animation (which owns "transform") cannot undo a drag.
+            { translate: dy ? `0 ${dy}px` : undefined, transition: drag.current ? "none" : "translate .18s ease-out" }
+      }
     >
       <div
         ref={stub}
-        className={clsx("stub flex min-h-0 flex-1 flex-col rounded-b-none rounded-t-[14px] border-b-0", theme && `stub-${theme}`)}
+        className={clsx(
+          "stub flex min-h-0 flex-1 flex-col",
+          side ? "rounded-[14px]" : "rounded-b-none rounded-t-[14px] border-b-0",
+          theme && `stub-${theme}`
+        )}
         style={notchY != null ? ({ "--notch-y": `${notchY}px` } as React.CSSProperties) : undefined}
       >
-        <div
-          aria-hidden
-          className="flex h-8 flex-none cursor-grab touch-none items-center justify-center"
-          onPointerDown={onDown}
-          onPointerMove={onMove}
-          onPointerUp={onUp}
-          onPointerCancel={onUp}
-        >
-          <span className="h-1 w-10 rounded-full bg-dim/40" />
-        </div>
+        {side ? (
+          <div aria-hidden className="h-3 flex-none" />
+        ) : (
+          <div
+            aria-hidden
+            className="flex h-8 flex-none cursor-grab touch-none items-center justify-center"
+            onPointerDown={onDown}
+            onPointerMove={onMove}
+            onPointerUp={onUp}
+            onPointerCancel={onUp}
+          >
+            <span className="h-1 w-10 rounded-full bg-dim/40" />
+          </div>
+        )}
         <button
           onClick={onClose}
           aria-label="Close"
@@ -126,7 +150,7 @@ export default function StubSheet({
         </div>
 
         {footer && (
-          <div ref={foot} className="flex-none border-t border-dashed border-line px-5 pb-4 pt-4">
+          <div ref={foot} className={clsx("flex-none border-t border-dashed border-line pt-4", side ? "px-4 pb-3" : "px-5 pb-4")}>
             {footer}
           </div>
         )}

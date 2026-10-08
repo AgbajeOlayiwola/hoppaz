@@ -30,7 +30,16 @@ const CELL =
  * Pinned under the perforation: the guest list (the going count, your face),
  * the one button that matters, and the ways to pass the night on.
  */
-export default function GoingFoot({ event, userId }: { event: EventRow; userId: string | null }) {
+export default function GoingFoot({
+  event,
+  userId,
+  compact = false,
+}: {
+  event: EventRow;
+  userId: string | null;
+  /** Narrow (the card docked beside the map): the secondary row folds into two columns. */
+  compact?: boolean;
+}) {
   const say = useToast((s) => s.say);
   const { isGoing, busy, toggleGoing } = useGoing(userId);
   const look = useMyLook(userId);
@@ -131,7 +140,13 @@ export default function GoingFoot({ event, userId }: { event: EventRow; userId: 
       </div>
 
       {/* -------------------------------------------------- the secondary row -- */}
-      <div className={clsx("mt-2 flex divide-x divide-line overflow-hidden rounded-hz border border-line")}>
+      <div
+        className={clsx(
+          "mt-2 overflow-hidden rounded-hz border border-line",
+          // Narrow: a two-column grid whose 1px gaps show the hairline; the chat link takes a row of its own when it is the odd one out.
+          compact ? "grid grid-cols-2 gap-px bg-line [&>*]:bg-ink-2" : "flex divide-x divide-line"
+        )}
+      >
         <button type="button" onClick={onShare} className={CELL}>
           <Share2 size={14} className="text-orange" aria-hidden /> SHARE
         </button>
@@ -140,7 +155,7 @@ export default function GoingFoot({ event, userId }: { event: EventRow; userId: 
             {linkLabel(event)} <ArrowUpRight size={14} className="text-orange" aria-hidden />
           </a>
         )}
-        <Link href={`/chat?c=${event.id}`} className={CELL}>
+        <Link href={`/chat?c=${event.id}`} className={clsx(CELL, compact && event.ig_url && "col-span-2")}>
           EVENT CHAT <ArrowRight size={14} className="text-orange" aria-hidden />
         </Link>
       </div>

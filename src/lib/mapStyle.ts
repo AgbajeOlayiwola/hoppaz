@@ -1,13 +1,12 @@
 import type { ExpressionSpecification, Map as MLMap, StyleSpecification } from "maplibre-gl";
+import { BRAND } from "./brand";
 import type { Theme } from "./theme";
 
 /**
  * The map's two looks. Night is CARTO dark-matter (or NEXT_PUBLIC_MAP_STYLE when
- * set, night only), day is CARTO positron. Both are free, keyless vector styles
- * with the same layer naming, so one repaint() handles either: it moves every
- * basemap layer onto the Hoppaz grounds (Night Black or Bridge Cream, hairline
- * roads, neutral buildings) and nothing on the basemap is orange or violet.
- * Orange on the map means heat or something you can tap, and those are ours.
+ * set, night only) in the original Hoppaz night paint: Night Black with orange
+ * arteries (repaintNight). Day is CARTO positron moved onto Bridge Cream with
+ * hairline roads (repaint). Both styles share OpenMapTiles layer naming.
  */
 const NIGHT_STYLE_URL =
   process.env.NEXT_PUBLIC_MAP_STYLE ||
@@ -204,24 +203,109 @@ function repaint(style: StyleSpecification, theme: Theme): StyleSpecification {
   return { ...style, light, layers: layers as StyleSpecification["layers"] };
 }
 
+/**
+ * The original night paint: dark-matter repainted so it reads as Night Black
+ * with orange arteries instead of Google-with-a-filter. Matching is by layer id.
+ * The one change from the original: the basemap's own extruded buildings are
+ * hidden, because the 3D city is ours (addCityLayer).
+ */
+function repaintNight(style: StyleSpecification): StyleSpecification {
+  const layers = (style.layers as AnyLayer[]).map((layer) => {
+    const id = layer.id.toLowerCase();
+    const sl = String(layer["source-layer"] ?? "").toLowerCase();
+    const l: AnyLayer = { ...layer, paint: { ...(layer.paint ?? {}) } };
+    const paint = l.paint as Record<string, unknown>;
+
+    if (l.type === "background") {
+      paint["background-color"] = BRAND.ink;
+      return l;
+    }
+    if (l.type === "fill-extrusion" && (id.includes("building") || sl === "building")) {
+      l.layout = { ...(l.layout ?? {}), visibility: "none" };
+      return l;
+    }
+    if (id.includes("water") || id.includes("ocean") || id.includes("bay")) {
+      if (l.type === "fill") paint["fill-color"] = "#1D2B32";
+      if (l.type === "line") paint["line-color"] = "#455963";
+      return l;
+    }
+    if (id.includes("park") || id.includes("wood") || id.includes("landcover") || id.includes("landuse")) {
+      if (l.type === "fill") {
+        paint["fill-color"] = id.includes("park") || id.includes("wood") ? "#29352B" : "#34322B";
+        paint["fill-opacity"] = 0.9;
+      }
+      return l;
+    }
+    if (id.includes("building")) {
+      if (l.type === "fill") {
+        paint["fill-color"] = "#3A2B23";
+        paint["fill-opacity"] = 0.95;
+      }
+      return l;
+    }
+    if (id.includes("boundary") || id.includes("admin")) {
+      if (l.type === "line") {
+        paint["line-color"] = "#59453A";
+        paint["line-opacity"] = 0.72;
+      }
+      return l;
+    }
+    if (id.includes("bridge")) {
+      if (l.type === "line") {
+        paint["line-color"] = "#C85E28";
+        paint["line-opacity"] = 0.8;
+      }
+      return l;
+    }
+    if (id.includes("motorway") || id.includes("trunk") || id.includes("primary")) {
+      if (l.type === "line") {
+        paint["line-color"] = "#D88A4E";
+        paint["line-opacity"] = 0.98;
+      }
+      if (l.type === "fill") paint["fill-color"] = "#78513A";
+      return l;
+    }
+    if (id.includes("road") || id.includes("street") || id.includes("tunnel") || id.includes("transit")) {
+      if (l.type === "line") {
+        paint["line-color"] = "#896B56";
+        paint["line-opacity"] = 0.92;
+      }
+      if (l.type === "fill") paint["fill-color"] = "#57473B";
+      return l;
+    }
+    if (l.type === "symbol") {
+      paint["text-color"] = id.includes("place") || id.includes("city") ? "#D0B6A3" : "#A38B79";
+      paint["text-halo-color"] = BRAND.ink;
+      paint["text-halo-width"] = 1.2;
+      if (id.includes("poi") || id.includes("housenum")) l.layout = { ...(l.layout ?? {}), visibility: "none" };
+      return l;
+    }
+    return l;
+  });
+
+  return { ...style, layers: layers as StyleSpecification["layers"] };
+}
+
 export async function loadBrandStyle(theme: Theme, signal?: AbortSignal): Promise<StyleSpecification> {
   const res = await fetch(styleUrlFor(theme), { signal });
   if (!res.ok) throw new Error(`Basemap style failed: ${res.status}`);
-  return repaint((await res.json()) as StyleSpecification, theme);
+  const style = (await res.json()) as StyleSpecification;
+  return theme === "night" ? repaintNight(style) : repaint(style, theme);
 }
 
 /**
  * The 3D city: the basemap's buildings extruded in flat neutral concrete (the
- * Campus Twin neighbour tones), no shading gradient. They are simply there from
- * zoom 13: nothing grows, nothing is orange. Heights are exaggerated because
- * most of Lagos has no height data and comes in at the OpenMapTiles default.
- * Returns the layer id, or null when the basemap has no building layer (e.g. the
- * fallback style).
+ * Campus Twin neighbour tones), no shading gradient, never orange. They grow out
+ * of the ground the first time they are in view (riseCity), the way buildings
+ * grow in the intro. Heights are exaggerated because most of Lagos has no height
+ * data and comes in at the OpenMapTiles default. Pass grown when the city has
+ * already risen (a day/night swap rebuilds it at full height). Returns the layer
+ * id, or null when the basemap has no building layer (e.g. the fallback style).
  */
 export const CITY_LAYER = "hoppaz-city";
 const CITY_HEIGHT: ExpressionSpecification = ["*", 2.2, ["max", 6, ["coalesce", ["get", "render_height"], 6]]];
 
-export function addCityLayer(m: MLMap, beforeId?: string, theme: Theme = "night"): string | null {
+export function addCityLayer(m: MLMap, beforeId?: string, theme: Theme = "night", grown = true): string | null {
   const src = (m.getStyle().layers as AnyLayer[]).find((l) => l["source-layer"] === "building" && "source" in l) as
     | (AnyLayer & { source: string })
     | undefined;
@@ -237,7 +321,7 @@ export function addCityLayer(m: MLMap, beforeId?: string, theme: Theme = "night"
       filter: ["!=", ["get", "hide_3d"], true],
       paint: {
         "fill-extrusion-color": ["interpolate", ["linear"], CITY_HEIGHT, 12, low, 40, mid, 90, tall],
-        "fill-extrusion-height": CITY_HEIGHT,
+        "fill-extrusion-height": grown ? CITY_HEIGHT : ["*", 0, CITY_HEIGHT],
         "fill-extrusion-base": ["*", 2.2, ["coalesce", ["get", "render_min_height"], 0]],
         "fill-extrusion-opacity": 0.96,
         "fill-extrusion-vertical-gradient": false,
@@ -246,6 +330,22 @@ export function addCityLayer(m: MLMap, beforeId?: string, theme: Theme = "night"
     beforeId
   );
   return CITY_LAYER;
+}
+
+/**
+ * The city sprouts out of the ground the first time it is in view, the way
+ * buildings grow in the intro. Overshoots a touch, then settles.
+ */
+export function riseCity(m: MLMap, ms = 1100) {
+  const t0 = performance.now();
+  const backOut = (t: number) => 1 + 2.2 * Math.pow(t - 1, 3) + 1.2 * Math.pow(t - 1, 2);
+  const step = (now: number) => {
+    if (!m.getLayer(CITY_LAYER)) return;
+    const t = Math.min(1, (now - t0) / ms);
+    m.setPaintProperty(CITY_LAYER, "fill-extrusion-height", ["*", backOut(t), CITY_HEIGHT]);
+    if (t < 1) requestAnimationFrame(step);
+  };
+  requestAnimationFrame(step);
 }
 
 /**

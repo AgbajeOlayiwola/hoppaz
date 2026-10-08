@@ -352,12 +352,12 @@
 
 /* ------------------------------------------------------- map signs ---- */
 /*
- * An event on the map: a dot (the "pins" circle layer) with a banner over it, a
- * card-colour block with the name and one mono line. From street zoom the banner
- * becomes a card with the flyer on top. NightMap's declutter sets data-mode on
- * each sign: card | banner | mini (price only) | off (just the dot).
- * Colours are the theme tokens, so the same rules are right on cream and on black.
- * Signs simply appear (fade 160ms at most): no pop, no spring, no stagger.
+ * Every event stands on the map as a rooftop billboard, the original Hoppaz
+ * sign: a cream board with the name and one mono line (crowd diamond, price,
+ * time, minutes away) on two posts, popping up one after another the way the
+ * intro's signs do. From street zoom it becomes a card with the flyer on top and
+ * floats over its venue's house. NightMap's declutter sets data-mode on each
+ * sign: card | banner | mini (price tag) | off (just the dot).
  */
 .hz-sign {
   display: flex;
@@ -368,59 +368,89 @@
   border: 0;
   background: none;
   font: inherit;
-  text-align: left;
-  color: rgb(var(--text));
+  text-align: center;
+  color: #0e0b0a;
   cursor: pointer;
 }
 .hz-board {
   display: flex;
   flex-direction: column;
   align-items: center;
-  animation: fade 0.16s ease both;
+  transform-origin: 50% 100%;
+  animation: hz-pop 0.45s cubic-bezier(0.34, 1.8, 0.64, 1) var(--d, 0s) both;
+}
+@keyframes hz-pop {
+  from {
+    transform: scale(0);
+  }
+  to {
+    transform: scale(1);
+  }
+}
+/* Street zoom: the sign floats above its venue's house instead of sitting on it */
+.hz-street .hz-board {
+  translate: 0 calc(-1 * var(--hz-lift, 0px));
 }
 .hz-face,
 .hz-mini {
-  background: rgb(var(--card));
-  border: 1px solid rgb(var(--hairline));
-  border-radius: 6px;
-  box-shadow: 0 3px 10px rgb(var(--shadow) / 0.35);
+  background: #f5ebdd;
+  color: #0e0b0a;
+  border-radius: 2px;
+  box-shadow: 0 2px 0 #b83600;
+}
+/* By day the cream board sits on a cream map: a hairline of ink keeps its edge. */
+[data-theme="day"] .hz-face,
+[data-theme="day"] .hz-mini {
+  box-shadow:
+    0 0 0 1px rgb(14 11 10 / 0.22),
+    0 2px 0 #b83600;
 }
 .hz-face {
   display: block;
-  padding: 4px 7px 5px;
+  padding: 4px 8px;
 }
 .hz-name {
   display: block;
   max-width: 150px;
+  margin: 0 auto;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
   font-family: var(--font-poppins), system-ui, sans-serif;
   font-weight: 900;
-  font-size: 11px;
-  line-height: 1.2;
-  color: rgb(var(--text));
+  font-size: 10.5px;
+  line-height: 1.1;
+  text-transform: uppercase;
+  color: #0e0b0a;
 }
 .hz-meta {
   display: flex;
   align-items: center;
-  gap: 6px;
-  margin-top: 1px;
+  justify-content: center;
+  gap: 4px;
+  margin-top: 2px;
   white-space: nowrap;
   font-family: var(--font-mono), monospace;
   font-weight: 500;
   font-size: 10px;
-  line-height: 1.35;
-  letter-spacing: 0.02em;
-  color: rgb(var(--text));
+  line-height: 1.2;
+  color: #b83600;
 }
-/* A live drop: violet text and a violet border, no fill. The only violet on a sign. */
+/* How busy it is: the same diamond that floats over the venue's house */
+.hz-gem {
+  display: inline-block;
+  flex: none;
+  width: 7px;
+  height: 7px;
+  transform: rotate(45deg);
+}
+/* A live drop: violet text and a violet border, no fill. */
 .hz-drop {
   padding: 0 4px;
-  border: 1px solid rgb(var(--violet));
+  border: 1px solid #5b2eff;
   border-radius: 4px;
   letter-spacing: 0.08em;
-  color: rgb(var(--violet));
+  color: #5b2eff;
 }
 .hz-drop[hidden] {
   display: none;
@@ -430,19 +460,27 @@
   display: none;
 }
 .hz-mini {
-  padding: 2px 6px;
+  padding: 3px 6px;
   font-family: var(--font-mono), monospace;
   font-weight: 500;
   font-size: 10px;
-  line-height: 1.3;
+  line-height: 1;
   white-space: nowrap;
-  color: rgb(var(--text));
 }
-.hz-stem {
+.hz-posts {
+  display: flex;
+  justify-content: space-around;
+  width: 100%;
+  padding: 0 8px;
+}
+.hz-posts i {
   display: block;
-  width: 1px;
-  height: 6px;
-  background: rgb(var(--text) / 0.55);
+  width: 2px;
+  height: 8px;
+  background: #f5ebdd;
+}
+[data-theme="day"] .hz-posts i {
+  background: #0e0b0a;
 }
 /* The flyer, or a clean branded block (the H mark and the vibe) when there is none. */
 .hz-art {
@@ -501,10 +539,16 @@
 .hz-sign[data-mode="mini"] .hz-mini {
   display: block;
 }
+/* Up close: a card in the card colours, the flyer on top, the name in full */
 .hz-sign[data-mode="card"] .hz-face {
   width: 132px;
   padding: 0;
   overflow: hidden;
+  text-align: left;
+  background: rgb(var(--card));
+  border: 1px solid rgb(var(--hairline));
+  border-radius: 6px;
+  box-shadow: 0 3px 10px rgb(var(--shadow) / 0.35);
 }
 .hz-sign[data-mode="card"] .hz-art {
   display: block;
@@ -516,34 +560,55 @@
 .hz-sign[data-mode="card"] .hz-name {
   display: -webkit-box;
   max-width: none;
+  margin: 0;
   white-space: normal;
+  text-transform: none;
   font-size: 12.5px;
+  color: rgb(var(--text));
   -webkit-line-clamp: 2;
   -webkit-box-orient: vertical;
 }
 .hz-sign[data-mode="card"] .hz-meta {
   flex-wrap: wrap;
+  justify-content: flex-start;
   row-gap: 3px;
   margin-top: 3px;
+  color: rgb(var(--text));
+}
+.hz-sign[data-mode="card"] .hz-drop {
+  border-color: rgb(var(--violet));
+  color: rgb(var(--violet));
 }
 /* Outside your radius: still there, still priced, just quieter */
 .hz-sign.hz-far {
   opacity: 0.55;
 }
-/* The one you picked: an orange 2px edge and the ember lip, never a solid orange fill */
+/* The one you picked: the board turns orange; up close, the card gets an orange edge and the ember lip */
 .hz-sign.hz-on {
   visibility: visible;
   opacity: 1;
 }
 .hz-sign.hz-on .hz-face,
 .hz-sign.hz-on .hz-mini {
+  background: #ff4d00;
+  color: #f5ebdd;
+}
+.hz-sign.hz-on .hz-name {
+  color: #f5ebdd;
+}
+.hz-sign.hz-on .hz-meta {
+  color: #0e0b0a;
+}
+.hz-sign.hz-on[data-mode="card"] .hz-face {
+  background: rgb(var(--card));
   border-color: #ff4d00;
   box-shadow:
     0 0 0 1px #ff4d00,
     0 4px 0 1px #b83600;
 }
-.hz-sign.hz-on .hz-stem {
-  background: #ff4d00;
+.hz-sign.hz-on[data-mode="card"] .hz-name,
+.hz-sign.hz-on[data-mode="card"] .hz-meta {
+  color: rgb(var(--text));
 }
 
 /* Desktop hover card over an event: above every banner, the bus and your dot (their z-index is 1 to 6) */
@@ -585,7 +650,8 @@
   color: rgb(var(--text));
 }
 
-/* The Hop on the map: a plain dashed route, numbered stops, and a card-colour bus. No violet, no bob. */
+/* The Hop on the map. Violet is the Hop's colour, so it only shows on the Hop's day:
+   the route (a map layer), the numbered stops, and the bus's edge and label. */
 /* No position here: MapLibre's .maplibregl-marker is already absolute, and a marker that is
    relative stacks in flow and lands far from its point. It is also the containing block below. */
 .hz-stop {
@@ -595,14 +661,13 @@
   height: 22px;
   padding: 0;
   border-radius: 9999px;
-  border: 1.5px solid rgb(var(--text));
-  background: rgb(var(--card));
-  box-shadow: 0 2px 6px rgb(var(--shadow) / 0.35);
+  border: 2px solid #0e0b0a;
+  background: #5b2eff;
   font-family: var(--font-poppins), system-ui, sans-serif;
   font-weight: 900;
   font-size: 11px;
   line-height: 1;
-  color: rgb(var(--text));
+  color: #f5ebdd;
   cursor: pointer;
 }
 /* 44px to tap, 22px to see */
@@ -611,66 +676,57 @@
   position: absolute;
   inset: -11px;
 }
+/* The little bus from the intro: orange, with a violet edge on the Hop's day. It bobs while it drives. */
 .hz-bus {
-  display: block;
-  width: 36px;
-  height: 28px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
   padding: 0;
   border: 0;
   background: none;
-  color: rgb(var(--text));
   cursor: pointer;
 }
 .hz-bus-body {
   display: grid;
   place-items: center;
-  width: 36px;
-  height: 28px;
+  width: 44px;
+  height: 32px;
   border-radius: 6px;
-  border: 1.5px solid rgb(var(--text));
-  background: rgb(var(--card));
-  box-shadow: 0 3px 10px rgb(var(--shadow) / 0.35);
+  border: 2px solid #5b2eff;
+  background: #ff4d00;
+  box-shadow: 0 2px 0 #b83600;
+}
+.hz-bus-moving .hz-bus-body {
+  animation: hz-bob 0.9s ease-in-out infinite;
+}
+@keyframes hz-bob {
+  0%,
+  100% {
+    transform: translateY(0);
+  }
+  50% {
+    transform: translateY(-3px);
+  }
 }
 .hz-bus-label {
-  position: absolute;
-  bottom: calc(100% + 5px);
-  left: 0;
+  margin-top: 4px;
   padding: 2px 6px;
-  border: 1px solid rgb(var(--hairline));
-  border-radius: 4px;
-  background: rgb(var(--card));
-  box-shadow: 0 3px 10px rgb(var(--shadow) / 0.35);
+  border-radius: 2px;
+  background: #5b2eff;
   white-space: nowrap;
   font-family: var(--font-mono), monospace;
   font-weight: 500;
   font-size: 10px;
-  line-height: 1.35;
-  letter-spacing: 0.06em;
-  color: rgb(var(--text));
+  line-height: 1.2;
+  letter-spacing: 0.04em;
+  color: #f5ebdd;
 }
-/* near the right edge the label grows leftwards instead of running off the map */
-.hz-bus[data-align="right"] .hz-bus-label {
-  left: auto;
-  right: 0;
+/* Any other day it waits at the boarding point: no purple until the Hop. */
+.hz-bus-parked .hz-bus-body {
+  border-color: #0e0b0a;
 }
-/* Your own position: a plain dot, ring in the text colour (cream at night, ink by day). Not tappable. */
-.hz-me {
-  display: grid;
-  place-items: center;
-  width: 18px;
-  height: 18px;
-  border-radius: 9999px;
-  border: 2px solid rgb(var(--text));
-  background: rgb(var(--ground));
-  box-shadow: 0 2px 8px rgb(var(--shadow) / 0.4);
-  pointer-events: none;
-}
-.hz-me::after {
-  content: "";
-  width: 6px;
-  height: 6px;
-  border-radius: 9999px;
-  background: rgb(var(--text));
+.hz-bus-parked .hz-bus-label {
+  background: #0e0b0a;
 }
 
 @media (prefers-reduced-motion: reduce) {
@@ -884,4 +940,17 @@ svg.rig.poke #character { animation: rig-poke 0.42s cubic-bezier(0.3, 1.6, 0.5, 
 .hz-scrap {
   background: #f5ebdd;
   clip-path: polygon(2% 8%, 14% 3%, 27% 7%, 41% 2%, 55% 6%, 70% 1%, 84% 5%, 97% 3%, 99% 20%, 96% 36%, 100% 52%, 97% 70%, 99% 88%, 86% 96%, 71% 92%, 56% 98%, 40% 93%, 26% 99%, 12% 94%, 3% 97%, 1% 80%, 4% 62%, 0% 45%, 3% 28%);
+}
+
+/* The event card docked beside the map slides in from the right edge. */
+.hz-slide-in {
+  animation: hz-slide-in 0.26s cubic-bezier(0.2, 0.8, 0.2, 1) both;
+}
+@keyframes hz-slide-in {
+  from {
+    transform: translateX(calc(100% + 16px));
+  }
+  to {
+    transform: none;
+  }
 }

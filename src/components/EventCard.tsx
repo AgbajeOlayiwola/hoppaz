@@ -36,6 +36,11 @@ type Props = {
   isHopStop: boolean;
   /** When you checked in (ISO), if the caller knows it from an earlier visit. */
   checkedAt?: string | null;
+  /**
+   * "sheet" (default): a tall stub rising from the bottom. "side": docked on the
+   * right of the map, so the venue's house stays in view on the left.
+   */
+  placement?: "sheet" | "side";
 };
 
 /** Check-in times seen this session, so the stamp keeps its time when you reopen the card. */
@@ -55,7 +60,8 @@ export default function EventCard(props: Props) {
   return <EventSheet key={props.event.id} {...props} />;
 }
 
-function EventSheet({ event, fix, userId, checkedIn, busy, onCheckIn, onClose, isHopStop, checkedAt }: Props) {
+function EventSheet({ event, fix, userId, checkedIn, busy, onCheckIn, onClose, isHopStop, checkedAt, placement = "sheet" }: Props) {
+  const side = placement === "side";
   const say = useToast((s) => s.say);
   const { photos: loaded, uploading, upload } = useEventFeed(event.id, userId);
   const sampleShots = useMemo(() => demoPhotos(event), [event]);
@@ -124,12 +130,12 @@ function EventSheet({ event, fix, userId, checkedIn, busy, onCheckIn, onClose, i
   };
 
   return (
-    <StubSheet label={title} theme={theme} onClose={onClose} footer={<GoingFoot event={event} userId={userId} />}>
+    <StubSheet label={title} theme={theme} onClose={onClose} placement={placement} footer={<GoingFoot event={event} userId={userId} compact={side} />}>
       <ArtPanel flyer={flyer} alt={`${title} flyer`} vibe={event.vibe} tone={theme === "day" ? "ink" : "cream"} />
 
       {/* ----------------------------------------------- title and the facts -- */}
       <div className="px-5 pt-4">
-        <h2 className="font-display text-[30px] font-black leading-[1.05] tracking-[-0.01em]">{title}</h2>
+        <h2 className={`font-display font-black leading-[1.05] tracking-[-0.01em] ${side ? "pr-6 text-[22px]" : "text-[30px]"}`}>{title}</h2>
         <p className="mt-2.5 font-mono text-[12px] font-medium uppercase leading-snug tracking-[0.04em] text-cream [text-wrap:balance]">{line}</p>
         <p className="mt-1 font-body text-[14px] text-dim">{event.venue_name}</p>
         {pill && (

@@ -20,9 +20,9 @@ House rules for every screen: no em dashes, no emoji in the interface, orange me
 | Buttons | Lip button: orange face, dark ink label, 6px radius, 4px ember lip, press sinks 4px. |
 | Containers | Ticket stub (two punched notches) for anything that represents one night. |
 | Day boundary | "TODAY" runs 6am to 6am Lagos time, so a 1am party belongs to the night before. |
-| 3D city | Stays, repainted in the twin's neutral dark concrete (`#2a2320` walls, `#1c1715` roofs). No ember or orange buildings. No grow animation. |
-| Event 3D | The little Sims houses go. Campus Twin venue patches render only at events (test venue-only vs venue-plus-block). Moon left out. |
-| Camera | Flat while browsing, no swoop on every visit. A gentle tilt (about 40 degrees) only when an event is tapped, so its model stands up. |
+| 3D city | Stays, repainted in the twin's neutral concrete (no ember or orange buildings). It grows in the first time it shows, as in the original. (Jae, 8 Oct, after seeing the build: the original map was better; only the orange towers and the always-on purple had to go.) |
+| Event 3D | The Sims houses stay at every venue for now. Campus Twin venue models replace them when they are ready (test venue-only vs venue-plus-block). Moon left out. |
+| Camera | The original: after the intro the map swoops down from high over Lagos into a tilted, angled city. Tapping an event pulls in close and tilted; the event card docks on the right and the venue's house stands on the left with its card over its head. Closing puts the camera back. |
 | Ladder | Status from the bus (canon): join = Hopper, 4 Hop badges = Captain. XP levels get their own names, proposed **JJC, Regular, Plug, Oga, Agba** (pending Jae's final word). "Bridge Rat" and "Night Runner" are gone. |
 | Guest list | Who's going stays private. The event shows the count, your own face, and your crew's faces when your crew planned that event. |
 | Lineup | A separate "lineup" section (name, role, organiser-supplied photo). Needs a lineup field: back end, phase 2. |
@@ -38,11 +38,11 @@ House rules for every screen: no em dashes, no emoji in the interface, orange me
 ### Map
 - Night rail across the top: 14 days, weekday, date number, "N on". Opens on TODAY. Calendar icon opens a month grid for further out. Replaces the native date pickers and "Any day".
 - Top right: a streak chip (drawn flame icon plus the daily streak number). Tapping it opens "Ways to earn". The XP level chip leaves the map.
-- Markers: far out, a dot plus a small banner. At street zoom the banner becomes a card with the event image, name, price and time, floating over the venue model. The declutter logic decides which events get full cards.
+- Markers: far out, the original rooftop billboard (cream board on two posts, crowd diamond, price, time, minutes away) popping up one after another. At street zoom it becomes a card with the event image, name, price and time, floating over the venue's house. The declutter logic decides which events get full signs.
 - Bottom: one slim time scrubber (the map's one ambient moment). Radius and "You are in" move into the location sheet as four plain choices. Zoom buttons hidden on touch devices, kept on desktop. Map credit stays visible.
-- Bus: on Hop night it runs the route; on other nights it is parked at the next boarding point with a "NEXT HOP · SAT 18" banner that opens the Hop.
-- Crew faces leave the map (their positions were made up). Your own position is a plain dot, only when GPS is on.
-- No bouncing signs, no bus bob, no swoop, no city grow.
+- Hop: the purple route, purple numbered stops and the bus's purple edge show on the Hop's day only. Other days, no purple: the bus is parked at the next boarding point with a "NEXT HOP · SAT 18" banner that opens the Hop.
+- Crew faces leave the map (their positions were made up). Your own face marks where the map works from, as in the original.
+- Night basemap is the original paint (Night Black, orange arteries); day is cream. Signs pop in, the bus bobs while it drives, the map swoops in and the city grows, as in the original.
 - Remove every player-visible developer message ("database not configured" and friends). Sample events only in local development.
 
 ### Event page
