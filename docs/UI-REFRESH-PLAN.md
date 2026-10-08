@@ -102,7 +102,22 @@ Hoppaz as a listing and community place for organisers, staged so nothing heavy 
 |---|---|---|
 | A. Claimed event pages | An organiser claims their listing, adds a lineup and posts updates. Hoppers tap Follow and see updates in the app. Tickets still link out. | Back end: claims, lineup, updates, follows. Organiser panel v1. |
 | B. Ticket pledge | Organisers give tickets (3 minimum, more buys more placement) that power quests and box prizes across the app. Ticket prizes only drop before the event; unclaimed ones return. | **Pilot now with no code**: the existing drop system already supports "ticket" rewards with codes. Legal check: random prizes with cash value may count as a promotional competition. |
-| C. Native ticketing | Hoppaz sells tickets and takes a fee. Market: Tix about 5% plus a small per-ticket fee; Paystack about 1.5% + N100 capped at N2,000. Proposed 4.5% as a launch rate, or 5% with promotion bundled. Decide who pays processing. Ticketing provider to confirm (Jae mentioned "Bachs"; name and link pending). | Payments, payouts, refunds, organiser verification. |
+| C. Native ticketing | Hoppaz sells tickets and takes a fee. Market: Tix about 5% plus a small per-ticket fee; Paystack about 1.5% + N100 capped at N2,000. Proposed 4.5% as a launch rate, or 5% with promotion bundled. Payment rails: **Bachs** (bachs.io), see below. | Ticket layer built by Hoppaz (ticket types, QR tickets, door scanning); Bachs Connect for money. |
+
+
+### Bachs (payments for Stage C), checked 8 Oct 2026
+
+- **What it is:** payments and billing infrastructure (checkout, subscriptions, settlement), not a ticketing product. Hoppaz builds the ticket layer on top.
+- **Organiser payouts:** Connect (sub-accounts), Stripe Connect style. Recommended shape: **the organiser collects** (direct charge into the organiser's sub-account, Hoppaz takes a per-ticket `platform_fee` as a fixed amount), so refunds and disputes hit the organiser's balance. Small individual organisers may suit "Hoppaz collects" instead (shorter onboarding, Hoppaz carries refunds). Hoppaz must upgrade to a registered business and pass compliance before Connect works in production.
+- **Fees (docs):** NGN bank transfer 1.5% capped at N2,000; Nigerian cards 2% (Beta, no cap shown); US cards 5% + $0.40, non-US cards +1.5%; mobile money 3.5% (pricing page says 2 to 3%); crypto 1.5%. NGN available immediately; NGN payout N50 flat.
+- **Refunds:** full or partial via API; Bachs keeps its processing fee and the platform fee is not reversed. Hoppaz needs a written refund policy.
+- **Worked example, N10,000 ticket, organiser collects, Hoppaz 4.5%:** bank transfer, organiser keeps N9,400; Nigerian card, N9,350.
+- **Risks to clear in writing before integrating:**
+  1. Bachs prohibits "mystery boxes and random pack openings" and "games of chance". The Game Plan's daily box and card packs are free (nothing random is sold); get written confirmation this is acceptable on the account.
+  2. Event ticketing is not explicitly listed as a supported business; confirm it is allowed.
+  3. Licence (CBN) not stated in the docs.
+  4. Local card cap, and which fee table is current (docs vs pricing page).
+  5. Connect production review timeline.
 
 **Claim campaign:** "Are you a brand or organiser? Claim your event on Hoppaz. DM us." Runs alongside Stage A.
 
@@ -125,4 +140,4 @@ Hoppaz as a listing and community place for organisers, staged so nothing heavy 
 2. Mascot: the Game Plan lists 8 moods, the rig has 10 states; which list is current, and the name (Waka) and the "no rabbit face" brand rule.
 3. Daytime card cutoff: events starting before 5pm get the cream card (proposed).
 4. Chat: does the "restyle only" rule for Crew also apply to Chat?
-5. Ticketing provider ("Bachs"): spelling or link.
+5. Bachs demo call: the five questions in section 4.
