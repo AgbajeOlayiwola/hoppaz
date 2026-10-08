@@ -46,6 +46,10 @@ Dev sample events are relative to today (14 days, some daytime, one after-midnig
 - Privacy contact: itshoppaz@gmail.com, controller Hoppaz.
 - Install sheet after the first "I'm going", once more after the first check-in, then never.
 - Brand rules: no em dashes, no emoji in UI, conductor voice, "Hoppers".
+- Organiser ticketing prices start cheap to pull organisers over: a founding organiser rate (e.g. 2.5%, locked 6 to 12 months for the first 20 to 50 organisers, end date announced) then 4.5%. See plan section 4.
+- Brand quest builder comes after the UI launch. Brands set and fund rewards; Hoppaz builds the quest line, verifies, tracks referrals for events hosted on Hoppaz, and can power ticket rewards. Model carried over from Jae's Absinthe Labs questing (X follows via the X API, Instagram via screenshot plus AI review). See plan section 4b for the examples (Blockfest pre-event, South Social on-the-night photo tasks).
+- Bachs: Jae knows the owner, so the written confirmations should be quick.
+- Cost: builders ran on Sonnet 5.5; ultracode and extra-high effort were the main spend drivers. Jae moved the work off the cloud session to use the normal subscription instead of cloud credits.
 
 ## Research done (summaries)
 

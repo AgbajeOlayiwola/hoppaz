@@ -102,7 +102,7 @@ Hoppaz as a listing and community place for organisers, staged so nothing heavy 
 |---|---|---|
 | A. Claimed event pages | An organiser claims their listing, adds a lineup and posts updates. Hoppers tap Follow and see updates in the app. Tickets still link out. | Back end: claims, lineup, updates, follows. Organiser panel v1. |
 | B. Ticket pledge | Organisers give tickets (3 minimum, more buys more placement) that power quests and box prizes across the app. Ticket prizes only drop before the event; unclaimed ones return. | **Pilot now with no code**: the existing drop system already supports "ticket" rewards with codes. Legal check: random prizes with cash value may count as a promotional competition. |
-| C. Native ticketing | Hoppaz sells tickets and takes a fee. Market: Tix about 5% plus a small per-ticket fee; Paystack about 1.5% + N100 capped at N2,000. Proposed 4.5% as a launch rate, or 5% with promotion bundled. Payment rails: **Bachs** (bachs.io), see below. | Ticket layer built by Hoppaz (ticket types, QR tickets, door scanning); Bachs Connect for money. |
+| C. Native ticketing | Hoppaz sells tickets and takes a fee. Market: Tix about 5% plus a small per-ticket fee; Paystack about 1.5% + N100 capped at N2,000. Jae: prices start cheap to pull organisers over. Recommended shape: a **founding organiser rate** (e.g. 2.5%) locked for 6 to 12 months for the first 20 to 50 organisers, with the end date announced up front, then the standard 4.5% (or 5% with promotion bundled). Avoid 0%. The platform fee is pure margin because Bachs processing (1.5 to 2%) sits on the organiser or buyer. Pitch instant naira payouts loudly. Payment rails: **Bachs** (bachs.io; Jae knows the owner), see below. | Ticket layer built by Hoppaz (ticket types, QR tickets, door scanning); Bachs Connect for money. |
 
 
 ### Bachs (payments for Stage C), checked 8 Oct 2026
@@ -128,6 +128,14 @@ Hoppaz as a listing and community place for organisers, staged so nothing heavy 
 The differentiator. Research on 8 Oct 2026 found no ticketing platform with one self-serve builder where organisers and brands set both pre-event and post-event quests and fund the rewards. What exists is referral cashback (Posh Kickback, Shotgun Cashback, Tixr Rewards, Ticket Fairy, Skiddle Reps), conference app quest builders (Eventify, Amego, POAP Journey) and one-off festival builds (Coachella Quests 2024, Defqon.1 The Path). Nothing like it in Lagos or Africa. Jae ran social questing at Absinthe Labs; the model carries over from web3 to events.
 
 **Roles:** brands and organisers set the quest line and fund the rewards; Hoppaz builds the quest line, verifies actions, and can power ticket rewards. Hoppaz adds XP and badges on top, and they carry across organisers (nobody else does that).
+
+**Order:** launch the UI refresh first, then build this.
+
+**Where the model comes from (Jae, Absinthe Labs):** Absinthe ran questing for web3 companies; Hoppaz runs questing for social and IRL. At Absinthe: follow quests on X and Instagram (sometimes Medium), plus "follow our account"; X checks through the X API ("XABS", to confirm); Instagram through an in-house Airtable-style tool where people submit a screenshot and it is confirmed manually or by AI. For Hoppaz the AI check runs on a cheap vision model on Groq: the brand screenshots its own Instagram page as the reference, the person submits a screenshot showing they follow, liked the post, or reposted the brand's story. Mentions on X (a post tagging the brand) are confirmed through the X API.
+
+**Examples Jae gave:** Blockfest running pre-event follow and repost quests; South Social running on-the-night tasks ("snap pictures with four people", "snap pictures with three people", "snap the DJ", "post on X tagging the brand") that make the night livelier while promoting the brand. Pre-event, during or post-event, depending on what the organiser wants.
+
+**Business points:** brands set the rewards, that is on them; Hoppaz's job is to create the quest line. Events hosted on Hoppaz get referral tracking. Hoppaz can power ticket rewards for brands that want them. Real rewards pay only for verified actions, so it can't be gamed.
 
 **Quest line, by phase:**
 - Pre-event: say you're going; follow the brand on X or Instagram (and Hoppaz); like or repost the announcement; share your referral link (Hoppaz tracks referrals for events hosted on Hoppaz); bring your crew.
