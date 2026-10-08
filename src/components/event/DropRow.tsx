@@ -5,6 +5,7 @@ import Link from "next/link";
 import { QrCode } from "lucide-react";
 import QrScanner from "@/components/QrScanner";
 import { useToast } from "@/lib/store";
+import { clockShort } from "@/lib/geo";
 import type { GameDrop } from "@/lib/game";
 import type { CollectibleDrop } from "@/lib/useCollectibles";
 import { sentence } from "./copy";
@@ -93,27 +94,32 @@ export default function DropRow({
 
           {closeEnough && (
             <div className="mt-3 space-y-3">
-              {pendingGame.map((drop) => (
-                <div key={drop.id}>
-                  {pending > 1 && <p className="mb-1.5 font-mono text-[11px] font-medium uppercase tracking-[0.08em] text-dim">{drop.title}</p>}
-                  {drop.claim_method !== "proximity" && (
-                    <div className="mb-2 flex gap-2">
-                      <input
-                        aria-label="Venue code"
-                        value={codes[drop.id] ?? ""}
-                        onChange={(e) => setCodes({ ...codes, [drop.id]: e.target.value })}
-                        placeholder="Venue code"
-                      />
-                      <button type="button" className="btn btn-ghost w-11 flex-none px-0" onClick={() => setScanFor(drop.id)} aria-label="Scan the venue code">
-                        <QrCode size={18} />
-                      </button>
-                    </div>
-                  )}
-                  <button className="btn w-full" disabled={gameBusy === drop.id} onClick={() => void openGame(drop)}>
-                    {gameBusy === drop.id ? "OPENING…" : "OPEN DROP"}
-                  </button>
-                </div>
-              ))}
+              {pendingGame.map((drop) => {
+                // The server refuses a claim before the drop opens, so the button waits for it too.
+                const opens = Date.parse(drop.opens_at);
+                const notYet = Number.isFinite(opens) && opens > Date.now();
+                return (
+                  <div key={drop.id}>
+                    {pending > 1 && <p className="mb-1.5 font-mono text-[11px] font-medium uppercase tracking-[0.08em] text-dim">{drop.title}</p>}
+                    {!notYet && drop.claim_method !== "proximity" && (
+                      <div className="mb-2 flex gap-2">
+                        <input
+                          aria-label="Venue code"
+                          value={codes[drop.id] ?? ""}
+                          onChange={(e) => setCodes({ ...codes, [drop.id]: e.target.value })}
+                          placeholder="Venue code"
+                        />
+                        <button type="button" className="btn btn-ghost w-11 flex-none px-0" onClick={() => setScanFor(drop.id)} aria-label="Scan the venue code">
+                          <QrCode size={18} />
+                        </button>
+                      </div>
+                    )}
+                    <button className="btn w-full disabled:border disabled:border-line" disabled={notYet || gameBusy === drop.id} onClick={() => void openGame(drop)}>
+                      {notYet ? `OPENS AT ${clockShort(drop.opens_at)}` : gameBusy === drop.id ? "OPENING…" : "OPEN DROP"}
+                    </button>
+                  </div>
+                );
+              })}
               {pendingCol.map((drop) => (
                 <div key={drop.id}>
                   {pending > 1 && <p className="mb-1.5 font-mono text-[11px] font-medium uppercase tracking-[0.08em] text-dim">{drop.collectible.name}</p>}

@@ -103,7 +103,7 @@ export default function HopSheet({
         </ol>
 
         <p className="mt-1 font-body text-[14px] leading-snug text-cream">
-          Come alone, leave with friends: the bus never waits, so hop on or stay.
+          Come alone, leave with friends. The bus never waits. Hop or stay.
         </p>
       </div>
     </StubSheet>

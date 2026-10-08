@@ -60,7 +60,7 @@ export default function MapPage() {
   const { userId, refresh } = useSession();
   const { events: allEvents, demo, ready, failed, reload } = useEvents(fix, radiusKm);
   const hop = useHop();
-  const { done, busy, checkIn } = useCheckin(userId, refresh);
+  const { done, checkedAt, busy, checkIn } = useCheckin(userId, refresh);
   // Only the streak is needed here, so ask for the lite read (one call, signed-in Hoppers only).
   const { stats } = useGameDashboard(userId, { lite: true });
   const streak = Number(stats?.daily_streak ?? 0) || 0;
@@ -359,6 +359,7 @@ export default function MapPage() {
           radiusKm={radiusKm}
           userId={userId}
           checkedIn={done.has(event.id)}
+          checkedAt={checkedAt[event.id] ?? null}
           busy={busy === event.id}
           onCheckIn={() => checkIn(event, fix)}
           onClose={closeCard}
