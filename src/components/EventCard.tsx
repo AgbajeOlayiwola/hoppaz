@@ -173,6 +173,9 @@ function EventSheet({ event, fix, userId, checkedIn, busy, onCheckIn, onClose, i
         onCollect={(drop) => collect(drop.id, fix)}
         openedIds={openedIds}
         onOpened={(id) => setJustOpened((s) => new Set(s).add(id))}
+        onClaimHunt={(drop, at) => claimDrop(drop, at)}
+        eventPoint={{ lat: event.lat, lng: event.lng }}
+        fix={fix}
       />
 
       <Photos photos={photos} title={title} checkedIn={checkedIn} uploading={uploading} onAdd={picker.open} />

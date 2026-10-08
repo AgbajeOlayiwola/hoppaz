@@ -10,6 +10,8 @@ import { DEMO, demoCollection, demoEmpty, demoReceipts } from "@/components/me/d
 import { shortDate } from "@/components/me/dropTime";
 import { useSession } from "@/lib/useSession";
 import { loadCollection, loadDropReceipts, type CollectionEntry, type DropReceipt } from "@/lib/useCollectibles";
+import Hunt3D from "@/components/Hunt3D";
+import { HUNT_ITEMS, HUNT_KEYS, RARITY } from "@/lib/huntItems";
 
 /* eslint-disable @next/next/no-img-element -- collectible art is Hoppaz or partner supplied, sizes unknown */
 
@@ -46,6 +48,8 @@ export default function CollectionPage() {
   }, [userId]);
 
   const total = items.length + receipts.length;
+  // Camera hunt finds arrive as drop receipts tagged with the 3D item they unlocked.
+  const found = new Map(receipts.filter((r) => r.hunt_item).map((r) => [r.hunt_item!, r]));
   return (
     <div className="h-full overflow-y-auto px-4 pb-8">
       <SubHeader
@@ -54,6 +58,38 @@ export default function CollectionPage() {
         title="Your shelf"
         caption={loaded && total ? `${items.length} COLLECTED · ${receipts.length} CLAIMED` : "COLLECTIBLES AND REWARDS"}
       />
+
+      {loaded && (
+        <section aria-label="Camera hunt collectibles" className="mb-7">
+          <div className="mb-2.5 flex items-center justify-between">
+            <p className="seclabel">CAMERA HUNT · {found.size}/{HUNT_KEYS.length}</p>
+            <span className="font-mono text-[10px] text-dim">HIDDEN AT EVENTS</span>
+          </div>
+          <ul className="grid grid-cols-2 gap-3">
+            {HUNT_KEYS.map((key, i) => {
+              const item = HUNT_ITEMS[key];
+              const got = found.get(key);
+              return (
+                <li key={key} className={i === 0 ? "col-span-2" : undefined}>
+                  <article className="stub p-3" style={{ ["--notch-y" as string]: "62%" } as React.CSSProperties}>
+                    <Hunt3D item={key} locked={!got} spin={got ? 0.6 : 0.25} className={i === 0 ? "h-40" : "h-28"} />
+                    <p className="mt-2 font-mono text-[10px] font-medium uppercase tracking-[0.12em]" style={{ color: RARITY[item.rarity].color }}>
+                      {RARITY[item.rarity].label}
+                    </p>
+                    <h2 className="font-display text-[14px] font-black leading-tight">{got ? item.name : "???"}</h2>
+                    <p className="hint mt-1">{got ? item.blurb : "Hidden at an event somewhere in Lagos. Find it with your camera."}</p>
+                    {got && (
+                      <p className="mt-2 border-t border-line pt-2 font-mono text-[10px] font-medium uppercase tracking-[0.06em] text-dim">
+                        {got.event_title ?? got.title}
+                      </p>
+                    )}
+                  </article>
+                </li>
+              );
+            })}
+          </ul>
+        </section>
+      )}
 
       {!loaded ? (
         <p className="hint">Dusting the shelf.</p>
