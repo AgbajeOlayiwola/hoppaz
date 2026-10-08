@@ -13,6 +13,15 @@ Written 8 Oct 2026 when the work moved from a Claude Code cloud session to Jae's
   5. **WIP (unfinished, unreviewed):** Crew and Chat restyle. The builder was stopped mid-task. It added new files (`src/app/crew/CrewPanel.tsx`, `src/components/chat/Bubble.tsx`, `Inbox.tsx`, `useLinger.ts`): check these against Jae's rule that Crew and Chat keep their current **structure** and only get restyled.
 - Nothing from the per-screen review pass ran (one reviewer, map-chrome, was mid-way when stopped).
 
+## Do NOT redo (already done, settled with Jae)
+
+- Duolingo, Pokemon GO and other game research: done. It is baked into the Design System Draft (colour tiers, lip button, stubs, number tiles, motion rules, mascot rules), the Mascot Rig v3 and the Game Plan v2. Do not research game mechanics again.
+- Screen-by-screen audit of the app against the design system: done (`audit-verified.json`, `audit-gaps.json`). Do not re-audit; review the new code instead.
+- Brief-vs-code gap analysis: done; the plan's section 2 is the brief and the builder spec is the gap list.
+- Mascot design: done (the rig is final art and already ported to `src/components/Mascot.tsx`). Do not redesign it.
+- Competitor research (ticketing, community, brand quests) and Bachs: done, summaries below.
+- Keep agent fan-out small. Jae is paying from the normal subscription; one reviewer at a time is fine. Ask Jae before launching any multi-agent workflow.
+
 ## What to do next, in order
 
 1. **Lead review of commit 4** (the promise to Jae: nothing ships unreviewed). Read every diff screen by screen. Look for: edits outside each builder's files, logic or Supabase changes in a UI-only pass, hard-coded hex colours, emoji, em dashes in copy, orange on non-tappable things, violet anywhere but drops, filled state colours, text under 10px, day-theme legibility, dead code. Then `npm run typecheck`, `npm run lint`, `npm run build` (production build catches what dev hides).
