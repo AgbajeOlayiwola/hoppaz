@@ -18,5 +18,7 @@ export default defineConfig([
       "react-hooks/immutability": "off",
     },
   },
-  globalIgnores([".next/**", "out/**", "build/**", "next-env.d.ts"]),
+  // The MapLibre worker is copied from node_modules on install (scripts/copy-maplibre-worker.mjs),
+  // and docs/ holds workflow scripts for Claude sessions, not app code.
+  globalIgnores([".next/**", "out/**", "build/**", "next-env.d.ts", "public/maplibre-gl-worker.mjs", "docs/**"]),
 ]);

@@ -79,7 +79,7 @@ export default function CameraHunt({
   const target = useMemo(() => targetPoint(dropPoint, drop.id, drop.radius_m), [dropPoint, drop.id, drop.radius_m]);
   const distance = fix ? distanceMeters(fix, dropPoint) : null;
   const targetBearing = fix ? bearingDegrees(fix, target) : null;
-  let turn = targetBearing !== null && heading !== null ? ((targetBearing - heading + 540) % 360) - 180 : null;
+  const turn = targetBearing !== null && heading !== null ? ((targetBearing - heading + 540) % 360) - 180 : null;
   const aligned = turn !== null && Math.abs(turn) <= 10;
   const inRange = distance !== null && distance <= drop.radius_m;
   const canCatch = started && aligned && inRange && !!fix && !claiming;
