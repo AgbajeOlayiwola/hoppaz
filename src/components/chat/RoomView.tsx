@@ -6,6 +6,7 @@ import { usePathname } from "next/navigation";
 import clsx from "clsx";
 import { Check, Hand } from "lucide-react";
 import { useToast } from "@/lib/store";
+import { sentence } from "@/components/event/copy";
 import { getSupabase } from "@/lib/supabase/client";
 import { useChatImages, usePeople, useRoom, type PeopleOf } from "@/lib/chat";
 import type { Message, Person } from "@/lib/types";
@@ -75,7 +76,7 @@ export default function RoomView({
         />
       ))}
     </div>
-    <Composer safeArea={false} placeholder={placeholder} maxLength={400} onSend={async (body, image) => { const error = await send(body, false, image); if (error) say(error, "error"); return error; }} />
+    <Composer safeArea={false} placeholder={placeholder} maxLength={400} onSend={async (body, image) => { const error = await send(body, false, image); if (error) say(sentence(error), "error"); return error; }} />
     {person && <PersonCard person={person} hasAccount={hasAccount} onClose={() => setPerson(null)} onChanged={() => void reload()} />}
   </>;
 }

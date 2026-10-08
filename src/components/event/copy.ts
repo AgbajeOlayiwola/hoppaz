@@ -17,13 +17,13 @@ const FRIENDLY: Array<[RegExp, string]> = [
   [/^THIS COLLECTIBLE IS CLOSED/, "This drop is closed."],
 ];
 
-/** "DROP IS CLOSED" -> "Drop is closed." with QR kept as QR. */
+/** "DROP IS CLOSED" -> "Drop is closed.", "WAVE SENT. IF THEY..." -> "Wave sent. If they...", QR kept as QR. */
 export function sentence(raw: string) {
   const hit = FRIENDLY.find(([re]) => re.test(raw));
   if (hit) return hit[1];
   const t = raw.replace(/\s*·\s*/g, ". ").trim();
   const lower = t.toLowerCase().replace(/\bqr\b/g, "QR").replace(/\bxp\b/g, "XP");
-  const s = lower.charAt(0).toUpperCase() + lower.slice(1);
+  const s = lower.replace(/(^|[.!?]\s+)([a-z])/g, (_, lead: string, c: string) => lead + c.toUpperCase());
   return /[.!?]$/.test(s) ? s : `${s}.`;
 }
 

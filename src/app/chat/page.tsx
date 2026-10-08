@@ -91,7 +91,7 @@ function Chat() {
       hasAccount={hasAccount}
       onAnswer={async (w) => {
         const r = await respond(w.id, true);
-        if (r.needAccount) { say("MAKE AN ACCOUNT TO CHAT"); router.push("/account?next=/chat"); }
+        if (r.needAccount) { say("Make an account to chat."); router.push("/account?next=/chat"); }
         else if (r.dm) router.push(`/chat/dm/${r.dm}`);
       }}
       onPass={(w) => void respond(w.id, false)}

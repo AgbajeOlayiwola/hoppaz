@@ -70,7 +70,7 @@ export default function GroupChatPage() {
           <p className="font-display text-sm font-black">You&apos;re invited</p>
           <p className="hint mt-1">Everyone going to {group.title} can join. It stays after the night, so you can keep in touch.</p>
           <div className="mt-3 flex gap-2">
-            <button className="btn flex-1" onClick={async () => { const ok = await join(id); say(ok ? "You're in the group chat." : "Could not join.", ok ? "ok" : "error"); }}>JOIN THE CHAT</button>
+            <button className="btn flex-1" onClick={async () => { const ok = await join(id); say(ok ? "You're in the group chat." : "Couldn't join. Try again.", ok ? "ok" : "error"); }}>JOIN THE CHAT</button>
             <button className="btn btn-ghost flex-none" onClick={async () => { await leave(id); router.push("/crew"); }}>NO THANKS</button>
           </div>
         </div>

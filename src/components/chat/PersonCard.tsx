@@ -8,6 +8,7 @@ import ChatFace from "./ChatFace";
 import Sheet from "@/components/Sheet";
 import { addToCrew, blockPerson, reportThing, wave } from "@/lib/chat";
 import { useToast } from "@/lib/store";
+import { sentence } from "@/components/event/copy";
 
 const REASONS = ["Harassment or threats", "Sexual or unwanted advances", "Spam or selling", "Hate or abuse", "Something else"];
 
@@ -58,7 +59,7 @@ export default function PersonCard({
     setBusy(false);
     // The server words its answers; sent or matched is a win, a repeat is neutral, the rest failed.
     const tone = r.dm || r.text.startsWith("WAVE SENT") ? "ok" : r.text === "ALREADY WAVED" ? "orange" : "error";
-    say(r.text, tone);
+    say(sentence(r.text), tone);
     onChanged?.();
     if (r.dm) router.push(`/chat/dm/${r.dm}`);
     else onClose();
@@ -68,7 +69,7 @@ export default function PersonCard({
     setBusy(true);
     const r = await addToCrew(person.key);
     setBusy(false);
-    say(r.text, r.ok ? "ok" : "error");
+    say(sentence(r.text), r.ok ? "ok" : "error");
     onChanged?.();
     onClose();
   };
@@ -77,7 +78,7 @@ export default function PersonCard({
     setBusy(true);
     const ok = await blockPerson({ key: person.key }, person.handle ?? person.name);
     setBusy(false);
-    say(ok ? "BLOCKED" : "COULD NOT BLOCK", ok ? "ok" : "error");
+    say(ok ? "Blocked." : "Couldn't block them. Try again.", ok ? "ok" : "error");
     onChanged?.();
     onClose();
   };
@@ -88,7 +89,7 @@ export default function PersonCard({
       ? await reportThing("room", person.messageId, reason)
       : await reportThing("person", person.key, reason);
     setBusy(false);
-    say(ok ? "REPORTED. THE CREW WILL LOOK AT IT" : "COULD NOT REPORT", ok ? "ok" : "error");
+    say(ok ? "Reported. The Hoppaz crew will look at it." : "Couldn't send the report. Try again.", ok ? "ok" : "error");
     onClose();
   };
 
@@ -174,7 +175,12 @@ export default function PersonCard({
                 </button>
               ))}
             </div>
-            <p className="hint mt-2">Reports go to the Hoppaz crew with what they wrote. They&apos;re not told who reported.</p>
+            <p className="hint mt-2">
+              Reports go to the Hoppaz crew with what they wrote. They&apos;re not told who reported.{" "}
+              <Link href="/community" className="hz-link">
+                Community rules
+              </Link>
+            </p>
             <button className="mt-1 min-h-[44px] font-mono text-[11px] font-medium uppercase tracking-[0.1em] text-dim" onClick={() => setStep("actions")} disabled={busy}>
               Back
             </button>

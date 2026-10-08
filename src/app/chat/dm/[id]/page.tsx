@@ -6,6 +6,7 @@ import { Ban, ChevronLeft, Eye, Flag } from "lucide-react";
 import { useSession } from "@/lib/useSession";
 import { useChatImages, useDm, blockPerson, reportThing } from "@/lib/chat";
 import { useToast } from "@/lib/store";
+import { sentence } from "@/components/event/copy";
 import ChatFace from "@/components/chat/ChatFace";
 import Bubble, { chatTime } from "@/components/chat/Bubble";
 import Composer from "@/components/chat/Composer";
@@ -24,12 +25,12 @@ export default function DmPage() {
   const actions = async (kind: "block" | "report") => {
     if (kind === "block") {
       const ok = await blockPerson({ dm: id }, thread.other_name);
-      say(ok ? "BLOCKED" : "COULD NOT BLOCK", ok ? "ok" : "error");
+      say(ok ? "Blocked." : "Couldn't block them. Try again.", ok ? "ok" : "error");
       router.replace("/chat");
     } else {
       const last = msgs[msgs.length - 1];
       const ok = last ? await reportThing("dm", last.id, "Something else") : false;
-      say(ok ? "REPORTED. THE CREW WILL LOOK AT IT" : "COULD NOT REPORT", ok ? "ok" : "error");
+      say(ok ? "Reported. The Hoppaz crew will look at it." : "Couldn't send the report. Try again.", ok ? "ok" : "error");
     }
   };
   return <div className="flex h-full flex-col overflow-hidden px-4">
@@ -55,6 +56,6 @@ export default function DmPage() {
       })}
       {msgs.length === 0 && <p className="hint">You both waved. Start with a hello, and keep it kind.</p>}
     </div>
-    <Composer placeholder="Message privately" maxLength={1000} onSend={async (body, image) => { const error = await send(body, image); if (error) say(error, "error"); return error; }} />
+    <Composer placeholder="Message privately" maxLength={1000} onSend={async (body, image) => { const error = await send(body, image); if (error) say(sentence(error), "error"); return error; }} />
   </div>;
 }
