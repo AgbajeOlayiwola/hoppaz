@@ -9,6 +9,20 @@ import type { CheckinClaim, EventRow } from "./types";
 
 export const CHECKIN_RADIUS_M = 1500;
 
+/** Fired once, the first time a Hopper checks in. The install sheet listens: it is its second and last chance. */
+export const FIRST_CHECKIN_EVENT = "hoppaz:first-checkin";
+const FIRST_CHECKIN_KEY = "hoppaz.firstCheckin";
+
+function markFirstCheckin() {
+  try {
+    if (localStorage.getItem(FIRST_CHECKIN_KEY)) return;
+    localStorage.setItem(FIRST_CHECKIN_KEY, "1");
+    window.dispatchEvent(new Event(FIRST_CHECKIN_EVENT));
+  } catch {
+    /* private mode: skip the install nudge */
+  }
+}
+
 /**
  * What a check-in attempt came to. The event page reads this to punch the
  * stub (one stamp for the check-in, one per new badge); failures have already
@@ -76,6 +90,7 @@ export function useCheckin(userId: string | null, onDone?: () => void) {
         const at = new Date().toISOString();
         setDone((s) => new Set(s).add(event.id));
         setCheckedAt((m) => ({ ...m, [event.id]: at }));
+        markFirstCheckin();
         return { ok: true, at, xp: 50, badges: demoBadges(event) };
       }
       if (!userId) {
@@ -112,6 +127,7 @@ export function useCheckin(userId: string | null, onDone?: () => void) {
       setDone((s) => new Set(s).add(event.id));
       setCheckedAt((m) => ({ ...m, [event.id]: at }));
       onDone?.();
+      markFirstCheckin();
       return { ok: true, at, xp: res.xp, badges: res.badges ?? [] };
     },
     [userId, say, onDone]

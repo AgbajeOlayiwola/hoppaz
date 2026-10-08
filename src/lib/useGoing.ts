@@ -47,6 +47,16 @@ const useGoingStore = create<GoingState>((set) => ({
 export const FIRST_GOING_EVENT = "hoppaz:first-going";
 const FIRST_GOING_KEY = "hoppaz.firstGoing";
 
+function markFirstGoing() {
+  try {
+    if (localStorage.getItem(FIRST_GOING_KEY)) return;
+    localStorage.setItem(FIRST_GOING_KEY, "1");
+    window.dispatchEvent(new Event(FIRST_GOING_EVENT));
+  } catch {
+    /* private mode: skip the install nudge */
+  }
+}
+
 export function useGoing(userId: string | null) {
   const { loadedFor, decisions, busy, setLoaded, setDecision, setBusy } = useGoingStore();
 
@@ -78,6 +88,7 @@ export function useGoing(userId: string | null) {
       const sb = getSupabase();
       if (!sb) {
         setDecision(eventId, decision);
+        if (decision === "in") markFirstGoing();
         return null;
       }
       if (!userId) return "Still connecting. Try again in a moment.";
@@ -92,16 +103,7 @@ export function useGoing(userId: string | null) {
           if (error) return "That didn't save. Try again.";
         }
         setDecision(eventId, decision);
-        if (decision === "in") {
-          try {
-            if (!localStorage.getItem(FIRST_GOING_KEY)) {
-              localStorage.setItem(FIRST_GOING_KEY, "1");
-              window.dispatchEvent(new Event(FIRST_GOING_EVENT));
-            }
-          } catch {
-            /* private mode: skip the install nudge */
-          }
-        }
+        if (decision === "in") markFirstGoing();
         return null;
       } finally {
         setBusy(eventId, false);

@@ -5,13 +5,7 @@ import { usePathname } from "next/navigation";
 import { Share, SquarePlus, X } from "lucide-react";
 import Mascot from "@/components/Mascot";
 import { FIRST_GOING_EVENT } from "@/lib/useGoing";
-
-/**
- * Fire this once, the first time a Hopper checks in (useCheckin does it, the
- * same way useGoing fires FIRST_GOING_EVENT). It is the install sheet's second
- * and last chance.
- */
-export const FIRST_CHECKIN_EVENT = "hoppaz:first-checkin";
+import { FIRST_CHECKIN_EVENT } from "@/lib/useCheckin";
 
 /**
  * "Keep Hoppaz on your home screen." A sheet, never a screen, and it never

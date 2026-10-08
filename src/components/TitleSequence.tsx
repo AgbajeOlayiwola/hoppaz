@@ -140,9 +140,9 @@ export default function TitleSequence({ signs, onDone }: { signs: string[]; onDo
   }, [finish]);
 
   const names = useMemo(() => {
-    const clean = Array.from(new Set(signs.map((s) => s.toUpperCase().trim()).filter(Boolean)));
-    const list = clean.length >= 4 ? clean : [...clean, ...FALLBACK_SIGNS];
-    return list.map((s) => (s.length > 15 ? `${s.slice(0, 14)}…` : s));
+    // A billboard shows a whole name or none: a name too long for the board is skipped, never cut short.
+    const clean = Array.from(new Set(signs.map((s) => s.toUpperCase().trim()).filter((s) => s && s.length <= 15)));
+    return clean.length >= 4 ? clean : [...clean, ...FALLBACK_SIGNS.filter((s) => !clean.includes(s))];
   }, [signs]);
 
   const scenePx = (units: number) => units * geo.scale;
