@@ -11,6 +11,9 @@ import { useEventCollectibles } from "@/lib/useCollectibles";
 import { useGameDrops } from "@/lib/game";
 import { useGoing } from "@/lib/chat";
 import QrScanner from "@/components/QrScanner";
+import CameraHunt from "@/components/CameraHunt";
+import Hunt3D from "@/components/Hunt3D";
+import { huntItem, RARITY } from "@/lib/huntItems";
 import EventQuestList from "@/components/EventQuestList";
 import { crowdAt, crowdLevel, TONE_HEX } from "@/lib/crowd";
 import { areaByName, clockLagos, clockShort, dayLagos, eventPrice, eventTitle, isEventLead, travelEstimate } from "@/lib/geo";
@@ -56,6 +59,7 @@ export default function EventCard({
   const { going, set: setGoing } = useGoing(event.id, userId);
   const [dropCode, setDropCode] = useState("");
   const [scanDrop,setScanDrop] = useState(false);
+  const [hunting, setHunting] = useState<string | null>(null);
   const [dropReward, setDropReward] = useState<{title:string;description:string;code?:string}|null>(null);
   const [photoSubmission, setPhotoSubmission] = useState<{eventId:string;submitted:boolean}|null>(null);
   const file = useRef<HTMLInputElement>(null);
@@ -153,12 +157,43 @@ export default function EventCard({
         {gameDrops.length > 0 && (
           <section className="mt-4 rounded border border-violet/50 bg-violet/10 p-3">
             <p className="seclabel mb-2 text-[#A98CFF]">LIVE DROP · REAL REWARD</p>
-            {gameDrops.map((drop) => <div key={drop.id} className="border-t border-line py-2 first:border-0">
+            {gameDrops.map((drop) => {
+              const item = huntItem(drop.hunt_item);
+              if (item) return <div key={drop.id} className="border-t border-line py-2 first:border-0">
+                <div className="flex items-center gap-3">
+                  <Hunt3D item={item.key} className="h-20 w-20 flex-none" />
+                  <div className="min-w-0 flex-1">
+                    <p className="font-mono text-[8px] font-bold tracking-[0.14em]" style={{ color: RARITY[item.rarity].color }}>{RARITY[item.rarity].label} · CAMERA HUNT</p>
+                    <b className="block font-display text-sm">{item.name} is hiding here</b>
+                    <p className="hint">{drop.partner?.name ? `${drop.partner.name} reward` : "Find it, keep it, get the reward"}</p>
+                  </div>
+                </div>
+                <button className="btn mt-2 w-full px-3 py-2" disabled={!closeEnough} onClick={() => setHunting(drop.id)}><Camera size={14}/> {closeEnough ? "FIND IT WITH YOUR CAMERA" : "GET TO THE EVENT TO HUNT"}</button>
+              </div>;
+              return <div key={drop.id} className="border-t border-line py-2 first:border-0">
               <div className="flex items-center gap-2"><span className="text-xl">🎁</span><div className="flex-1"><b className="font-display text-sm">{drop.title}</b><p className="hint">{drop.partner?.name ?? "Hoppaz"} · surprise reward</p></div><span className="tag tag-v">{drop.reward_model.toUpperCase()}</span></div>
               {drop.claim_method !== "proximity" && <div className="mt-2 flex gap-2"><input value={dropCode} onChange={e=>setDropCode(e.target.value)} placeholder="Enter venue QR code"/><button type="button" className="btn btn-ghost flex-none px-3" onClick={()=>setScanDrop(true)} aria-label="Scan QR"><Camera size={14}/></button></div>}
               <button className="btn mt-2 w-full px-3 py-2" disabled={dropBusy===drop.id || !closeEnough} onClick={async()=>{const result=await claimDrop(drop,fix,dropCode);if(result.error){say(result.error);return;}setDropReward({title:result.reward??"Reward",description:result.description??"",code:result.code});say("DROP CLAIMED · REWARD REVEALED","violet");}}>{dropBusy===drop.id?"OPENING…":closeEnough?"OPEN DROP":"GET CLOSER TO CLAIM"}</button>
-            </div>)}
+            </div>;
+            })}
             {dropReward && <div className="mt-2 rounded bg-ink p-3"><p className="seclabel text-orange">YOU GOT</p><b className="font-display text-lg">{dropReward.title}</b><p className="hint">{dropReward.description}</p>{dropReward.code&&<p className="mt-2 font-mono text-xs">{dropReward.code}</p>}</div>}
+            {(() => {
+              const d = hunting ? gameDrops.find((x) => x.id === hunting) : null;
+              return d ? <CameraHunt
+                drop={d}
+                eventPoint={{ lat: event.lat, lng: event.lng }}
+                initialFix={fix}
+                onClaim={async (at) => {
+                  const result = await claimDrop(d, at);
+                  if (!result.error) {
+                    setDropReward({ title: result.reward ?? "Reward", description: result.description ?? "", code: result.code });
+                    say("FOUND IT · REWARD UNLOCKED", "violet");
+                  }
+                  return result;
+                }}
+                onClose={() => setHunting(null)}
+              /> : null;
+            })()}
             {scanDrop&&<QrScanner onRead={value=>{setDropCode(value);setScanDrop(false);say("QR CODE READ","violet")}} onClose={()=>setScanDrop(false)}/>}
           </section>
         )}

@@ -3,6 +3,8 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { Camera, Compass, LocateFixed, X } from "lucide-react";
 import type { GameDrop } from "@/lib/game";
+import Hunt3D from "@/components/Hunt3D";
+import { huntItem, RARITY } from "@/lib/huntItems";
 
 type Point = { lat: number; lng: number };
 type ClaimResult = { error?: string; reward?: string; description?: string; code?: string };
@@ -76,14 +78,18 @@ export default function CameraHunt({
   const [claiming, setClaiming] = useState(false);
   const [found, setFound] = useState(false);
   const dropPoint = useMemo(() => pointFromGeog(drop.geog, eventPoint), [drop.geog, eventPoint]);
-  const target = useMemo(() => targetPoint(dropPoint, drop.id, drop.radius_m), [dropPoint, drop.id, drop.radius_m]);
+  const spot = useMemo(() => targetPoint(dropPoint, drop.id, drop.radius_m), [dropPoint, drop.id, drop.radius_m]);
   const distance = fix ? distanceMeters(fix, dropPoint) : null;
-  const targetBearing = fix ? bearingDegrees(fix, target) : null;
-  let turn = targetBearing !== null && heading !== null ? ((targetBearing - heading + 540) % 360) - 180 : null;
+  const targetBearing = fix ? bearingDegrees(fix, spot) : null;
+  const turn = targetBearing !== null && heading !== null ? ((targetBearing - heading + 540) % 360) - 180 : null;
   const aligned = turn !== null && Math.abs(turn) <= 10;
   const inRange = distance !== null && distance <= drop.radius_m;
   const canCatch = started && aligned && inRange && !!fix && !claiming;
   const left = turn === null ? 50 : Math.max(6, Math.min(94, 50 + turn * 1.8));
+  // A 3D collectible when the drop has one, the old emoji target otherwise.
+  const item = huntItem(drop.hunt_item);
+  const target = (cls: string) =>
+    item ? <Hunt3D item={item.key} spin={aligned ? 1.6 : 0.6} className={cls} /> : <span className="grid h-full w-full place-items-center text-4xl">{targetEmoji(drop.id)}</span>;
 
   useEffect(() => {
     if (!started) return;
@@ -170,7 +176,12 @@ export default function CameraHunt({
           <div className="absolute left-1/2 top-1/2 z-10 h-44 w-44 -translate-x-1/2 -translate-y-1/2 rounded-full border border-white/25" />
           <div className="absolute left-1/2 top-1/2 z-10 h-28 w-28 -translate-x-1/2 -translate-y-1/2 rounded-full border border-orange/70" />
           <div className="absolute inset-x-4 top-[42%] z-20 flex justify-center" style={{ left: `${left}%`, right: "auto", transform: "translateX(-50%)" }}>
-            <div className={`grid h-16 w-16 place-items-center rounded-2xl border-2 border-orange bg-black/65 text-4xl shadow-[0_0_38px_rgba(255,77,0,0.8)] transition-transform ${aligned ? "scale-125" : ""}`} aria-label="Digital reward target">{targetEmoji(drop.id)}</div>
+            {item
+              ? <div className={`relative h-40 w-40 transition-transform duration-300 ${aligned ? "scale-125" : "scale-90 opacity-80"}`} aria-label={`${item.name}, hidden here`}>
+                  <span aria-hidden className="absolute inset-6 rounded-full blur-2xl" style={{ background: RARITY[item.rarity].color, opacity: aligned ? 0.7 : 0.35 }} />
+                  {target("relative h-full w-full")}
+                </div>
+              : <div className={`grid h-16 w-16 place-items-center rounded-2xl border-2 border-orange bg-black/65 shadow-[0_0_38px_rgba(255,77,0,0.8)] transition-transform ${aligned ? "scale-125" : ""}`} aria-label="Digital reward target">{target("")}</div>}
           </div>
           <div className="absolute inset-x-4 bottom-24 z-20 rounded-xl border border-white/20 bg-black/70 p-4 text-center backdrop-blur">
             <p className="flex items-center justify-center gap-2 font-mono text-[10px] font-bold tracking-widest text-orange"><Compass size={14}/>{heading === null ? "SEARCHING FOR COMPASS" : aligned ? "TARGET LOCKED" : `${Math.round(Math.abs(turn ?? 0))}° ${turn !== null && turn > 0 ? "RIGHT" : "LEFT"}`}</p>
@@ -185,8 +196,9 @@ export default function CameraHunt({
 
       {!started && !found && (
         <div className="absolute inset-x-5 bottom-12 z-20 rounded-xl border border-white/20 bg-black/75 p-5 text-center backdrop-blur">
-          <div className="mx-auto grid h-20 w-20 place-items-center rounded-2xl border border-orange/60 bg-orange/10 text-5xl">{targetEmoji(drop.id)}</div>
-          <h2 className="mt-4 font-display text-xl font-black">A reward is hiding nearby</h2>
+          <div className="mx-auto h-28 w-28">{item ? <Hunt3D item={item.key} locked className="h-full w-full" /> : <span className="grid h-full w-full place-items-center rounded-2xl border border-orange/60 bg-orange/10 text-5xl">{targetEmoji(drop.id)}</span>}</div>
+          {item && <p className="mt-2 font-mono text-[9px] font-bold tracking-[0.16em]" style={{ color: RARITY[item.rarity].color }}>{RARITY[item.rarity].label}</p>}
+          <h2 className="mt-2 font-display text-xl font-black">{item ? `Something ${item.rarity === "common" ? "tasty" : "rare"} is hiding here` : "A reward is hiding nearby"}</h2>
           <p className="hint mt-2 text-white/70">Move your phone to search the camera view. Line up the target and claim the event reward. Camera frames stay on this device.</p>
           {error && <p role="alert" className="mt-3 text-xs text-orange">{error}</p>}
           <button className="btn mt-4 w-full" onClick={() => void start()}><Camera size={15}/> START CAMERA HUNT</button>
@@ -194,7 +206,7 @@ export default function CameraHunt({
         </div>
       )}
 
-      {found && <div className="absolute inset-0 z-30 grid place-items-center bg-black/80 p-6 text-center"><div className="card max-w-sm border-orange/60 bg-ink-2"><div className="text-7xl">{targetEmoji(drop.id)}</div><p className="seclabel mt-4 text-orange">TARGET FOUND</p><h2 className="mt-2 font-display text-2xl font-black">Reward unlocked</h2><p className="hint mt-2">Your reward is ready in the event card and your collection.</p><button className="btn mt-5 w-full" onClick={onClose}>BACK TO EVENT</button></div></div>}
+      {found && <div className="absolute inset-0 z-30 grid place-items-center bg-black/80 p-6 text-center"><div className="card max-w-sm border-orange/60 bg-ink-2">{item ? <div className="mx-auto h-44 w-44"><Hunt3D item={item.key} spin={1} className="h-full w-full" /></div> : <div className="text-7xl">{targetEmoji(drop.id)}</div>}<p className="seclabel mt-4" style={{ color: item ? RARITY[item.rarity].color : undefined }}>{item ? `${RARITY[item.rarity].label} · FOUND` : "TARGET FOUND"}</p><h2 className="mt-2 font-display text-2xl font-black">{item ? item.name : "Reward unlocked"}</h2><p className="hint mt-2">{item ? `${item.blurb} It's in your collection, and your reward is on the event card.` : "Your reward is ready in the event card and your collection."}</p><button className="btn mt-5 w-full" onClick={onClose}>BACK TO EVENT</button></div></div>}
     </div>
   );
 }

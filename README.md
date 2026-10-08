@@ -53,6 +53,8 @@ must not be mistaken for a live event feed. Keep demo fixtures out of production
    project needs it before deploying the chat and account changes. Set
    `CRON_SECRET` in Vercel too: the daily job in `vercel.json` deletes event
    rooms for good three days after the event.
+   Then `supabase/hunt_items.sql`: the five 3D camera-hunt collectibles staff can
+   hide at events from the launch desk (also safe to run again).
 3. **Authentication → Sign In / Providers → turn on Anonymous sign-ins.** Keep
    anonymous identity enabled; there is no mandatory email registration.
 4. Configure the app's Production environment in Vercel with

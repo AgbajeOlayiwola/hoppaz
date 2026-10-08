@@ -62,7 +62,7 @@ export function useCollectibleEventIds(eventIds: string[]) {
   return ids;
 }
 
-export type DropReceipt = { drop_id: string; title: string; partner: string | null; reward: string; description: string; code: string | null; claimed_at: string };
+export type DropReceipt = { drop_id: string; title: string; partner: string | null; reward: string; description: string; code: string | null; claimed_at: string; hunt_item?: string | null; event_title?: string | null };
 export async function loadDropReceipts(userId: string | null) {
   const sb=getSupabase();if(!sb||!userId)return [] as DropReceipt[];const {data}=await sb.rpc("my_drop_claims");return (data??[]) as DropReceipt[];
 }

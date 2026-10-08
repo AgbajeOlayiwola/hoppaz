@@ -1,6 +1,7 @@
 import { createHash, randomBytes, timingSafeEqual } from "node:crypto";
 import { createClient, type SupabaseClient } from "@supabase/supabase-js";
 import { NextResponse } from "next/server";
+import { huntItem } from "@/lib/huntItems";
 
 export const runtime="nodejs";
 export const dynamic="force-dynamic";
@@ -73,6 +74,22 @@ export async function POST(req:Request){
     const r=initialReward;const {data:reward,error:rewardError}=await sb.from("drop_rewards").insert({drop_id:data.id,reward_type:r.type,title:String(r.title).slice(0,100),description:String(r.description??"").slice(0,500),quantity:r.quantity==null||String(r.quantity).trim()===""?null:Math.max(0,Number(r.quantity)||0),weight:Math.max(0.01,Number(r.weight)||1),xp_amount:Math.max(0,Number(r.xp_amount)||0),badge_key:typeof r.badge_key==="string"?r.badge_key:null,collectible_id:typeof r.collectible_id==="string"?r.collectible_id:null}).select("id").single();if(rewardError){await sb.from("game_drops").update({active:false}).eq("id",data.id);return bad(rewardError.message,500);}if(Array.isArray(r.codes)&&reward){const rows=(r.codes as unknown[]).filter((x):x is string=>typeof x==="string"&&x.length<160).map(code=>({reward_id:reward.id,code}));if(rows.length){const {error:codesError}=await sb.from("drop_reward_codes").insert(rows);if(codesError){await sb.from("game_drops").update({active:false}).eq("id",data.id);return bad(codesError.message,500);}}}
     let qrCode:string|undefined;if(row.claim_method!=="proximity"){qrCode=randomBytes(12).toString("hex");const {error:qrError}=await sb.from("drop_qr_codes").insert({drop_id:data.id,code_hash:hash(qrCode),valid_from:row.opens_at,valid_until:row.closes_at,max_uses:row.max_claims??500});if(qrError){await sb.from("game_drops").update({active:false}).eq("id",data.id);return bad(qrError.message,500);}}
     return NextResponse.json({drop:data,qr_code:qrCode});
+  }
+  if(action==="place_hunt"){
+    // Hide one of the 3D collectibles at an event: found by camera, claimed on location, QR as the fallback.
+    const item=huntItem(typeof b.hunt_item==="string"?b.hunt_item:null);if(!item)return bad("Pick one of the five hunt items");
+    if(typeof b.event_id!=="string"||!b.event_id)return bad("Pick the event to hide it at");
+    const {data:ev,error:evError}=await sb.from("events").select("id,title,starts_at,ends_at,status").eq("id",b.event_id).single();if(evError||!ev)return bad("Event not found",404);if(ev.status!=="live")return bad("Only live events can hold a hunt");
+    const start=new Date(ev.starts_at).getTime(),end=ev.ends_at?new Date(ev.ends_at).getTime():start+8*3.6e6;
+    const opensAt=validDate(b.opens_at)??new Date(start-3.6e6).toISOString(),closesAt=validDate(b.closes_at)??new Date(end+3.6e6).toISOString();if(new Date(closesAt)<=new Date(opensAt))return bad("Close time must be after the opening time");
+    const xp=b.xp_amount==null||String(b.xp_amount).trim()===""?item.xp:Math.min(10000,Math.max(0,Number(b.xp_amount)||0));
+    const row={title:`Find the ${item.name}`,description:item.blurb,partner_id:typeof b.partner_id==="string"&&b.partner_id?b.partner_id:null,event_id:ev.id,opens_at:opensAt,closes_at:closesAt,radius_m:Math.min(5000,Math.max(25,Number(b.radius_m)||150)),claim_method:"either",max_claims:b.max_claims?Math.max(1,Number(b.max_claims)):null,reward_model:"fixed",hunt_item:item.key,active:true};
+    const {data:drop,error}=await sb.from("game_drops").insert(row).select("id,title").single();if(error)return bad(error.message,500);
+    const {data:collectible}=await sb.from("collectibles").select("id").eq("key",item.key).maybeSingle();
+    const {error:rewardError}=await sb.from("drop_rewards").insert({drop_id:drop.id,reward_type:"collectible",title:item.name,description:`${item.blurb} +${xp} XP`,xp_amount:xp,collectible_id:collectible?.id??null});
+    if(rewardError){await sb.from("game_drops").update({active:false}).eq("id",drop.id);return bad(rewardError.message,500);}
+    const qrCode=randomBytes(12).toString("hex");const {error:qrError}=await sb.from("drop_qr_codes").insert({drop_id:drop.id,code_hash:hash(qrCode),valid_from:opensAt,valid_until:closesAt,max_uses:row.max_claims??500});if(qrError){await sb.from("game_drops").update({active:false}).eq("id",drop.id);return bad(qrError.message,500);}
+    return NextResponse.json({drop,qr_code:qrCode,event:ev.title});
   }
   if(action==="add_drop_reward"){
     if(typeof b.drop_id!=="string"||typeof b.title!=="string"||!(["xp","badge","discount","upgrade","ticket","collectible"].includes(String(b.type))))return bad("Reward type, title and drop required");
