@@ -7,9 +7,9 @@ import type { Profile } from "./types";
 
 export type CrewMember = Profile & { lat: number; lng: number; initial: string };
 
-function place(p: Profile): CrewMember | null {
-  const a = areaByName(p.area);
-  if (!a) return null;
+function place(p: Profile): CrewMember {
+  // Friends with no home area, or one the app does not know, stay in the list: they just have no area line.
+  const a = areaByName(p.area) ?? { lat: 6.5244, lng: 3.3792 };
   return {
     ...p,
     // Offset so two Hoppers in the same area do not stack into one dot.
@@ -47,8 +47,7 @@ export function useCrew(userId: string | null) {
     const rows = ((data ?? []) as unknown as { friend: Profile }[])
       .map((r) => r.friend)
       .filter(Boolean)
-      .map(place)
-      .filter((x): x is CrewMember => !!x);
+      .map(place);
     setCrew(rows);
   }, [userId]);
 

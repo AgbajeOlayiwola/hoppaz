@@ -3,13 +3,13 @@
 import { Suspense, useMemo, useState } from "react";
 import Link from "next/link";
 import { useSearchParams, useRouter } from "next/navigation";
-import { Hand, MessageCircle } from "lucide-react";
 import clsx from "clsx";
 import { useSession } from "@/lib/useSession";
 import { useEvents } from "@/lib/useEvents";
 import { useHoppaz, useToast } from "@/lib/store";
 import { useInbox, useMyEventRooms, type PeopleOf } from "@/lib/chat";
-import ChatFace from "@/components/chat/ChatFace";
+import PageHeader from "@/components/app/PageHeader";
+import Inbox from "@/components/chat/Inbox";
 import RoomView from "@/components/chat/RoomView";
 
 export default function ChatPage() {
@@ -49,20 +49,18 @@ function Chat() {
     return list;
   }, [eventRooms, linked, events]);
   const room = rooms.find((r) => r.id === (picked ?? linked)) ?? rooms[0] ?? null;
+  const inboxCount = waves.length + dms.length;
 
   return <div className="flex h-full flex-col overflow-hidden px-4">
-    <header className="pad-top flex-none pb-3">
-      <h1 className="font-display text-2xl font-black leading-none">Chat</h1>
-      <p className="seclabel mt-1.5">The people at your party tonight. Say hi on your terms.</p>
-    </header>
-    <div className="mb-3 grid flex-none grid-cols-2 gap-2">
-      <button className={clsx("btn", view !== "room" && "btn-ghost")} onClick={() => setView("room")}><MessageCircle size={14}/> ROOMS</button>
-      <button className={clsx("btn", view !== "inbox" && "btn-ghost")} onClick={() => setView("inbox")}><Hand size={14}/> WAVES & DMS{waves.length + dms.length > 0 ? ` · ${waves.length + dms.length}` : ""}</button>
+    <PageHeader title="Chat" caption="Say hi on your terms" className="flex-none" />
+    <div role="tablist" aria-label="Chat" className="mb-3 flex flex-none gap-6 border-b border-line">
+      <Tab on={view === "room"} onClick={() => setView("room")}>ROOMS</Tab>
+      <Tab on={view === "inbox"} onClick={() => setView("inbox")}>WAVES &amp; DMS{inboxCount > 0 ? ` · ${inboxCount}` : ""}</Tab>
     </div>
 
     {view === "room" ? <>
       {rooms.length > 1 && <div className="flex-none overflow-x-auto pb-3 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"><div className="flex gap-1.5">
-        {rooms.map((r) => <button key={r.id} onClick={() => setPicked(r.id)} aria-pressed={room?.id === r.id} className={clsx("flex-none whitespace-nowrap rounded-full border px-2.5 py-1.5 font-mono text-[9.5px] font-bold tracking-[0.08em]", room?.id === r.id ? "border-orange bg-orange text-ink" : "border-line text-dim")}>{r.label}</button>)}
+        {rooms.map((r) => <button key={r.id} onClick={() => setPicked(r.id)} aria-pressed={room?.id === r.id} className={clsx("min-h-[36px] flex-none whitespace-nowrap rounded-full border px-3 font-mono text-[10.5px] font-medium uppercase tracking-[0.08em] transition-colors", room?.id === r.id ? "border-cream text-cream" : "border-line text-dim")}>{r.label}</button>)}
       </div></div>}
       {rooms.length === 1 && room && <p className="mb-2 flex-none truncate font-display text-sm font-black">{room.kind === "hop" ? "The Hop" : events.find((e) => e.id === room.id)?.title ?? eventRooms.find((r) => r.id === room.id)?.title ?? "Event room"}</p>}
       {room ? <RoomView
@@ -87,20 +85,35 @@ function Chat() {
           </div>
         </div>
       )}
-    </> : <div className="min-h-0 flex-1 overflow-y-auto pb-4">
-      {!hasAccount && <AccountNudge text="Make an account to answer waves and chat privately." />}
-      {waves.length > 0 && <><p className="seclabel mb-2">They waved at you</p>{waves.map((w) => <div key={w.id} className="card mb-2 flex items-center gap-3 py-3"><ChatFace look={w.from_look} alias={w.from_look ? null : w.from_alias} size={38}/><div className="min-w-0 flex-1"><b className="block truncate font-display">@{w.from_alias}</b><p className="hint">{w.event_title ? `Met at ${w.event_title}` : "Someone you met out"}</p></div><button className="btn px-3 py-2" onClick={async () => { const r = await respond(w.id, true); if (r.needAccount) { say("MAKE AN ACCOUNT TO CHAT"); router.push("/account?next=/chat"); } else if (r.dm) router.push(`/chat/dm/${r.dm}`); }}>CHAT</button><button className="btn btn-ghost px-3 py-2" onClick={() => void respond(w.id, false)}>PASS</button></div>)}</>}
-      <p className="seclabel mb-2 mt-4">Your chats</p>
-      {dms.length === 0 ? <p className="hint">Wave at someone at the same party or in one of your group chats. If they wave back, your private chat opens.</p> : dms.map((d) => <Link href={`/chat/dm/${d.id}`} key={d.id} className="card mb-2 flex items-center gap-3 py-3"><ChatFace look={d.other_look} alias={d.other_look ? null : d.other_name} size={38}/><span className="min-w-0 flex-1"><b className="block truncate font-display">{d.other_name}</b>{d.other_handle && <span className="block truncate font-mono text-[9px] font-bold text-orange">@{d.other_handle}</span>}<p className="hint truncate">{d.last_body ?? (d.event_title ? `Met at ${d.event_title}` : "Say hello")}</p></span>{d.revealed && <span className="tag">KNOWN</span>}</Link>)}
-    </div>}
+    </> : <Inbox
+      waves={waves}
+      dms={dms}
+      hasAccount={hasAccount}
+      onAnswer={async (w) => {
+        const r = await respond(w.id, true);
+        if (r.needAccount) { say("MAKE AN ACCOUNT TO CHAT"); router.push("/account?next=/chat"); }
+        else if (r.dm) router.push(`/chat/dm/${r.dm}`);
+      }}
+      onPass={(w) => void respond(w.id, false)}
+    />}
   </div>;
 }
 
-function AccountNudge({ text }: { text: string }) {
-  return <Link href="/account?next=/chat" className="mb-3 flex flex-none items-center justify-between gap-3 rounded border border-orange/60 bg-ink-2 px-3 py-2">
-    <span className="text-[12px] leading-snug">{text}</span>
-    <span className="flex-none font-mono text-[9px] font-bold tracking-widest text-orange">SIGN UP →</span>
-  </Link>;
+/** A quiet tab: cream text and an orange underline when it is the one you are on, dim otherwise. */
+function Tab({ on, onClick, children }: { on: boolean; onClick: () => void; children: React.ReactNode }) {
+  return (
+    <button
+      role="tab"
+      aria-selected={on}
+      onClick={onClick}
+      className={clsx(
+        "-mb-px min-h-[44px] whitespace-nowrap border-b-2 font-mono text-[11px] font-medium uppercase tracking-[0.12em] transition-colors",
+        on ? "border-orange text-cream" : "border-transparent text-dim"
+      )}
+    >
+      {children}
+    </button>
+  );
 }
 
 /** "SAT 2 AM": when an event room closes for good. */
