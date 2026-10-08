@@ -151,11 +151,12 @@ The differentiator. Research on 8 Oct 2026 found no ticketing platform with one 
 
 **Builds on what exists:** quest types (check-in, photo, venue code or QR, text, crew) and reward types (XP, badge, discount, ticket, upgrade, collectible) are already in the schema and the admin desk. The builder exposes that to organisers, adds social quest types, and adds the verification pipeline.
 
-## 5. Card of the Day
+## 5. Card of the Day (online content, not an app feature)
 
-- Daily content using the deck. Only signed, place or public-domain cards are featured.
+- A daily social media content series (Hoppaz's own channels) using cards from the deck, showing what people are enjoying. Nothing to build in the app for it.
+- Only signed, place or public-domain cards are featured.
 - Unsigned cards (89 in Season 1) appear only as locked silhouette slots with no name or likeness: "A Grammy Club card is waiting for its artist. Is it you? DM us." Same pattern for brands.
-- Admin gets a Card of the Day scheduler that shows each card's sign-off status and refuses unsigned cards.
+- Before posting, check the card's sign-off flag in the deck review (the deck already carries sign-off flags).
 
 ## 6. Suggestions parked for Jae
 

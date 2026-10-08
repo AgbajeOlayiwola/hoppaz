@@ -192,7 +192,7 @@ Organiser updates need push, which on iPhone only works once the app is installe
 
 ## 9. Card of the Day
 
-Daily content built from the deck. Only signed, place or public-domain cards are featured. The 89 Season 1 cards without rights appear only as locked silhouette slots with no name or likeness: "A Grammy Club card is waiting for its artist. Is it you? DM us." Same pattern for brands. Admin gets a Card of the Day scheduler that shows each card's sign-off status and refuses unsigned cards.
+A daily **online content series** on Hoppaz's social channels, not an app feature: iconic cards from the deck, showing what people are enjoying. Only signed, place or public-domain cards are featured. The 89 Season 1 cards without rights appear only as locked silhouette slots with no name or likeness: "A Grammy Club card is waiting for its artist. Is it you? DM us." Same pattern for brands ("If you are a brand and want your card in the deck, DM us"). Check each card's sign-off flag in the deck review before it is posted.
 
 ## 10. The game in the app
 
@@ -306,6 +306,6 @@ A credit is not permission. Credit only counts when the licence itself asks for 
 
 ## Change log
 
-- **8 Oct 2026, v3.** Brand quests (section 7) from Jae's Absinthe Labs model, with the research showing nobody offers it. Hoppaz for organisers (section 8): claimed pages, ticket pledge, native ticketing on Bachs, founding organiser pricing. Card of the Day (section 9). The game in the app (section 10): bus status vs XP levels, Ways to earn, two number tiles, stamped badges, one reveal screen for drops and the daily box. Crew board proposed. Sections renumbered.
+- **8 Oct 2026, v3.** Brand quests (section 7) from Jae's Absinthe Labs model, with the research showing nobody offers it. Hoppaz for organisers (section 8): claimed pages, ticket pledge, native ticketing on Bachs, founding organiser pricing. Card of the Day as an online content series (section 9). The game in the app (section 10): bus status vs XP levels, Ways to earn, two number tiles, stamped badges, one reveal screen for drops and the daily box. Crew board proposed. Sections renumbered.
 - **8 Oct 2026, v2.** Graffiti walls archived for launch. Streak freeze set at 3 free a month, then 30 Gist or ₦1,000, with repaired days never counting as outside days. Music classes added, with Pioneer for the genre founders and New Wave for rising artists. Epic tightened. Heads of State set removed from the deck and archived. Political cards set to positive-only for past leaders, neutral for sitting ones, with a campaign hold. Image licence rules written down. Deck at 287 cards across 61 sets.
 - **7 Oct 2026, v1.** First game plan: streaks, mystery boxes, the card deck, leagues of 30, the mascot rig, the economy and the rarity ladder.
