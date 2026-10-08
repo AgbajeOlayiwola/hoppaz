@@ -293,7 +293,8 @@ export default function MePage() {
           onSubmit={async (e) => {
             e.preventDefault();
             if (!birthday) return;
-            say((await ask.answer({ birthday })) ? "Saved. We'll remember it." : "That date didn't work.", "ok");
+            const saved = await ask.answer({ birthday });
+            say(saved ? "Saved. We'll remember it." : "That date didn't work.", saved ? "ok" : "error");
           }}
         >
           <p className="font-display font-black">When&apos;s your birthday?</p>

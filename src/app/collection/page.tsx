@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import { useEffect, useState } from "react";
+import { Gift } from "lucide-react";
 import PerforatedStub from "@/components/me/PerforatedStub";
 import Serial from "@/components/me/Serial";
 import SpotMascot from "@/components/me/SpotMascot";
@@ -15,8 +16,8 @@ import { loadCollection, loadDropReceipts, type CollectionEntry, type DropReceip
 
 /**
  * Your shelf: every collectible you found and every reward you claimed, each
- * as a punched stub. Collectibles show their art; only when there is no art
- * does the emoji go in a fixed frame. Reward codes are printed like a ticket
+ * as a punched stub. Collectibles show their art; with no art they get a drawn
+ * gift in a fixed frame (the database emoji never reaches the screen). Reward codes are printed like a ticket
  * serial with a COPY button.
  */
 export default function CollectionPage() {
@@ -85,9 +86,9 @@ export default function CollectionPage() {
                         ) : (
                           <span
                             aria-hidden
-                            className="grid h-[64px] w-[64px] place-items-center rounded-hz border border-line bg-ink-3 text-[30px] leading-none"
+                            className="grid h-[64px] w-[64px] place-items-center rounded-hz border border-line bg-ink-3 text-dim"
                           >
-                            {item.collectible.emoji}
+                            <Gift size={28} strokeWidth={1.75} />
                           </span>
                         )
                       }

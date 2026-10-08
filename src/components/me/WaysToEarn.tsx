@@ -94,7 +94,7 @@ export default function WaysToEarn({ userId, xp }: { userId: string | null; xp: 
                     <span className="num text-[20px]">+{q.xp_reward}</span>
                     <span className="font-mono text-[10px] font-medium tracking-[0.08em] text-dim">XP</span>
                   </span>
-                  {done && <span className="pill pill-keke">{done === "pending" ? "IN REVIEW" : "DONE"}</span>}
+                  {done && <span className={done === "pending" ? "pill" : "pill pill-keke"}>{done === "pending" ? "IN REVIEW" : "DONE"}</span>}
                 </span>
               </li>
             );

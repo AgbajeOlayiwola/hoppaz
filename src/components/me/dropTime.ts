@@ -32,12 +32,6 @@ function clock12(ms: number) {
   return `${h % 12 || 12}${m ? `:${String(m).padStart(2, "0")}` : ""}${h < 12 ? "AM" : "PM"}`;
 }
 
-/** "23:30" */
-function clock24(ms: number) {
-  const t = new Date(ms + HOUR);
-  return `${String(t.getUTCHours()).padStart(2, "0")}:${String(t.getUTCMinutes()).padStart(2, "0")}`;
-}
-
 /** "OPENS IN 2H 14M" when it is close, "OPENS FRI 10PM" when it is not. */
 export function opensLabel(opensAt: string, now: number) {
   const at = Date.parse(opensAt);
@@ -55,9 +49,9 @@ export function opensLabel(opensAt: string, now: number) {
   return `OPENS ${when} ${clock12(at)}`;
 }
 
-/** "CLOSES 23:30" */
+/** "CLOSES 11:30PM", in the same 12-hour clock as every other time in the app. */
 export function closesLabel(closesAt: string) {
-  return `CLOSES ${clock24(Date.parse(closesAt))}`;
+  return `CLOSES ${clock12(Date.parse(closesAt))}`;
 }
 
 /** "3 OCT" in Lagos, for stamps and receipts. */
