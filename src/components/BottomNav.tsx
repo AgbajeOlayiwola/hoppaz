@@ -25,7 +25,7 @@ const PARENT: Array<[string, string]> = [
 ];
 
 /** Full-screen tasks hide the tab bar, the way a chat hides WhatsApp's tabs. */
-const FULL_SCREEN = [/^\/chat\/dm\//, /^\/drop$/, /^\/me\/avatar/, /^\/admin/, /^\/report\//];
+const FULL_SCREEN = [/^\/chat\/dm\//, /^\/drop$/, /^\/me\/avatar/, /^\/admin/, /^\/report\//, /^\/phone/];
 
 export default function BottomNav() {
   const path = usePathname();
