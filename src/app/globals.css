@@ -3,20 +3,59 @@
 @tailwind utilities;
 
 @layer base {
-  :root {
+  /*
+   * Grounds and state colours, as space-separated RGB so Tailwind's /alpha works.
+   * Night is the default. The inline script in layout.tsx sets data-theme="day"
+   * by the Lagos clock before first paint; ?theme=day|night forces one for testing.
+   */
+  :root,
+  [data-theme="night"] {
     color-scheme: dark;
+    --ground: 14 11 10; /* #0E0B0A Night ground */
+    --raised: 23 18 16; /* #171210 Night raised */
+    --card: 34 26 23; /* #221A17 Night card */
+    --hairline: 46 35 32; /* #2E2320 Night hairline */
+    --text: 245 235 221; /* #F5EBDD Night text */
+    --dim: 156 144 135; /* #9C9087 Night dim */
+    --keke: 47 211 92; /* #2FD35C */
+    --lagoon: 34 184 240; /* #22B8F0 */
+    --danfo: 255 196 0; /* #FFC400 */
+    --violet: 157 129 255; /* violet as readable text on night; brand.violet #5B2EFF for shapes */
+    --fireant: 229 72 77; /* #E5484D */
+    --shadow: 0 0 0;
     --font-poppins: "Poppins", system-ui, -apple-system, "Segoe UI", sans-serif;
-    --font-mono: "Space Mono", ui-monospace, "SFMono-Regular", Menlo, "Noto Sans", monospace;
+    --font-body: "Archivo", "Helvetica Neue", system-ui, sans-serif;
+    --font-mono: "DM Mono", ui-monospace, "SFMono-Regular", Menlo, "Noto Sans", monospace;
+  }
+  [data-theme="day"] {
+    color-scheme: light;
+    --ground: 245 235 221; /* #F5EBDD Day ground */
+    --raised: 255 249 240; /* #FFF9F0 Day raised */
+    --card: 255 252 247; /* #FFFCF7 Day card */
+    --hairline: 224 211 194; /* #E0D3C2 Day hairline */
+    --text: 14 11 10; /* #0E0B0A Day text */
+    --dim: 110 99 90; /* #6E635A Day dim */
+    --keke: 31 168 71; /* #1FA847 */
+    --lagoon: 14 134 184; /* #0E86B8 */
+    --danfo: 176 127 0; /* #B07F00 */
+    --violet: 74 32 224; /* #4A20E0 */
+    --fireant: 198 42 47; /* #C62A2F */
+    --shadow: 70 50 30;
   }
   html,
   body {
     height: 100%;
   }
   body {
-    @apply bg-ink text-cream font-display antialiased;
+    @apply bg-ink text-cream font-body antialiased;
     margin: 0;
     overscroll-behavior: none;
     -webkit-tap-highlight-color: transparent;
+  }
+  h1,
+  h2,
+  h3 {
+    @apply font-display;
   }
   :focus-visible {
     outline: 2px solid #ff4d00;
@@ -26,7 +65,7 @@
   input,
   select,
   textarea {
-    @apply bg-ink-3 border border-line rounded text-cream px-3 py-2.5 w-full;
+    @apply bg-ink-3 border border-line rounded-hz text-cream px-3 py-2.5 w-full font-body;
     font-size: 16px; /* stops iOS Safari zooming the page on focus */
   }
   ::placeholder {
@@ -35,36 +74,117 @@
 }
 
 @layer components {
+  /*
+   * The lip button. Orange face, ink label, a 4px hard Ember edge, radius 6.
+   * On press the face sinks exactly 4px and the lip disappears.
+   */
   .btn {
-    @apply inline-flex items-center justify-center gap-2 bg-orange text-cream font-display font-black
-           text-xs tracking-wide px-4 py-3 rounded shadow-chunk active:translate-y-0.5
-           active:shadow-chunk-sm disabled:bg-ink-3 disabled:text-dim disabled:shadow-none
-           disabled:active:translate-y-0 transition-[transform,box-shadow] duration-75;
+    @apply inline-flex items-center justify-center gap-2 bg-orange text-brand-ink font-display font-black
+           text-[13px] uppercase tracking-[0.02em] px-4 py-3 min-h-[44px] rounded-hz shadow-chunk
+           active:translate-y-1 active:shadow-none
+           disabled:bg-ink-3 disabled:text-dim disabled:shadow-none disabled:active:translate-y-0
+           transition-[transform,box-shadow] duration-75;
   }
   .btn-ghost {
     @apply bg-transparent border border-line shadow-none text-cream active:translate-y-0;
   }
   .card {
-    @apply bg-ink-2 border border-line rounded-md p-4;
+    @apply bg-ink-2 border border-line rounded-hz p-4;
   }
+  /*
+   * The ticket stub: anything that represents one night. Two half-circle
+   * notches punched out of the long sides, at --notch-y (default the middle).
+   */
+  .stub {
+    @apply relative bg-ink-2 border border-line rounded-hz;
+    --notch: 9px;
+    -webkit-mask:
+      radial-gradient(circle var(--notch) at left var(--notch-y, 50%), #0000 98%, #000) left / 51% 100% no-repeat,
+      radial-gradient(circle var(--notch) at right var(--notch-y, 50%), #0000 98%, #000) right / 51% 100% no-repeat;
+    mask:
+      radial-gradient(circle var(--notch) at left var(--notch-y, 50%), #0000 98%, #000) left / 51% 100% no-repeat,
+      radial-gradient(circle var(--notch) at right var(--notch-y, 50%), #0000 98%, #000) right / 51% 100% no-repeat;
+  }
+  /* Card follows the event: a day event keeps the cream card inside the night app, and back. */
+  .stub-day {
+    --raised: 255 252 247;
+    --card: 255 249 240;
+    --hairline: 224 211 194;
+    --text: 14 11 10;
+    --dim: 110 99 90;
+    --keke: 31 168 71;
+    --lagoon: 14 134 184;
+    --danfo: 176 127 0;
+    --violet: 74 32 224;
+    --fireant: 198 42 47;
+    color: rgb(var(--text));
+  }
+  .stub-night {
+    --raised: 23 18 16;
+    --card: 34 26 23;
+    --hairline: 46 35 32;
+    --text: 245 235 221;
+    --dim: 156 144 135;
+    --keke: 47 211 92;
+    --lagoon: 34 184 240;
+    --danfo: 255 196 0;
+    --violet: 157 129 255;
+    --fireant: 229 72 77;
+    color: rgb(var(--text));
+  }
+  /* Status pill: never tappable. Mono caps, 1px border in one state colour, no fill. */
+  .pill {
+    @apply inline-flex items-center gap-1 font-mono text-[10.5px] font-medium uppercase tracking-[0.08em]
+           border border-line text-dim px-2 py-[3px] rounded-[4px] whitespace-nowrap;
+  }
+  .pill-keke {
+    @apply border-keke text-keke;
+  }
+  .pill-lagoon {
+    @apply border-lagoon text-lagoon;
+  }
+  .pill-danfo {
+    @apply border-danfo text-danfo;
+  }
+  .pill-violet {
+    @apply border-violet text-violet;
+  }
+  .pill-fireant {
+    @apply border-fireant text-fireant;
+  }
+  /* Filter chip: tappable. Selected chips go solid orange with an ink label. */
+  .chip {
+    @apply inline-flex items-center justify-center gap-1 font-mono text-[11px] font-medium uppercase
+           tracking-[0.08em] border border-line text-cream px-3 min-h-[36px] rounded-hz whitespace-nowrap
+           transition-colors;
+  }
+  .chip[aria-pressed="true"],
+  .chip[aria-checked="true"],
+  .chip-on {
+    @apply bg-orange border-orange text-brand-ink;
+  }
+  /* Older names, kept so every screen picks up the new pill without a rewrite. */
   .tag {
-    @apply font-mono text-[8.5px] font-bold tracking-[0.1em] uppercase border border-line
-           text-dim px-1.5 py-[3px] rounded-sm whitespace-nowrap;
+    @apply pill;
   }
   .tag-o {
-    @apply border-orange text-orange;
+    @apply border-line text-cream;
   }
   .tag-v {
-    @apply border-violet text-[#A98CFF];
+    @apply pill-violet;
   }
   .label {
-    @apply block font-mono text-[9px] font-bold tracking-[0.14em] text-dim uppercase mb-1.5;
+    @apply block font-mono text-[10.5px] font-medium tracking-[0.12em] text-dim uppercase mb-1.5;
   }
   .seclabel {
-    @apply font-mono text-[9px] font-bold tracking-[0.18em] text-dim uppercase;
+    @apply font-mono text-[10.5px] font-medium tracking-[0.14em] text-dim uppercase;
   }
   .hint {
-    @apply font-mono text-[11px] leading-relaxed text-dim;
+    @apply font-body text-[13px] leading-snug text-dim;
+  }
+  /* Numbers are display type: Poppins Black, tabular, with a mono caption under. */
+  .num {
+    @apply font-display font-black tabular-nums leading-none;
   }
   /* Safe areas: the map runs edge to edge, the chrome stays clear of the bars */
   .pad-top {
@@ -77,23 +197,31 @@
 
 /* MapLibre: strip the light default chrome, keep attribution legible */
 .maplibregl-ctrl-attrib {
-  background: rgba(14, 11, 10, 0.78) !important;
-  color: #8a7c73 !important;
+  background: rgb(var(--ground) / 0.78) !important;
+  color: rgb(var(--dim)) !important;
   font-family: var(--font-mono), monospace !important;
   font-size: 9px !important;
 }
 .maplibregl-ctrl-attrib a {
-  color: #a89588 !important;
+  color: rgb(var(--dim)) !important;
 }
 .maplibregl-ctrl-group {
-  background: #17110f !important;
-  border: 1px solid #2e211c !important;
+  background: rgb(var(--raised)) !important;
+  border: 1px solid rgb(var(--hairline)) !important;
 }
 .maplibregl-ctrl-group button + button {
-  border-top: 1px solid #2e211c !important;
+  border-top: 1px solid rgb(var(--hairline)) !important;
 }
-.maplibregl-ctrl-group button span {
+:root:not([data-theme="day"]) .maplibregl-ctrl-group button span {
   filter: invert(1) brightness(1.4);
+}
+/* Phones pinch to zoom; the +/- buttons only earn their space with a mouse. */
+@media (hover: none) and (pointer: coarse) {
+  .maplibregl-ctrl-zoom-in,
+  .maplibregl-ctrl-zoom-out,
+  .maplibregl-ctrl-group:has(.maplibregl-ctrl-zoom-in) {
+    display: none !important;
+  }
 }
 .maplibregl-canvas:focus {
   outline: none;
@@ -210,10 +338,19 @@
 .hz-sign {
   cursor: pointer;
 }
+/* Signs simply appear: no spring, no stagger. Restraint buys the drop reveal its impact. */
 .hz-sign-board {
   display: block;
   transform-origin: 50% 100%;
-  animation: ts-pop 0.45s cubic-bezier(0.34, 1.8, 0.64, 1) var(--d, 0s) both;
+  animation: fade 0.16s ease both;
+}
+@keyframes fade {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
 }
 .hz-sign .hz-full,
 .hz-sign .hz-tag {
@@ -266,34 +403,23 @@
 
 /* Desktop hover card over an event */
 .hz-peek .maplibregl-popup-content {
-  background: #17110f;
-  border: 1px solid #2e211c;
+  background: rgb(var(--raised));
+  color: rgb(var(--text));
+  border: 1px solid rgb(var(--hairline));
   border-radius: 6px;
   padding: 10px 12px;
   box-shadow: 0 8px 24px rgba(0, 0, 0, 0.5);
 }
 .hz-peek.maplibregl-popup-anchor-bottom .maplibregl-popup-tip {
-  border-top-color: #2e211c;
+  border-top-color: rgb(var(--hairline));
 }
 .hz-peek.maplibregl-popup-anchor-top .maplibregl-popup-tip {
-  border-bottom-color: #2e211c;
+  border-bottom-color: rgb(var(--hairline));
 }
 
-/* The Hop bus: its own marker, bobs while it is between stops */
+/* The Hop bus: its own marker. It glides between stops; it does not bob. */
 .hz-bus {
   cursor: pointer;
-}
-.hz-bus-moving .hz-bus-body {
-  animation: hz-bob 0.9s ease-in-out infinite;
-}
-@keyframes hz-bob {
-  0%,
-  100% {
-    transform: translateY(0);
-  }
-  50% {
-    transform: translateY(-3px);
-  }
 }
 
 @media (prefers-reduced-motion: reduce) {
@@ -303,5 +429,142 @@
     animation-duration: 0.01ms !important;
     animation-iteration-count: 1 !important;
     transition-duration: 0.01ms !important;
+  }
+}
+
+/* Theme-only content (logo files, map art). */
+[data-theme="day"] .night-only,
+:root:not([data-theme="day"]) .day-only {
+  display: none !important;
+}
+
+/* ------------------------------------------------------- mascot rig ---- */
+/*
+ * One rig, one state machine (Hoppaz Mascot Rig v3). Parts are switched by
+ * data-state on the <svg>. Breathing runs under every state. The ground edge
+ * keyline stops a cream hand merging into the cream face; --rig-edge is the
+ * ground colour behind the mascot.
+ */
+svg.rig {
+  --rig-edge: rgb(var(--ground));
+  --rig-edge-w: 11px;
+  overflow: visible;
+}
+svg.rig .rc {
+  fill: #f5ebdd;
+  stroke: var(--rig-edge);
+  stroke-width: var(--rig-edge-w);
+  stroke-linejoin: round;
+  stroke-linecap: round;
+  paint-order: stroke fill markers;
+}
+svg.rig .ro {
+  fill: #ff4d00;
+}
+svg.rig * {
+  transform-box: view-box;
+}
+svg.rig #character { transform-origin: 300px 680px; }
+svg.rig #head { transform-origin: 300px 420px; }
+svg.rig #ear-left { transform-origin: 246px 240px; }
+svg.rig #ear-right { transform-origin: 360px 238px; }
+svg.rig #arm-left { transform-origin: 236px 509px; }
+svg.rig #arm-right { transform-origin: 364px 509px; }
+svg.rig #left-mitten { transform-origin: 150px 512px; }
+svg.rig #right-mitten { transform-origin: 450px 512px; }
+svg.rig .face,
+svg.rig #secret-arm,
+svg.rig #cheeks,
+svg.rig #point-left-hand,
+svg.rig #point-right-hand {
+  display: none;
+}
+svg.rig[data-state="idle"] #face-default,
+svg.rig[data-state="wave"] #face-default,
+svg.rig[data-state="oya"] #face-default,
+svg.rig[data-state="point"] #face-default,
+svg.rig[data-state="win"] #face-happy,
+svg.rig[data-state="celebrate"] #face-happy,
+svg.rig[data-state="welcome"] #face-invite,
+svg.rig[data-state="secret"] #face-secret,
+svg.rig[data-state="oops"] #face-wow,
+svg.rig[data-state="sleep"] #face-closed,
+svg.rig[data-state="win"] #cheeks,
+svg.rig[data-state="celebrate"] #cheeks,
+svg.rig[data-state="welcome"] #cheeks,
+svg.rig[data-state="secret"] #secret-arm,
+svg.rig[data-state="point"] #point-right-hand {
+  display: block;
+}
+svg.rig[data-state="secret"] #arm-left,
+svg.rig[data-state="point"] #right-mitten {
+  display: none;
+}
+svg.rig #secret-arm path[stroke] {
+  stroke: #f5ebdd;
+  stroke-width: 35px;
+  paint-order: normal;
+}
+svg.rig #character { animation: rig-breathe 3.4s ease-in-out infinite; }
+svg.rig #ear-left { animation: rig-ear 3.4s ease-in-out infinite; }
+svg.rig #ear-right { animation: rig-ear 3.4s ease-in-out infinite 0.12s; }
+@keyframes rig-breathe { 0%, 100% { transform: translateY(0) scale(1, 1); } 50% { transform: translateY(-5px) scale(0.993, 1.012); } }
+@keyframes rig-ear { 0%, 100% { transform: rotate(0deg); } 50% { transform: rotate(3.5deg); } }
+svg.rig[data-state="wave"] #arm-left { animation: rig-wv-arm 1.15s cubic-bezier(0.34, 0.1, 0.3, 1) infinite; }
+svg.rig[data-state="wave"] #left-mitten { animation: rig-wv-wrist 1.15s cubic-bezier(0.34, 0.1, 0.3, 1) infinite; }
+svg.rig[data-state="wave"] #head { animation: rig-wv-head 1.15s ease-in-out infinite; }
+@keyframes rig-wv-arm { 0% { transform: rotate(0); } 14% { transform: rotate(-14deg); } 40% { transform: rotate(96deg); } 58% { transform: rotate(78deg); } 76% { transform: rotate(100deg); } 100% { transform: rotate(0); } }
+@keyframes rig-wv-wrist { 0% { transform: rotate(0); } 40% { transform: rotate(26deg); } 58% { transform: rotate(-16deg); } 76% { transform: rotate(22deg); } 100% { transform: rotate(0); } }
+@keyframes rig-wv-head { 0%, 100% { transform: rotate(0); } 45% { transform: rotate(-5deg) translateY(-3px); } }
+svg.rig[data-state="win"] #character { animation: rig-jump 1.25s cubic-bezier(0.3, 0, 0.4, 1) infinite; }
+svg.rig[data-state="win"] #arm-left { animation: rig-jump-l 1.25s cubic-bezier(0.3, 0, 0.4, 1) infinite; }
+svg.rig[data-state="win"] #arm-right { animation: rig-jump-r 1.25s cubic-bezier(0.3, 0, 0.4, 1) infinite; }
+@keyframes rig-jump { 0% { transform: translateY(0) scale(1, 1); } 16% { transform: translateY(14px) scale(1.1, 0.88); } 30% { transform: translateY(-34px) scale(0.9, 1.14); } 46% { transform: translateY(-62px) scale(0.96, 1.05); } 64% { transform: translateY(-20px) scale(0.96, 1.06); } 76% { transform: translateY(10px) scale(1.14, 0.86); } 88% { transform: translateY(-4px) scale(0.98, 1.03); } 100% { transform: translateY(0) scale(1, 1); } }
+@keyframes rig-jump-l { 0% { transform: rotate(0); } 16% { transform: rotate(-18deg); } 40% { transform: rotate(82deg); } 70% { transform: rotate(70deg); } 100% { transform: rotate(0); } }
+@keyframes rig-jump-r { 0% { transform: rotate(0); } 16% { transform: rotate(18deg); } 40% { transform: rotate(-82deg); } 70% { transform: rotate(-70deg); } 100% { transform: rotate(0); } }
+svg.rig[data-state="celebrate"] #character { animation: rig-cel 1s ease-in-out infinite; }
+svg.rig[data-state="celebrate"] #arm-left { animation: rig-cel-l 1s ease-in-out infinite; }
+svg.rig[data-state="celebrate"] #arm-right { animation: rig-cel-r 1s ease-in-out infinite; }
+@keyframes rig-cel { 0%, 100% { transform: translateY(0) rotate(0) scale(1, 1); } 25% { transform: translateY(-16px) rotate(-3deg) scale(0.97, 1.05); } 50% { transform: translateY(2px) rotate(0) scale(1.05, 0.95); } 75% { transform: translateY(-16px) rotate(3deg) scale(0.97, 1.05); } }
+@keyframes rig-cel-l { 0%, 100% { transform: rotate(66deg); } 25% { transform: rotate(84deg); } 50% { transform: rotate(58deg); } 75% { transform: rotate(78deg); } }
+@keyframes rig-cel-r { 0%, 100% { transform: rotate(-66deg); } 25% { transform: rotate(-82deg); } 50% { transform: rotate(-58deg); } 75% { transform: rotate(-80deg); } }
+svg.rig[data-state="welcome"] #arm-left { animation: rig-wel-l 2.1s ease-in-out infinite; }
+svg.rig[data-state="welcome"] #arm-right { animation: rig-wel-r 2.1s ease-in-out infinite; }
+svg.rig[data-state="welcome"] #character { animation: rig-wel 2.1s ease-in-out infinite; }
+@keyframes rig-wel-l { 0%, 100% { transform: rotate(0); } 20% { transform: rotate(-16deg); } 55% { transform: rotate(54deg); } }
+@keyframes rig-wel-r { 0%, 100% { transform: rotate(0); } 20% { transform: rotate(16deg); } 55% { transform: rotate(-54deg); } }
+@keyframes rig-wel { 0%, 100% { transform: translateY(0) scale(1, 1); } 55% { transform: translateY(-10px) scale(1.04, 1.02); } }
+svg.rig[data-state="oya"] #arm-left { animation: rig-oya-arm 0.85s ease-in-out infinite; }
+svg.rig[data-state="oya"] #left-mitten { animation: rig-oya-hand 0.85s ease-in-out infinite; }
+svg.rig[data-state="oya"] #head { animation: rig-oya-head 0.85s ease-in-out infinite; }
+@keyframes rig-oya-arm { 0%, 100% { transform: rotate(58deg); } 50% { transform: rotate(32deg); } }
+@keyframes rig-oya-hand { 0%, 100% { transform: rotate(40deg); } 50% { transform: rotate(-26deg); } }
+@keyframes rig-oya-head { 0%, 100% { transform: translateX(0); } 50% { transform: translateX(-5px); } }
+svg.rig[data-state="secret"] #character { animation: rig-sec 3s ease-in-out infinite; }
+svg.rig[data-state="secret"] #head { animation: rig-sec-head 3s ease-in-out infinite; }
+@keyframes rig-sec { 0%, 100% { transform: rotate(0) translateY(0); } 50% { transform: rotate(-5deg) translateY(-4px); } }
+@keyframes rig-sec-head { 0%, 100% { transform: rotate(0); } 50% { transform: rotate(-8deg); } }
+svg.rig[data-state="point"] #arm-right { animation: rig-pt-arm 1.4s ease-in-out infinite; }
+svg.rig[data-state="point"] #head { animation: rig-pt-head 1.4s ease-in-out infinite; }
+@keyframes rig-pt-arm { 0%, 100% { transform: rotate(-6deg); } 50% { transform: rotate(4deg); } }
+@keyframes rig-pt-head { 0%, 100% { transform: rotate(3deg); } 50% { transform: rotate(-2deg); } }
+svg.rig[data-state="oops"] #character { animation: rig-oops 1.5s ease-in-out infinite; }
+svg.rig[data-state="oops"] #arm-left { animation: rig-oops-l 1.5s ease-in-out infinite; }
+svg.rig[data-state="oops"] #arm-right { animation: rig-oops-r 1.5s ease-in-out infinite; }
+@keyframes rig-oops { 0%, 100% { transform: translateY(0) scale(1, 1); } 10% { transform: translateY(6px) scale(1.06, 0.94); } 40% { transform: translateY(-3px) scale(0.99, 1.01); } }
+@keyframes rig-oops-l { 0%, 100% { transform: rotate(0); } 40% { transform: rotate(34deg); } }
+@keyframes rig-oops-r { 0%, 100% { transform: rotate(0); } 40% { transform: rotate(-34deg); } }
+svg.rig[data-state="sleep"] #character { animation: rig-slp 5.2s ease-in-out infinite; }
+svg.rig[data-state="sleep"] #head { animation: rig-slp-head 5.2s ease-in-out infinite; }
+svg.rig[data-state="sleep"] #ear-left { animation: rig-slp-ear 5.2s ease-in-out infinite; }
+svg.rig[data-state="sleep"] #ear-right { animation: rig-slp-ear 5.2s ease-in-out infinite 0.3s; }
+@keyframes rig-slp { 0%, 100% { transform: translateY(0) scale(1, 1); } 50% { transform: translateY(5px) scale(1.03, 0.975); } }
+@keyframes rig-slp-head { 0%, 100% { transform: rotate(6deg) translateY(2px); } 50% { transform: rotate(9deg) translateY(6px); } }
+@keyframes rig-slp-ear { 0%, 100% { transform: rotate(-8deg); } 50% { transform: rotate(-14deg); } }
+svg.rig.poke #character { animation: rig-poke 0.42s cubic-bezier(0.3, 1.6, 0.5, 1); }
+@keyframes rig-poke { 0% { transform: scale(1, 1); } 30% { transform: translateY(9px) scale(1.14, 0.86); } 100% { transform: scale(1, 1); } }
+@media (prefers-reduced-motion: reduce) {
+  svg.rig * {
+    animation: none !important;
   }
 }

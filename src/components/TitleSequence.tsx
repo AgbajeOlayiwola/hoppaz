@@ -366,7 +366,7 @@ export default function TitleSequence({ signs, onDone }: { signs: string[]; onDo
         className="pointer-events-none absolute inset-x-0 bottom-[8%] flex flex-col items-center gap-3"
         style={{ animation: `ts-stamp .5s cubic-bezier(.34,1.7,.64,1) ${START + PAN - 0.6}s both` }}
       >
-        <Wordmark size={46} />
+        <Wordmark size={46} tone="cream" />
         <p
           className="rounded-sm bg-ink/80 px-2 py-1 font-mono text-[11px] font-bold tracking-[0.18em] text-cream"
           style={{ animation: `pop .3s ease ${START + PAN}s both` }}

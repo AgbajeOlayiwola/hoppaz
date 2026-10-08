@@ -34,16 +34,17 @@ export default function Sheet({
       aria-modal="true"
       aria-label={label}
       tabIndex={-1}
-      className="absolute inset-x-0 bottom-0 z-40 max-h-[80%] overflow-y-auto rounded-t-lg
-                 border-t-2 border-orange bg-ink-2 px-4 pt-4 shadow-sheet animate-rise outline-none"
-      style={{ paddingBottom: "calc(1rem + env(safe-area-inset-bottom, 0px))" }}
+      className="absolute inset-x-0 bottom-0 z-40 max-h-[85%] overflow-y-auto rounded-t-[12px]
+                 border-t border-line bg-ink-2 px-4 pt-3 shadow-sheet animate-rise outline-none"
+      style={{ paddingBottom: "1rem" }}
     >
+      <div aria-hidden className="mx-auto mb-3 h-1 w-10 rounded-full bg-line" />
       <button
         onClick={onClose}
         aria-label="Close"
-        className="absolute right-3 top-3 grid h-7 w-7 place-items-center text-dim hover:text-cream"
+        className="absolute right-1.5 top-1.5 grid h-11 w-11 place-items-center text-dim hover:text-cream"
       >
-        <X size={16} />
+        <X size={18} />
       </button>
       {children}
     </div>
