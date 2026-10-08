@@ -54,8 +54,8 @@ export default function TopChrome({
   const filtered = types.length > 0;
   return (
     <div ref={hudRef} className="pointer-events-none absolute inset-x-0 top-0 z-20">
-      {/* A soft scrim so the wordmark and icons read over any map. */}
-      <div aria-hidden className="absolute inset-x-0 top-0 h-[calc(env(safe-area-inset-top,0px)+4.25rem)] bg-gradient-to-b from-ink/85 to-transparent" />
+      {/* A soft scrim so the wordmark, icons and rail read over any map: map labels must not show through. */}
+      <div aria-hidden className="absolute inset-x-0 top-0 h-[calc(env(safe-area-inset-top,0px)+8rem)] bg-gradient-to-b from-ink/95 via-ink/80 to-transparent" />
 
       <div className="pad-top relative mx-auto max-w-[640px] px-3.5 pb-2">
         <div className="flex items-center gap-1">

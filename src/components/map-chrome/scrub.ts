@@ -150,7 +150,7 @@ export function conductorLine(opts: {
   const parts: string[] = [];
   if (today && out > 0) parts.push(`${out} Hopper${s(out)} out`);
   else if (going > 0) parts.push(`${going} Hopper${s(going)} going`);
-  else parts.push(today ? "Nobody out yet" : "Nobody in yet");
+  else parts.push(today ? "Nobody out yet" : "Nobody going yet");
   if (drops > 0) parts.push(`${drops} drop${s(drops)} ${dayWord(dayKey, now)}`);
   return parts.join(" · ");
 }

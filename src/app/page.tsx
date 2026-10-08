@@ -199,7 +199,6 @@ export default function MapPage() {
   );
   const dropSet = useMemo(() => new Set(dropIds), [dropIds]);
 
-
   const bus = useMemo(() => busPosition(hop, new Date(now)), [hop, now]);
   const [busFocus, setBusFocus] = useState(0);
   // The route and the bus button belong to Hop day only. Other days the bus sits parked and opens the Hop.
@@ -318,6 +317,7 @@ export default function MapPage() {
 
       {showEmpty && (
         <EmptyDay
+          filtered={shownTypes.length > 0}
           nextLabel={nextBusy ? dayTag(nextBusy) : null}
           onNext={() => nextBusy && pickDay({ kind: "night", date: nextBusy })}
         />

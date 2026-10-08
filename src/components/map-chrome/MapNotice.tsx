@@ -25,12 +25,21 @@ export function ErrorLine({ onRetry }: { onRetry: () => void }) {
 }
 
 /** A day with nothing on (or nothing that matches the type filter). */
-export function EmptyDay({ nextLabel, onNext }: { nextLabel: string | null; onNext: () => void }) {
+export function EmptyDay({
+  nextLabel,
+  onNext,
+  filtered,
+}: {
+  nextLabel: string | null;
+  onNext: () => void;
+  /** A vibe filter is on, so fewer types could bring something back. */
+  filtered: boolean;
+}) {
   return (
     <div className="pointer-events-none absolute inset-x-0 top-[40%] z-20 flex justify-center px-6">
       <div className="pointer-events-auto rounded-hz border border-line bg-ink-2/95 px-5 py-3.5 text-center backdrop-blur">
         <p className="font-display text-[15px] font-black">Nothing on for that.</p>
-        <p className="hint mt-0.5">Try another day or fewer types.</p>
+        <p className="hint mt-0.5">{filtered ? "Try another day or fewer types." : "Try another day."}</p>
         {nextLabel && (
           <button
             onClick={onNext}
