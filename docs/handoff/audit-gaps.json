@@ -1,0 +1,205 @@
+{
+ "surface": "cross-cutting & gaps",
+ "current_state_summary": "The app has 15 page routes: /, /discover, /crew, /chat, /chat/dm/[id], /me, /me/avatar, /quests, /drops, /drop, /collection, /community, /privacy, /report/share/[token] and /admin. It also has 3 API routes, which have no UI. There are 17 components: AreaPicker, Avatar, BottomNav, EventCard, EventQuestList, FilterCard, HeatBar, HopSheet, QrScanner, Sheet, SwipeDeck, TitleSequence, Toaster, Wordmark, chat/ChatFace, chat/PersonCard and map/NightMap. No audit covers /privacy or the QR scanner overlay (QrScanner.tsx, used in three places). The app also has no 404 page, no crash page, no loading page and no offline screen: src/app contains no not-found, error or loading files. Some areas are only partly covered: the public shared report link (the visitor's experience, as opposed to the poster design), the sample \"demo\" events that appear in the live app while it loads, and how you get out of the flyer form. The admin page was skipped; it only reaches players through the STAFF link on Me, which the chrome audit already covers. Across the app, the same jobs are done in several different ways. Back buttons come in three styles and some sub-pages have none. The Me pages say \"empty\" before their data has loaded. Text sits at 8-9px while pinch-zoom is switched off. Tap targets are 16-32px. Confirm dialogs and dropdowns use the browser's native pop-ups. Dates are printed four different ways. The bottom tab bar shows on every route, including a private chat and the public report link.",
+ "findings": [
+  {
+   "title": "Stop flashing sample events with real venue names in the live app",
+   "verdict": "change",
+   "evidence": "src/lib/useEvents.ts:20-21 starts every session with DEMO_EVENTS and demo=true. These are only replaced when the database answers (useEvents.ts:51-52). src/lib/demoData.ts:9-24 lists 16 made-up events at real venues (Hard Rock Cafe, New Afrika Shrine, Bature Brewery, Terra Kulture), dated this coming Friday (demoData.ts:28-36). While they are showing, the map displays the pill 'DEMO NIGHT \u00b7 NOT CONNECTED TO THE DATABASE' (src/app/page.tsx:226-228). The intro's rooftop signs are built from the same list (page.tsx:88-91). Chat room chips use it too (src/app/chat/page.tsx:35), and so does the Tonight deck (src/app/discover/page.tsx:38-45). If loading fails in production, the list empties and the map shows 'LIVE EVENT DATA UNAVAILABLE \u00b7 CHECK DATABASE SETUP' (page.tsx:228). Tonight then says 'That is the whole night. You have been through everything' (src/components/SwipeDeck.tsx:48-51), which is the wrong message for an outage.",
+   "why": "Every cold open on a slow Lagos connection briefly shows fake parties at real, named businesses, with prices, before the real night replaces them. That is the opposite of professional, and it could look like Hoppaz is advertising events those venues never agreed to. The demo pill is engineer copy in front of players.",
+   "suggestion": "In the live app, never show the sample night. Open on a calm 'Loading tonight' state: the empty map plus a quiet ghost stub, with no shimmer. If loading fails, show the 'oops' error state with a Try again button, not the 'you have seen everything' message. Keep the sample events for local development only. This is a one-line front-end change to the starting value in useEvents.ts; it touches no back-end.",
+   "gamification_angle": "Real names on the first screen are the promise of the game. A fake night undermines every badge and check-in that comes after it.",
+   "priority": "P0",
+   "effort": "S"
+  },
+  {
+   "title": "Before cutting Quests, rehome Drops and the month report card, which are only reachable from there",
+   "verdict": "change",
+   "evidence": "The only link to /drops anywhere is the REWARDS button on Quests (src/app/quests/page.tsx:25). The only button that creates the month report card is also on Quests (quests/page.tsx:26, which calls makeReport from src/lib/game.ts:31). Me reaches Quests only through 'DETAILS \u2192' (src/app/me/page.tsx:227). The Game layer audit recommends 'Remove the Quests page'.",
+   "why": "If Quests is removed on its own, the report card loses its only entry point. The draft calls the report card 'the organic growth engine'. The Drops list would also become unreachable outside an event card.",
+   "suggestion": "Do these together. Put a 'Make my month' button on Me under the two number tiles; on the 1st of the month it can become the loud report-card moment. Show live drops as violet pins on the map, plus one 'Drops tonight' line in the Tonight conductor line. Then Quests can go.",
+   "gamification_angle": "The report card and the drop reveal are the two loud moments in the draft. Neither should sit three taps deep.",
+   "priority": "P0",
+   "effort": "S"
+  },
+  {
+   "title": "One navigation model: every sub-page goes back to where you came from, and a tab stays lit",
+   "verdict": "change",
+   "evidence": "src/components/BottomNav.tsx:25-29 only lights a tab for /, /discover, /crew, /chat and a /me list (/me, /quests, /drops, /collection). /drop, /privacy, /community and /report light nothing. The flyer form has no back or close at all (src/app/drop/page.tsx:104-107). Quests has no back (quests/page.tsx:25). Drops is reached from Quests but its back arrow goes to the Map (src/app/drops/page.tsx:15, href='/'). Privacy and Community link to each other (src/app/privacy/page.tsx:13, src/app/community/page.tsx:4) but both always go back to Me (privacy:5, community:4). There are three back styles: a 36px boxed arrow (drops:15, src/app/collection/page.tsx:17, src/app/me/avatar/page.tsx:61, src/app/chat/dm/[id]/page.tsx:29), a 9px text 'BACK' (privacy:5, community:4), and '\u2190 HOPPAZ' (src/app/report/share/[token]/page.tsx:10). One place has four names: 'REWARDS' (quests:25), 'Live drops' (drops:15), 'Found on the map' (me:231, collection:17) and 'COLLECTION \u2192' (src/components/EventCard.tsx:155).",
+   "why": "Users get lost when a page has no way back, when back takes them somewhere unexpected, or when no tab is lit. One header pattern is the cheapest way to make a prototype feel like a product.",
+   "suggestion": "Use one header everywhere. Tab pages get a big Poppins Black title with a DM Mono caption and no back button. Sub-pages get a 44px back chevron on the left that returns to the previous screen, the title, and at most one action on the right. Keep the parent tab lit on every sub-page: flyer form \u2192 Map; Privacy, Community, Drops and Collection \u2192 Me. Give each place one name, used the same way in the tab bar, the header and every link into it.",
+   "gamification_angle": "",
+   "priority": "P1",
+   "effort": "M"
+  },
+  {
+   "title": "Hide the tab bar on full-screen tasks",
+   "verdict": "change",
+   "evidence": "src/app/layout.tsx:37 renders BottomNav on every route with no exceptions. That includes a private chat thread (src/app/chat/dm/[id]/page.tsx:28-32), whose message box sits directly on top of the tab bar; the flyer form (src/app/drop/page.tsx:103); the avatar editor (src/app/me/avatar/page.tsx:57); and the staff page (src/app/admin/page.tsx:15).",
+   "why": "Chat, forms and editors are focused tasks. Keeping five tabs under a private conversation makes it feel cramped and unlike WhatsApp, which the draft names as the competitor for Chat. Hiding the bar also removes the double home-bar padding described in a separate finding.",
+   "suggestion": "Hide the tab bar inside a private chat, the flyer form, the avatar editor and the staff page. Each of these gets the back header from the navigation finding instead. Keep the bar on the five tab pages and their read-only sub-pages.",
+   "gamification_angle": "",
+   "priority": "P1",
+   "effort": "S"
+  },
+  {
+   "title": "Treat the shared report link as a landing page for people without Hoppaz",
+   "verdict": "change",
+   "evidence": "src/app/report/share/[token]/page.tsx is the page friends open from WhatsApp. It shows the full app tab bar (src/app/layout.tsx:37), including CREW, CHAT and ME, to a visitor who has no account. A bad or expired link stays on 'LOADING REPORT\u2026' forever because the data call has no failure branch (report:10). The page is client-only ('use client', report:1), so it cannot give WhatsApp its own preview. The app has only a title and description and no preview image (layout.tsx:14-21).",
+   "why": "This is the one page non-users see, and the draft calls the report card the growth engine. Right now it looks like someone else's app screen, can hang forever, and previews in WhatsApp as a bare 'Hoppaz' link.",
+   "suggestion": "Make it a standalone poster page with no tab bar and one big 'Open Hoppaz' lip button. A bad link shows the mascot 'oops' with 'This report has expired'. Give the link a WhatsApp preview image of the poster. It can use the same get_monthly_report call the page already makes (report:10), so no new data is needed. The poster design itself is covered in the Game audit.",
+   "gamification_angle": "A friend's report card is the most persuasive invitation in the product. It should look like a trophy, not a settings screen.",
+   "priority": "P1",
+   "effort": "M"
+  },
+  {
+   "title": "Fix contrast failures across buttons, inputs and tinted boxes",
+   "verdict": "change",
+   "evidence": "Cream text on orange measures 2.82:1. That affects every primary button (src/app/globals.css:39 .btn), the + map button icon (src/app/page.tsx:300) and the selected map sign (globals.css:234-235). Dim #8A7C73 on input grey #231915 measures 4.27:1. That affects placeholders (globals.css:29,33) and disabled buttons (globals.css:41), and disabled buttons carry real information such as 'GET CLOSER TO CHECK IN' (src/components/EventCard.tsx:113-114). Dim hint text inside the orange-tinted Outside Score box measures 4.44:1 (src/app/me/page.tsx:220-226), and inside the violet-tinted drop box 4.40:1 (EventCard.tsx:139-142). The violet icon on its violet tint measures 2.58:1 (src/app/drops/page.tsx:18). AA requires 4.5:1 for text and 3:1 for icons.",
+   "why": "Low-contrast text reads as cheap and is hard to read on a phone outdoors at night. The draft's own tokens already fix most of this: night dim #9C9087 measures 6.3:1 on the ground and 4.9:1 on the hairline.",
+   "suggestion": "Use the draft's night dim #9C9087. Put dark ink labels on orange buttons; the chrome audit already recommends this, and it also applies to the + button and the selected map sign. Stop tinting boxes orange or violet, which the draft forbids anyway. When an action is unavailable, state the reason in normal text above a disabled button instead of greying out the message itself.",
+   "gamification_angle": "",
+   "priority": "P1",
+   "effort": "S"
+  },
+  {
+   "title": "Make every tap target at least thumb-sized, and let people zoom",
+   "verdict": "change",
+   "evidence": "src/app/layout.tsx:26 sets maximumScale: 1, which blocks pinch-zoom on most Android browsers. Meanwhile the player screens use 47 hard-coded text sizes under 10px, and the shared styles are tiny: tags 8.5px (src/app/globals.css:51), section labels 9px (globals.css:61,64), tab labels 8px (src/components/BottomNav.tsx:41). Undersized tap targets: sheet close 28px (src/components/Sheet.tsx:44); close buttons 32px (src/components/EventCard.tsx:88, src/components/FilterCard.tsx:44, src/components/chat/PersonCard.tsx:74); report/block 32px (src/app/chat/dm/[id]/page.tsx:29); clear filters 24px (src/app/page.tsx:208); QR close is a bare 16px icon (src/components/QrScanner.tsx:14). Tags used as buttons are about 17px tall, including crew 'I'M IN' (src/app/crew/page.tsx:181), the invite code (crew:179) and wave chips (src/app/chat/page.tsx:64). 9px underlined words act as buttons: DELETE MY ACCOUNT (src/app/me/page.tsx:271), REPLAY THE INTRO (me:275), CHANGE (page.tsx:286-291), ADD ONE (EventCard.tsx:197), OPEN CHAT (EventCard.tsx:238), BACK (src/app/privacy/page.tsx:5).",
+   "why": "Tiny type you cannot zoom, plus targets smaller than a fingertip, is the clearest sign of an unfinished app. It hits hardest at night, outdoors, one-handed.",
+   "suggestion": "Every tappable thing gets at least a 44x44 tap area, even when the visible icon is smaller. Real actions such as I'M IN, RSVP, Wave and Change become lip buttons or pills at least 32px tall. Remove the zoom lock; the map handles its own pinch. Mono labels go to 11px minimum, as part of the type scale the chrome audit recommends.",
+   "gamification_angle": "Pressing a fat lip button and feeling it travel 4px is part of the game feel. Hairline text links give the press nothing to land on.",
+   "priority": "P1",
+   "effort": "M"
+  },
+  {
+   "title": "One kit for loading, empty and error states, and never show 'empty' before the data arrives",
+   "verdict": "add",
+   "evidence": "While loading, Me shows 'Hopper', '0 XP', every badge greyed out and 'Nothing yet' (src/app/me/page.tsx:90-93, 192-216, 236-238), even though the session hook knows it is still loading (src/lib/useSession.ts:15; the page only uses it for 'offline' at me:284). Crew shows 'No crew yet' while loading (src/app/crew/page.tsx:120-123), even though useCrew has a loading flag the page never reads (src/lib/useCrew.ts:33, crew:18). Several hooks have no loading flag at all, so their empty copy shows first: Quests (src/app/quests/page.tsx:29, src/lib/game.ts:16), Drops (src/app/drops/page.tsx:16, game.ts:24), Collection (src/app/collection/page.tsx:18), and chat rooms and inbox (src/app/chat/page.tsx:66, 82; src/lib/chat.ts:95). Loaders use four different text-only phrasings: src/app/page.tsx:32, chat:16, src/app/chat/dm/[id]/page.tsx:22, src/app/report/share/[token]/page.tsx:10.",
+   "why": "Telling a returning player they have no badges and no crew, even for a second, feels broken. The draft lists empty states and errors as places the mascot belongs. Today they are scattered mono sentences with no mascot and no next step.",
+   "suggestion": "Build three shared states. Loading: a static ghost stub with no shimmer, as the draft requires. Empty: the mascot in its sleep pose, one plain line and one action (for example 'No crew yet' \u2192 'Find your people'). Error: the mascot 'oops', one line in Fire Ant red, and a Try again button. Show Empty only after the data has actually arrived. Crew, Tonight and Me can use loading signals the code already has; Quests, Drops, Collection and Chat need a small front-end 'loaded' flag.",
+   "gamification_angle": "The draft puts the mascot exactly here, at the edges of the app. This is the cheapest place to introduce it without cluttering the content screens.",
+   "priority": "P1",
+   "effort": "M"
+  },
+  {
+   "title": "Add a 404 page, a crash page and an offline line",
+   "verdict": "add",
+   "evidence": "src/app has no not-found.tsx, error.tsx, global-error.tsx or loading.tsx (confirmed from the file listing), so a wrong link or a crash shows Next.js's built-in, unbranded screen. Map failures only go to the developer console (src/components/map/NightMap.tsx:156-158). A failed 'I'm in' save is silent (src/app/discover/page.tsx:59). Nothing in src watches for losing the connection; there is no navigator.onLine or online/offline listener. Raw engineer toasts reach players: 'NOT CONNECTED' (src/lib/game.ts:15, 23; src/lib/chat.ts:114), 'NOT CONNECTED \u00b7 CANNOT SAVE THIS YET' (src/app/drop/page.tsx:74) and 'CHECKED IN (DEMO, NOT SAVED)' (src/lib/useCheckin.ts:39).",
+   "why": "Lagos mobile data drops all the time. Without designed failure screens, a dropped signal shows up as a blank page or as words like 'database'.",
+   "suggestion": "Add a branded 404 page and a crash page: the mascot 'oops', one line ('That page has gone home'), and a 'Back to tonight' lip button. Add one quiet line under the status bar when the phone loses signal ('No signal. Showing what we had.'), and remove it when the signal returns. Rewrite every 'NOT CONNECTED' toast as human copy ('No signal. Try again in a moment.').",
+   "gamification_angle": "Errors are an approved mascot moment in the draft. A good 'oops' screen makes a failure feel like part of the brand.",
+   "priority": "P1",
+   "effort": "S"
+  },
+  {
+   "title": "The map credits and zoom buttons are hidden under the bottom panels",
+   "verdict": "change",
+   "evidence": "The map turns on its compact credits button (src/components/map/NightMap.tsx:150) and adds +/- zoom buttons, both in the bottom-right corner (NightMap.tsx:160). The bottom panels (heat, radius, 'You are in') span the full width of the screen just above the bottom edge and are layered on top of the map (src/app/page.tsx:225, z-20), so they cover that corner. The tiles are CARTO dark-matter (src/lib/mapStyle.ts:6), which requires a visible \u00a9 OpenStreetMap / \u00a9 CARTO credit. The CSS even restyles these controls (src/app/globals.css:79-97), so they were meant to be seen.",
+   "why": "Hiding the map credit breaks the tile provider's terms. Restyled controls that can never be seen are wasted work.",
+   "suggestion": "Keep the credit visible as a tiny mono line in a corner the panels never cover, for example top-left under the wordmark or just above the time scrubber. Drop the +/- buttons: pinch-zoom works and the draft wants a plain map. This fits the Map audit's plan to clear the bottom of the screen.",
+   "gamification_angle": "",
+   "priority": "P1",
+   "effort": "S"
+  },
+  {
+   "title": "One Share button that opens WhatsApp, plus a proper link preview",
+   "verdict": "add",
+   "evidence": "No file in src calls the phone's share sheet (navigator.share) or mentions WhatsApp. The month report link is copied to the clipboard (src/app/quests/page.tsx:26). If copying fails, the raw URL is shown as a toast for 2.6 seconds and disappears before anyone can copy it (quests:26, src/lib/store.ts:73). Crew invites copy a bare code (src/app/crew/page.tsx:179). The app has no preview image for shared links (src/app/layout.tsx:14-21 sets only a title and description).",
+   "why": "The draft says the event page and the report card are built to be 'pasted into WhatsApp'. Copy-to-clipboard and naked links are not how people share in Lagos.",
+   "suggestion": "Use one share pattern everywhere: a Share lip button that opens the phone's own share sheet, with WhatsApp-ready text and the link. If the phone has no share sheet, copy the link and show a short 'Copied' stamp. Use it for events (already raised in the Event audit), the report card, crew invites and drop wins. Add a branded preview image so every Hoppaz link shows a ticket stub in WhatsApp.",
+   "gamification_angle": "Sharing a stub is the game's way of recruiting. Each share should look like a ticket, not a URL.",
+   "priority": "P1",
+   "effort": "M"
+  },
+  {
+   "title": "Build the install sheet from the draft (screen 02); it does not exist yet",
+   "verdict": "add",
+   "evidence": "public/manifest.webmanifest makes the app installable, but nothing in src listens for the browser's install prompt (there is no 'beforeinstallprompt' anywhere), and no screen invites people to add Hoppaz to their home screen. The moments the draft names already exist: the first 'I'm in' (src/app/discover/page.tsx:47-53) and a successful check-in (src/lib/useCheckin.ts:71).",
+   "why": "Without an install, people forget a web app by the next weekend. The draft makes this a sheet that 'fires after a success' and 'never leads'.",
+   "suggestion": "After the first 'I'm going' or the first check-in, slide up one sheet with the mascot in its 'oya come' pose and 'Keep Hoppaz on your home screen'. On Android, the button triggers the phone's real install prompt. On iPhone, the sheet shows the Share \u2192 Add to Home Screen steps. Show it once and respect 'Not now'. This is front-end only.",
+   "gamification_angle": "It lands right after a win, which is when people say yes.",
+   "priority": "P1",
+   "effort": "M"
+  },
+  {
+   "title": "Privacy page: style it properly and remove the notes addressed to the owner",
+   "verdict": "change",
+   "evidence": "src/app/privacy/page.tsx:5 uses a class called 'prose-hoppaz' that is defined nowhere (it appears only in this file). The section headings (privacy:6-12, plain <h2> tags) therefore render at the same size as the body text, while the Community page styles its headings (src/app/community/page.tsx:4). Players can read two notes meant for the owner: 'A public support email must be configured before launch\u2026' and 'The Hoppaz owner should review and complete it\u2026 before public launch' (privacy:12). Back always goes to Me (privacy:5).",
+   "why": "A legal page that reads like an unformatted draft, with launch to-dos showing, is a credibility problem in exactly the place users look for trust.",
+   "suggestion": "Style it like the Community page: Poppins Black headings and readable body text, using the draft's body font Archivo at about 14px rather than 11px mono. Remove the owner notes from the player view; they belong in docs/LAUNCH_CHECKLIST.md. Fill in the support email. Back returns to the previous screen.",
+   "gamification_angle": "",
+   "priority": "P1",
+   "effort": "S"
+  },
+  {
+   "title": "QR scanner overlay: right title, a real close button, error in red",
+   "verdict": "change",
+   "evidence": "src/components/QrScanner.tsx:14 always says 'SCAN DROP QR', even when it opens to scan a quest venue code (src/components/EventQuestList.tsx:80). It also opens from src/components/EventCard.tsx:147 and src/app/drops/page.tsx:24. The close X is a bare 16px icon (QrScanner:14). The camera error is in orange (QrScanner:14, 'text-orange'), the colour the draft reserves for things you can tap. The button that opens the scanner is a '\u25a6' text character in quests (EventQuestList.tsx:66) but a camera icon elsewhere (EventCard.tsx:143, drops/page.tsx:20). It is also a fifth overlay style: a centred card on a 90% black screen.",
+   "why": "No audit covered this component. It is small, but it is where the physical night meets the app.",
+   "suggestion": "Use a neutral title ('Scan the venue code'), a 44px close button, the camera error in Fire Ant red with 'or type the code', and the same camera icon on every entry point. Present it in the shared sheet style. Draw the viewfinder corners in cream, not orange.",
+   "gamification_angle": "A scan that lands could do the 180ms stamp on the code field, a small physical 'got it'.",
+   "priority": "P2",
+   "effort": "S"
+  },
+  {
+   "title": "Replace the browser's own pop-ups and dropdowns inside branded flows",
+   "verdict": "change",
+   "evidence": "Deleting your account uses the browser's confirm box (src/app/me/page.tsx:271), and so does blocking from a person card (src/components/chat/PersonCard.tsx:41). Blocking inside a private chat has no confirmation at all (src/app/chat/dm/[id]/page.tsx:24). Picking an event or a crew uses native dropdowns (src/app/quests/page.tsx:33-34, src/components/EventQuestList.tsx:70, src/app/crew/page.tsx:180), and so do Private/Open (crew:67), area and vibe on the flyer form (src/app/drop/page.tsx:154, 185). 'How Outside Score works' is a bare HTML disclosure (quests:38). Native date pickers are covered by the Date audit.",
+   "why": "Native grey dialogs in the middle of a branded app break the spell, and they look different on every phone. Blocking someone should behave the same wherever you do it.",
+   "suggestion": "Use one confirm sheet for destructive actions: plain words, a Fire Ant 'Delete' or 'Block' button, and a quiet Cancel. Use it for delete account and both block buttons. Turn short choice lists into chip rows (Private/Open, vibe, area). Turn 'pick an event' into a short list of stubs.",
+   "gamification_angle": "",
+   "priority": "P2",
+   "effort": "M"
+  },
+  {
+   "title": "Pad for the iPhone home bar once, and give toasts one fixed place",
+   "verdict": "change",
+   "evidence": "The tab bar already pads for the home bar (src/components/BottomNav.tsx:21). Four places that sit directly above it add the same padding again: sheets (src/components/Sheet.tsx:39), the chat message box (src/app/chat/page.tsx:75), the private chat message box (src/app/chat/dm/[id]/page.tsx:32) and the Tonight footer (src/app/discover/page.tsx:114). They use the .pad-bottom class (src/app/globals.css:73-74) or the same rule inline. Toasts sit at a fixed bottom-24 whatever the tab bar's height (src/components/Toaster.tsx:14), so on the chat page they cover the message box (chat:75-77). The toast timer is never reset (src/lib/store.ts:71-74), so a second message disappears early.",
+   "why": "On notched iPhones this leaves an empty band of roughly 34px under the chat box and every sheet, so it looks misaligned. Toasts landing on the message box get in the way of typing.",
+   "suggestion": "Pad for the home bar in one place only: the tab bar, or the bottom of a full-screen page when the tab bar is hidden. Toasts appear in one spot just above the tab bar (or under the status bar), one at a time, and each stays its full time.",
+   "gamification_angle": "",
+   "priority": "P2",
+   "effort": "S"
+  },
+  {
+   "title": "Print dates one way, always in Lagos time",
+   "verdict": "change",
+   "evidence": "Shared helpers already print weekday and date in Lagos time (src/lib/geo.ts:99-114, dayLagos/clockLagos). Other places format dates their own way, without the Lagos time zone: src/app/drops/page.tsx:18 and src/app/quests/page.tsx:30 (dateStyle short, e.g. 08/10/2026, 21:00), src/app/crew/page.tsx:181 and src/app/collection/page.tsx:20 (dateStyle medium).",
+   "why": "The draft sets dates in DM Mono as 'FRI 10 OCT', and nobody going out thinks in '08/10/2026'. A phone set to another time zone would show the wrong hour for a drop or a crew move.",
+   "suggestion": "Use the same format everywhere: 'FRI 10 OCT \u00b7 11PM' in DM Mono, Lagos time. That covers drops ('opens\u2026', 'closes\u2026'), quest end times, crew moves and collection receipts.",
+   "gamification_angle": "",
+   "priority": "P2",
+   "effort": "S"
+  },
+  {
+   "title": "Status bar and native controls are locked to night; switch them with the Lagos clock",
+   "verdict": "change",
+   "evidence": "The iOS status bar is set to 'black-translucent', which means white status text (src/app/layout.tsx:20). The theme colour is fixed at #0E0B0A (layout.tsx:28), as are the manifest's theme and background colours (public/manifest.webmanifest). The page declares 'color-scheme: dark' (src/app/globals.css:7), and the date input forces dark (src/app/discover/page.tsx:104).",
+   "why": "Once the cream day theme from the chrome audit ships, the iPhone status bar would show white text on cream, which is unreadable. Android's top bar would stay black, and native controls would stay dark on a light page.",
+   "suggestion": "When the app switches between cream and night, switch the status-bar style, the theme colour and the native control scheme at the same time, so the whole phone screen agrees with the clock.",
+   "gamification_angle": "",
+   "priority": "P2",
+   "effort": "S"
+  },
+  {
+   "title": "Keep: the solid basics already in place",
+   "verdict": "keep",
+   "evidence": "Animations are cut for people who ask their phone for less motion (src/app/globals.css:294-302). Every page header clears the notch the same way (the .pad-top class, globals.css:70-72, used on every route). Keyboard focus shows a clear orange ring (globals.css:21-25). Inputs are 16px so iPhones do not zoom when you type (globals.css:30). Sheets close with Escape and move focus correctly (src/components/Sheet.tsx:19-27). Most icon-only buttons have spoken labels. One exception: the 'add person' button in crew search has none (src/app/crew/page.tsx:99-108).",
+   "why": "These are good foundations. The restyle should keep them, not lose them.",
+   "suggestion": "Keep all of these through the redesign. Add a spoken label to the crew 'add person' button.",
+   "gamification_angle": "",
+   "priority": "P2",
+   "effort": "S"
+  }
+ ],
+ "questions_for_jae": [
+  "If the Quests page goes, can 'Make my month' (the report card) move to Me under the two number tiles, with live drops shown on the map and in Tonight's conductor line?",
+  "Should the shared report link be a standalone poster page for people who don't have Hoppaz yet (no tab bar, one 'Open Hoppaz' button)?",
+  "If the event database is down, do you want players to see an honest 'oops, try again' screen instead of the sample night with real venue names? (Recommended.)",
+  "When should the install sheet appear: after the first 'I'm going', after the first check-in, or both?",
+  "Can we remove the map's +/- zoom buttons entirely and rely on pinch-zoom, keeping only a small map-credit line?",
+  "What support email and company name should the privacy page show, so the notes to the owner can come off before launch?",
+  "Should private chat, the flyer form and the avatar editor open full-screen without the bottom tab bar, the way WhatsApp hides its tabs inside a chat?"
+ ]
+}
