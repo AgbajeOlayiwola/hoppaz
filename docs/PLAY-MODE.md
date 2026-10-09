@@ -310,6 +310,7 @@ Waves, DMs, blocks, reports, room keys, the account gate and the sign-up sheet a
 | `supabase/schema.sql` | `reports.kind` gains `'spot'` and `'vibe'` | Phase 4 |
 | `supabase/schema.sql` | `riders_read` limited to own rows and `riders_insert_own` removed (no client code uses `hop_riders` today; boarding comes back as a server function when Hop social is built) | Phase 5 |
 | `supabase/schema.sql` | `drop_rewards` and `claim_game_drop` pay a `collectible` prize into `user_collectibles` | Phase 2 |
+| `supabase/schema.sql` | `quest_claims.evidence_id` (column and index) that `claim_quest` and the photo approval trigger already use; `claim_quest` gets `search_path public, extensions` (it calls `digest()`, so every qr and door-code quest failed) and a group claim needs the claimer checked in (`checkin_required`). `starter_quests.sql` carries all three until they are folded in, so run it again after any `schema.sql` run | Phase 0 merge commit |
 | `src/app/api/account/create/route.ts` | confirm step removed (or route deleted); the code flow replaces it | Phase 6 |
 
 Asked of Ola, not done by us: a server-verified boarding function for `hop_riders` before any Hop social, and a review of the OTP change to `has_account`.
