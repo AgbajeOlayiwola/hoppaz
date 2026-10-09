@@ -2,17 +2,19 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { Map, CalendarDays, Users, MessageSquare, CircleUserRound } from "lucide-react";
+import { Map, CalendarDays, Users, MessageSquare, CircleUserRound, type LucideIcon } from "lucide-react";
 import clsx from "clsx";
 import { usePlayMode } from "@/lib/usePlayMode";
 
-const TABS = [
+type Tab = { href: string; label: string; Icon: LucideIcon; intro?: string };
+
+const TABS: ReadonlyArray<Tab> = [
   { href: "/", label: "MAP", Icon: Map },
-  { href: "/discover", label: "TODAY", Icon: CalendarDays },
-  { href: "/crew", label: "CREW", Icon: Users },
+  { href: "/discover", label: "TODAY", Icon: CalendarDays, intro: "today-tab" },
+  { href: "/crew", label: "CREW", Icon: Users, intro: "crew-tab" },
   { href: "/chat", label: "CHAT", Icon: MessageSquare },
-  { href: "/me", label: "ME", Icon: CircleUserRound },
-] as const;
+  { href: "/me", label: "ME", Icon: CircleUserRound, intro: "me-tab" },
+];
 
 /** Sub-pages keep their parent tab lit, so you always know where you are. */
 const PARENT: Array<[string, string]> = [
@@ -42,12 +44,13 @@ export default function BottomNav() {
       style={{ paddingBottom: "env(safe-area-inset-bottom, 0px)" }}
       aria-label="Main"
     >
-      {TABS.map(({ href, label, Icon }) => {
+      {TABS.map(({ href, label, Icon, intro }) => {
         const on = href === "/" ? active === "/" : active === href || active.startsWith(`${href}/`);
         return (
           <Link
             key={href}
             href={href}
+            data-intro={intro}
             aria-current={on ? "page" : undefined}
             className={clsx(
               "flex min-h-[52px] flex-1 flex-col items-center justify-center gap-1 transition-colors",

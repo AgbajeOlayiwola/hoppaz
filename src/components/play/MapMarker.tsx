@@ -21,6 +21,7 @@ export default function MapMarker({
   className,
   style,
   label,
+  dataIntro,
   onClick,
   children,
   ref,
@@ -34,6 +35,8 @@ export default function MapMarker({
   style?: Record<string, string | number>;
   /** Makes the marker a button with this accessible name. */
   label?: string;
+  /** The first-run tour's pointer name (data-intro), when Paz can point at this marker. */
+  dataIntro?: string;
   onClick?: () => void;
   children?: ReactNode;
   ref?: Ref<MarkerHandle>;
@@ -75,6 +78,11 @@ export default function MapMarker({
     if (label) el.setAttribute("aria-label", label);
     else el.removeAttribute("aria-label");
   }, [el, label]);
+
+  useEffect(() => {
+    if (dataIntro) el.setAttribute("data-intro", dataIntro);
+    else el.removeAttribute("data-intro");
+  }, [el, dataIntro]);
 
   const styleKey = JSON.stringify(style ?? {});
   useEffect(() => {

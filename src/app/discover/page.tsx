@@ -40,6 +40,7 @@ import { useCollectibleEventIds } from "@/lib/useCollectibles";
 import { useEvents, useHop } from "@/lib/useEvents";
 import { useGoing } from "@/lib/useGoing";
 import { useSession } from "@/lib/useSession";
+import { introEvent } from "@/lib/intro";
 import type { EventRow } from "@/lib/types";
 
 // One stable empty list, so memo deps do not change on every render.
@@ -77,6 +78,11 @@ export default function TodayPage() {
   const [mounted, setMounted] = useState(false);
   useEffect(() => setMounted(true), []);
   const [now, setNow] = useState(() => Date.now());
+
+  // Paz's tour: the deck is on screen.
+  useEffect(() => {
+    introEvent("deck_viewed");
+  }, []);
 
   // Never sit on a day that is over: past days snap to today, on return and every half minute.
   useEffect(() => {
@@ -284,7 +290,8 @@ export default function TodayPage() {
       style={{ ["--hz-side-top" as string]: `${sideTop}px` }}
     >
       <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain">
-        <div className="flex min-h-full flex-col">
+        {/* Paz's tour sets --intro-reserve while its card is up on this screen, so the deck stops above the card. */}
+        <div className="flex min-h-full flex-col pb-[var(--intro-reserve,0px)]">
           {/* -------------------------------------------------------- header -- */}
           <header className="pad-top flex-none px-4 pb-3">
             <div className="flex items-baseline gap-2.5">
@@ -345,7 +352,7 @@ export default function TodayPage() {
           {/* ------------------------------------------------------- the deck -- */}
           <div
             ref={deckBox}
-            className="flex min-h-[400px] flex-1 flex-col pt-2 transition-transform duration-300 ease-[cubic-bezier(.2,.8,.2,1)]"
+            className="flex min-h-[calc(400px_-_min(var(--intro-reserve,0px),80px))] flex-1 flex-col pt-2 transition-transform duration-300 ease-[cubic-bezier(.2,.8,.2,1)]"
             style={{ transform: shift ? `translate3d(${-shift}px,0,0)` : undefined }}
           >
             {loading ? (
@@ -373,7 +380,10 @@ export default function TodayPage() {
                   count={deckEvents.length}
                   index={index}
                   onIndex={setIndex}
-                  onOpen={() => setOpen(true)}
+                  onOpen={() => {
+                    setOpen(true);
+                    introEvent("event_opened");
+                  }}
                   label={(i) => `${i === index ? "Open" : "Show"} ${eventTitle(deckEvents[i])}`}
                   slide={(i, s) => {
                     const e = deckEvents[i];
@@ -407,6 +417,7 @@ export default function TodayPage() {
                 // A night you are going to: slide the deck to it and open it, like a tap on its card.
                 jump(e);
                 setOpen(true);
+                introEvent("event_opened");
               }}
             />}
           <div className="h-3 flex-none" />

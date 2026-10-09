@@ -92,7 +92,7 @@ export default function Hud({
     <div className="hz-hud" role="group" aria-label="Play">
       <div className="hz-hud-top">
         <div className="flex flex-col gap-2">
-          <button type="button" onClick={onExit} aria-label="Back to the events map" className="hz-hud-btn">
+          <button type="button" onClick={onExit} data-intro="play-exit" aria-label="Back to the events map" className="hz-hud-btn">
             <ArrowLeft size={20} strokeWidth={2.2} aria-hidden />
           </button>
           <button

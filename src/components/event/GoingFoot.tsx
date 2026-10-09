@@ -7,6 +7,7 @@ import { ArrowRight, ArrowUpRight, Check, Share2 } from "lucide-react";
 import Avatar from "@/components/Avatar";
 import { useGoing } from "@/lib/useGoing";
 import { useToast } from "@/lib/store";
+import { introEvent } from "@/lib/intro";
 import type { EventRow } from "@/lib/types";
 import { shareEvent } from "./share";
 import { useMyLook } from "./useMyLook";
@@ -160,7 +161,7 @@ export default function GoingFoot({
             {linkLabel(event)} <ArrowUpRight size={14} className={clsx("text-orange", compact && "short:hidden")} aria-hidden />
           </a>
         )}
-        <Link href={`/chat?c=${event.id}`} className={clsx(CELL, compact && SHORT_CELL, compact && event.ig_url && "col-span-2")}>
+        <Link href={`/chat?c=${event.id}`} data-intro="event-chat" onClick={() => introEvent("chat_opened")} className={clsx(CELL, compact && SHORT_CELL, compact && event.ig_url && "col-span-2")}>
           <span>
             <span className={clsx(compact && "short:hidden")}>EVENT </span>CHAT
           </span>

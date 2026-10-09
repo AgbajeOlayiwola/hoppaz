@@ -4,6 +4,8 @@ import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore
 import type { GeoJSONSource, Map as MLMap } from "maplibre-gl";
 import clsx from "clsx";
 import { requireAccount } from "@/lib/accountGate";
+import { introEvent, registerIntroAction } from "@/lib/intro";
+import { introSetOpening } from "@/lib/intro/store";
 import { deviceTier, playTuning } from "@/lib/deviceTier";
 import type { PlayBox } from "@/lib/playTypes";
 import { sfx } from "@/lib/sound/sfx";
@@ -714,6 +716,7 @@ export default function PlayLayer({
       const h = hereRef.current;
       if (!h) {
         tell("Finding you");
+        introEvent("location_needed");
         return;
       }
       // An account is asked for before the tape rips, never for a welcome box.
@@ -742,6 +745,25 @@ export default function PlayLayer({
     [playing, tell, farNudge, runTo, showStage]
   );
 
+  // Paz's tour: SEND IT on the far welcome box starts the same run a tap on it does, and it opens like any remote box.
+  const farWelcome = useMemo(() => boxes.find((b) => b.kind === "welcome" && b.slot === "c") ?? null, [boxes]);
+  useEffect(() => {
+    if (!farWelcome) return;
+    return registerIntroAction("send_avatar", () => {
+      if (busy.current) return;
+      onBoxTap(farWelcome);
+      if (!busy.current) return;
+      // The card steps out for the run; the open moment's own events keep it out and bring it back.
+      introSetOpening(true);
+      setTimeout(() => {
+        if (!busy.current) introSetOpening(false);
+      }, 6000);
+    });
+  }, [farWelcome, onBoxTap]);
+  useEffect(() => {
+    if (!playing) introSetOpening(false);
+  }, [playing]);
+
   /* ------------------------------------------------------ entering Play ---- */
   const pendingEnter = useRef(false);
   const enterNow = useCallback(() => {
@@ -767,6 +789,7 @@ export default function PlayLayer({
     // No fresh GPS yet: ask for it, and go in the moment it arrives.
     if (live.status === "denied") {
       say("Turn on location to open boxes.");
+      introEvent("location_needed");
       onNeedLocation();
       return;
     }
@@ -785,6 +808,7 @@ export default function PlayLayer({
       pendingEnter.current = false;
       setWantLive(false);
       say("Turn on location to open boxes.");
+      introEvent("location_needed");
       onNeedLocation();
     } else if (live.status === "unavailable") {
       // A timeout or no signal is not a settings problem: say so, and let them tap again.
@@ -873,6 +897,7 @@ export default function PlayLayer({
               lat={b.lat}
               anchor="bottom"
               className="hz-crate"
+              dataIntro={b.kind === "welcome" ? (b.slot === "c" ? "far-box" : "box") : undefined}
               label={`${name}, ${art.name}. ${b.needsPresence ? (live ? "In reach. Tap to open." : `About ${dist} metres away. Tap to see the way.`) : "Tap to send your avatar."}`}
               onClick={() => onBoxTap(b)}
               style={{ zIndex: Math.round((90 - b.lat) * 100_000) }}

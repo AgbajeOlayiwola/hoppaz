@@ -23,12 +23,12 @@ import {
   scrubTicks,
 } from "@/components/map-chrome/scrub";
 import { TODAY, countByDay, matchesType, nightOf, todayKey, type DateFilter } from "@/lib/filters";
-import { useHoppaz } from "@/lib/store";
+import { useHoppaz, useToast } from "@/lib/store";
 import { useSession } from "@/lib/useSession";
 import { useEvents, useHop } from "@/lib/useEvents";
 import { useCheckin } from "@/lib/useCheckin";
 import { useGameDashboard } from "@/lib/game";
-import { haversineKm, hasVenue } from "@/lib/geo";
+import { haversineKm, hasVenue, nearestArea } from "@/lib/geo";
 import type { HopStop } from "@/lib/types";
 import { busPosition } from "@/lib/busPosition";
 import { useCollectibleEventIds } from "@/lib/useCollectibles";
@@ -36,6 +36,7 @@ import { DEMO_DROP_TITLES } from "@/lib/demoData";
 import NextBar from "@/components/map-chrome/NextBar";
 import { NEXT_COUNT, nextEvents } from "@/lib/filters";
 import { usePlayMode } from "@/lib/usePlayMode";
+import { introAsksLocation, introEvent, registerIntroAction } from "@/lib/intro";
 
 // MapLibre touches window on import, so it stays out of the server bundle.
 const NightMap = dynamic(() => import("@/components/map/NightMap"), {
@@ -62,8 +63,9 @@ const IS_DEV = process.env.NODE_ENV !== "production";
 export default function MapPage() {
   const {
     fix, radiusKm, seenIntro, markIntroSeen, seenTitle, setSeenTitle,
-    dateFilter, setDateFilter, types, setTypes, look,
+    dateFilter, setDateFilter, types, setTypes, look, setFix,
   } = useHoppaz();
+  const say = useToast((s) => s.say);
   const { userId, refresh, profile } = useSession();
   // Play closes the map around you: the events chrome steps out and the page's own tickers and polls wait.
   const playing = usePlayMode((s) => s.active);
@@ -235,7 +237,8 @@ export default function MapPage() {
     if (!mounted || !seenTitle) return;
     if (!fix && !seenIntro) {
       const t = setTimeout(() => {
-        setPicking(true);
+        // A new Hopper meets Paz first: her "Let's find you" step is the one ask, so the sheet stays shut.
+        if (!introAsksLocation()) setPicking(true);
         markIntroSeen();
       }, 600);
       return () => clearTimeout(t);
@@ -256,6 +259,36 @@ export default function MapPage() {
         .sort()[0] ?? null,
     [counts, dayKey]
   );
+
+  /* --------------------------------------------------- Paz's first-run tour -- */
+  const onMapReady = useCallback((m: MLMap) => {
+    setMap(m);
+    introEvent("map_ready");
+  }, []);
+
+  // Paz's "Let's find you": what "Use my location" does in the location sheet, without opening the sheet, so one
+  // tap asks the browser, sets the fix (the map flies to the Hopper) and tells the tour what the answer was.
+  const locateMe = useCallback(() => {
+    if (!("geolocation" in navigator)) {
+      introEvent("location_denied");
+      return;
+    }
+    navigator.geolocation.getCurrentPosition(
+      (pos) => {
+        const { latitude: lat, longitude: lng } = pos.coords;
+        const near = nearestArea(lat, lng);
+        setFix({ lat, lng, source: "gps", area: near.name });
+        say(`Locked on. ${near.name}.`, "ok");
+        introEvent("location_granted", { lat, lng });
+      },
+      (err) => {
+        if (err.code === err.PERMISSION_DENIED) introEvent("location_denied");
+        else say("Still finding you. Try again in a moment.");
+      },
+      { enableHighAccuracy: true, timeout: 10000, maximumAge: 60000 }
+    );
+  }, [setFix, say]);
+  useEffect(() => registerIntroAction("locate", locateMe), [locateMe]);
 
   /* ------------------------------------------------------------- Play -- */
   // Opening Play leaves whatever card was open; the camera is Play's from here.
@@ -339,7 +372,7 @@ export default function MapPage() {
         hudBottom={hud.bottom}
         swoop={mounted && seenTitle}
         mode={playing ? "play" : "events"}
-        onMapReady={setMap}
+        onMapReady={onMapReady}
         sidePanel={!!event}
         allHot={mode === "next"}
         navRef={navRef}

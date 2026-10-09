@@ -22,6 +22,7 @@ import {
 } from "@/lib/push";
 import { supabaseConfigured } from "@/lib/supabase/client";
 import { useSessionStore } from "@/lib/useSession";
+import ReplayTourRow from "@/components/intro/ReplayTourRow";
 
 const LOOKS: ReadonlyArray<[ThemePref, string]> = [
   ["night", "Dark"],
@@ -155,7 +156,7 @@ function SpawnAlerts() {
   const canTurnOn = on && !live && !canInstall && push?.support === "ok" && push.permission !== "denied";
 
   return (
-    <div className="px-4 py-3.5">
+    <div className="px-4 py-3.5" data-intro="alerts">
       <span className="seclabel block">SPAWN ALERTS</span>
       <div role="radiogroup" aria-label="Spawn alerts" className="mt-2 grid grid-cols-3 gap-1.5">
         {ALERT_LEVELS.map(([k, label]) => (
@@ -174,7 +175,7 @@ function SpawnAlerts() {
       </div>
       {line && <p className="hint mt-2" aria-live="polite">{line}</p>}
       {canInstall && (
-        <button type="button" className="btn mt-3 w-full" onClick={askToInstall}>
+        <button type="button" data-intro="install" className="btn mt-3 w-full" onClick={askToInstall}>
           ADD TO HOME SCREEN
         </button>
       )}
@@ -300,6 +301,7 @@ export default function SettingsGroup({
                 <RowLink href="/account" icon={UserRound} title="Make an account" hint="Wave at people, join crews, chat privately. Your XP comes with you." />
               ))}
             <RowButton icon={Play} title="Replay the intro" onClick={onReplayIntro} />
+            <ReplayTourRow />
             <RowLink href="/privacy" icon={Lock} title="Privacy" />
             <RowLink href="/community" icon={FileText} title="Community rules" />
             {isAdmin && <RowLink href="/admin" icon={ShieldCheck} title="Staff" />}

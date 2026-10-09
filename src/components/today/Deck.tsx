@@ -331,6 +331,7 @@ export default function Deck({
         role="group"
         aria-roledescription="carousel"
         aria-label="Events"
+        data-intro="deck"
         onPointerDown={onDown}
         onPointerMove={onMove}
         onPointerUp={onUp}

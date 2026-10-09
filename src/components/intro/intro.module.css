@@ -1,0 +1,378 @@
+/*
+ * Paz's tour overlay. One fixed layer above the app and below the reveal and
+ * the sign-up sheet. The layer itself never takes a tap: only the card does,
+ * so the thing Paz is pointing at stays tappable.
+ *
+ * Positions are written by useSpotlight straight to these nodes (transform and
+ * custom properties), never through React state, so a moving map marker does
+ * not re-render anything.
+ */
+
+.root {
+  position: fixed;
+  inset: 0;
+  z-index: 57;
+  pointer-events: none;
+  --ic-bottom: calc(env(safe-area-inset-bottom, 0px) + 12px);
+  --ic-top: calc(env(safe-area-inset-top, 0px) + 12px);
+  opacity: 1;
+  transition: opacity 0.16s ease;
+}
+.root[data-hidden="true"] {
+  opacity: 0;
+  visibility: hidden;
+  transition: opacity 0.1s ease, visibility 0s 0.1s;
+}
+
+/* ------------------------------------------------------------- spotlight -- */
+.ring {
+  position: fixed;
+  left: 0;
+  top: 0;
+  width: 56px;
+  height: 56px;
+  border-radius: 16px;
+  opacity: 0;
+  will-change: transform;
+  /* The dim around the hole. A big spread on one fixed node is cheaper than a mask. */
+  box-shadow: 0 0 0 200vmax rgb(14 11 10 / 0.46);
+}
+/* The cream day ground needs a lighter veil or the hole looks muddy. */
+:global([data-theme="day"]) .ring {
+  box-shadow: 0 0 0 200vmax rgb(14 11 10 / 0.3);
+}
+.ring[data-on="true"] {
+  opacity: 1;
+  animation: ring-in 0.32s cubic-bezier(0.2, 0.9, 0.3, 1) both;
+}
+.ringLine {
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  border: 3px solid #ff4d00;
+  /* An ink hairline outside the orange so it reads on the cream day ground too. */
+  box-shadow: 0 0 0 1.5px rgb(14 11 10 / 0.7), inset 0 0 0 1.5px rgb(14 11 10 / 0.35);
+}
+.halo {
+  position: absolute;
+  inset: -3px;
+  border-radius: inherit;
+  border: 2px solid #ff4d00;
+  opacity: 0;
+  animation: halo 1.7s ease-out 0.4s infinite;
+}
+@keyframes ring-in {
+  from {
+    opacity: 0;
+    scale: 1.5;
+  }
+  to {
+    opacity: 1;
+    scale: 1;
+  }
+}
+@keyframes halo {
+  0% {
+    opacity: 0.85;
+    scale: 1;
+  }
+  100% {
+    opacity: 0;
+    scale: 1.32;
+  }
+}
+
+.arrow {
+  position: fixed;
+  left: 0;
+  top: 0;
+  width: 30px;
+  height: 36px;
+  opacity: 0;
+  will-change: transform;
+}
+.arrow[data-on="true"] {
+  opacity: 1;
+}
+.arrowBob {
+  display: block;
+  width: 100%;
+  height: 100%;
+  animation: bob 0.9s ease-in-out infinite;
+}
+.arrow[data-side="below"] .arrowBob {
+  animation-name: bob-up;
+}
+@keyframes bob {
+  0%,
+  100% {
+    transform: translateY(0);
+  }
+  50% {
+    transform: translateY(7px);
+  }
+}
+@keyframes bob-up {
+  0%,
+  100% {
+    transform: translateY(0);
+  }
+  50% {
+    transform: translateY(-7px);
+  }
+}
+
+/* ------------------------------------------------------------- the dock --- */
+.dock {
+  position: fixed;
+  left: 0;
+  right: 0;
+  display: flex;
+  justify-content: center;
+  padding-inline: max(16px, env(safe-area-inset-left, 0px)) max(16px, env(safe-area-inset-right, 0px));
+  pointer-events: none;
+}
+.dock[data-at="bottom"] {
+  bottom: var(--ic-bottom);
+}
+.dock[data-at="top"] {
+  top: var(--ic-top);
+  /* room for Paz above the card */
+  padding-top: 112px;
+}
+.dock[data-at="top"][data-big="true"] {
+  padding-top: 142px;
+}
+.dock[data-at="top"][data-compact="true"] {
+  padding-top: 62px;
+}
+
+.stack {
+  position: relative;
+  width: min(100%, 420px);
+  pointer-events: none;
+  animation: dock-in 0.36s cubic-bezier(0.2, 0.9, 0.3, 1) both;
+}
+@keyframes dock-in {
+  from {
+    opacity: 0;
+    transform: translateY(18px) scale(0.97);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+/* Paz stands on the card, half tucked behind it. Left or right, whichever side the target is not on. */
+.paz {
+  position: absolute;
+  bottom: calc(100% - 20px);
+  z-index: 0;
+  line-height: 0;
+  pointer-events: none;
+  transform-origin: 50% 100%;
+  animation: paz-in 0.5s cubic-bezier(0.3, 1.5, 0.5, 1) 0.1s both;
+}
+.paz > svg {
+  pointer-events: auto;
+  cursor: pointer;
+  -webkit-tap-highlight-color: transparent;
+}
+/* The small Paz (84 px) shows 54 px above the card. */
+.stack[data-compact="true"] .paz {
+  bottom: calc(100% - 30px);
+}
+.root[data-paz="left"] .paz {
+  left: 8px;
+}
+.root[data-paz="right"] .paz {
+  right: 8px;
+}
+@keyframes paz-in {
+  from {
+    opacity: 0;
+    transform: translateY(46px) scale(0.9);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+.card {
+  position: relative;
+  z-index: 1;
+  overflow: hidden;
+  pointer-events: auto;
+  border: 1px solid rgb(var(--hairline));
+  border-top: 3px solid #ff4d00;
+  border-radius: 14px;
+  background: rgb(var(--raised));
+  color: rgb(var(--text));
+  padding: 13px 16px 4px;
+  /* A hard lip like the buttons, then a soft lift. */
+  box-shadow: 0 4px 0 rgb(var(--hairline)), 0 22px 44px -8px rgb(var(--shadow) / 0.5);
+}
+
+.head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  min-height: 22px;
+}
+.count {
+  font-family: var(--font-mono), monospace;
+  font-size: 10.5px;
+  font-weight: 500;
+  letter-spacing: 0.14em;
+  color: rgb(var(--dim));
+}
+.skip {
+  margin: -10px -12px -10px 0;
+  min-height: 44px;
+  padding: 0 12px;
+  display: inline-flex;
+  align-items: center;
+  font-family: var(--font-mono), monospace;
+  font-size: 11px;
+  font-weight: 500;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: rgb(var(--dim));
+}
+.skip:active {
+  color: rgb(var(--text));
+}
+
+.title {
+  margin-top: 2px;
+  font-family: var(--font-poppins), system-ui, sans-serif;
+  font-weight: 900;
+  font-size: 21px;
+  line-height: 1.12;
+  letter-spacing: -0.01em;
+}
+.line {
+  margin-top: 5px;
+  font-family: var(--font-body), sans-serif;
+  font-size: 15px;
+  line-height: 1.38;
+  color: rgb(var(--text) / 0.88);
+}
+
+.act {
+  margin-top: 12px;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+.act :global(.btn) {
+  flex: 1;
+}
+.move {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  font-family: var(--font-mono), monospace;
+  font-size: 10.5px;
+  font-weight: 500;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: rgb(var(--text));
+}
+.moveDot {
+  width: 8px;
+  height: 8px;
+  border-radius: 9999px;
+  background: #ff4d00;
+  animation: dot 1.2s ease-in-out infinite;
+}
+@keyframes dot {
+  0%,
+  100% {
+    transform: scale(1);
+    opacity: 1;
+  }
+  50% {
+    transform: scale(1.5);
+    opacity: 0.55;
+  }
+}
+
+.gap {
+  height: 14px;
+}
+.foot {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  min-height: 40px;
+  margin-top: 2px;
+}
+.end {
+  margin-left: -12px;
+  min-height: 40px;
+  padding: 0 12px;
+  display: inline-flex;
+  align-items: center;
+  font-family: var(--font-mono), monospace;
+  font-size: 10px;
+  font-weight: 500;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: rgb(var(--dim) / 0.85);
+}
+.bar {
+  position: absolute;
+  left: 0;
+  bottom: 0;
+  height: 3px;
+  background: #ff4d00;
+  transition: width 0.4s cubic-bezier(0.2, 0.8, 0.2, 1);
+}
+.barTrack {
+  position: absolute;
+  inset: auto 0 0 0;
+  height: 3px;
+  background: rgb(var(--hairline));
+}
+
+.busy {
+  opacity: 0.7;
+  pointer-events: none;
+}
+
+@media (max-height: 719px) {
+  .dock[data-at="top"] {
+    padding-top: 100px;
+  }
+  .dock[data-at="top"][data-big="true"] {
+    padding-top: 126px;
+  }
+  .line {
+    font-size: 14px;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .stack,
+  .paz,
+  .ring[data-on="true"] {
+    animation: none;
+  }
+  .halo,
+  .arrowBob,
+  .moveDot {
+    animation: none;
+  }
+  .halo {
+    opacity: 0.5;
+    scale: 1.12;
+  }
+  .root,
+  .bar {
+    transition: none;
+  }
+}
