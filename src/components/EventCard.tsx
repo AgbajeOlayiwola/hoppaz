@@ -143,11 +143,16 @@ function EventSheet({ event, fix, userId, checkedIn, busy, onCheckIn, onClose, i
       toolbar={
         side && (onPrev || onNext) ? (
           <>
-            <button type="button" onClick={onPrev} disabled={!onPrev} aria-label="Nearest event to the left" className="grid h-10 w-10 place-items-center rounded-hz text-cream disabled:opacity-30">
-              <ChevronLeft size={22} aria-hidden />
+            <button type="button" onClick={onPrev} disabled={!onPrev} aria-label="Nearest event to the left" className="grid h-11 w-11 place-items-center">
+              {/* Solid orange: this takes you somewhere else on the map. */}
+              <span className="grid h-9 w-9 place-items-center rounded-full bg-orange text-brand-ink shadow-[0_2px_0_theme(colors.orange.ember)] transition-transform active:translate-y-px [button:disabled_&]:bg-line [button:disabled_&]:text-dim [button:disabled_&]:shadow-none">
+                <ChevronLeft size={20} strokeWidth={2.6} aria-hidden />
+              </span>
             </button>
-            <button type="button" onClick={onNext} disabled={!onNext} aria-label="Nearest event to the right" className="grid h-10 w-10 place-items-center rounded-hz text-cream disabled:opacity-30">
-              <ChevronRight size={22} aria-hidden />
+            <button type="button" onClick={onNext} disabled={!onNext} aria-label="Nearest event to the right" className="grid h-11 w-11 place-items-center">
+              <span className="grid h-9 w-9 place-items-center rounded-full bg-orange text-brand-ink shadow-[0_2px_0_theme(colors.orange.ember)] transition-transform active:translate-y-px [button:disabled_&]:bg-line [button:disabled_&]:text-dim [button:disabled_&]:shadow-none">
+                <ChevronRight size={20} strokeWidth={2.6} aria-hidden />
+              </span>
             </button>
             {/* Up here it stays in sight however far the card scrolls. */}
             <Link

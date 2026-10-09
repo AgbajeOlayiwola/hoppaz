@@ -429,39 +429,40 @@ export default function NightMap({
   const busMk = useRef<maplibregl.Marker | null>(null);
   const meMk = useRef<maplibregl.Marker | null>(null);
   const boxMks = useRef(new Map<string, maplibregl.Marker>());
-  const hover = useRef<maplibregl.Popup | null>(null);
   const declutter = useRef(() => {});
 
   /* ------------------------------------------------------------ hover card -- */
-  const showPeek = (id: string) => {
-    const m = map.current;
-    const e = eventsRef.current.find((x) => x.id === id);
-    // The open event already has its card; a hover card over it would cover the house.
-    if (!m || !e || id === selectedRef.current || !window.matchMedia("(hover: hover)").matches) return;
-    const box = make("div", "hz-peek-body");
-    const line = (cls: string, text: string) => box.append(make("p", cls, text));
-    line("hz-peek-title", `${isEventLead(e) ? "LEAD · " : ""}${eventTitle(e)}`);
-    line("hz-peek-sub", `${e.venue_name}${e.area ? ` · ${e.area}` : ""}`);
-    line("hz-peek-meta", `${eventPrice(e)} · ${isEventLead(e) ? "CHECK DETAILS" : dayLabel(e.starts_at)} · ${e.vibe.toUpperCase()}`);
-    const f = fixRef.current;
-    if (f) {
-      const trip = travelEstimate({ ...f, side: areaByName(f.area ?? null)?.side }, { lat: e.lat, lng: e.lng, side: areaByName(e.area)?.side });
-      line(
-        "hz-peek-sub",
-        `~${trip.minutes} min · ${(e.distance_m / 1000).toFixed(1)} km${trip.crossesBridge ? " · over the bridge" : ""}${e.distance_m / 1000 > radiusRef.current ? " · outside your radius" : ""}`
-      );
-    }
-    hover.current?.remove();
-    // Below the dot, unless that would tuck it under the page's bottom chrome.
-    const low = m.project([e.lng, e.lat]).y > m.getContainer().clientHeight - insetsRef.current.bottom - 170;
-    hover.current = new maplibregl.Popup({ closeButton: false, closeOnClick: false, offset: low ? 22 : 14, anchor: low ? "bottom" : "top", className: "hz-peek", maxWidth: "240px" })
-      .setLngLat([e.lng, e.lat])
-      .setDOMContent(box)
-      .addTo(m);
+  // Desktop only. Hovering a dot or its sign swaps the sign for the clean flyer card with a
+  // CLICK TO OPEN tab; moving away puts the sign back. No separate pop-up, so nothing ends up
+  // behind a banner.
+  const peekId = useRef<string | null>(null);
+  const peekOff = useRef(0);
+  const clearPeek = () => {
+    const id = peekId.current;
+    peekId.current = null;
+    if (id) signs.current.get(id)?.mk.getElement().classList.remove("hz-peeking");
   };
-  const hidePeek = () => {
-    hover.current?.remove();
-    hover.current = null;
+  const showPeek = (id: string) => {
+    window.clearTimeout(peekOff.current);
+    if (peekId.current === id) return;
+    clearPeek();
+    // The open event already shows its card over the house.
+    if (id === selectedRef.current || !window.matchMedia("(hover: hover)").matches) return;
+    const el = signs.current.get(id)?.mk.getElement();
+    if (!el) return;
+    const img = el.querySelector<HTMLImageElement>(".hz-art img[data-src]");
+    if (img) {
+      img.src = img.dataset.src ?? "";
+      img.removeAttribute("data-src");
+    }
+    el.classList.add("hz-peeking");
+    peekId.current = id;
+  };
+  // `soon` leaves a moment to move from the dot up onto the card without it vanishing.
+  const hidePeek = (soon = false) => {
+    window.clearTimeout(peekOff.current);
+    if (soon) peekOff.current = window.setTimeout(clearPeek, 160);
+    else clearPeek();
   };
   // The init effect binds once; this ref lets it reach the current handlers.
   const peek = useRef({ show: showPeek, hide: hidePeek });
@@ -632,7 +633,7 @@ export default function NightMap({
           });
           m.on("mouseleave", layer, () => {
             m!.getCanvas().style.cursor = "";
-            peek.current.hide();
+            peek.current.hide(true);
           });
         }
         m.on("mousemove", "pins", (e) => {
@@ -698,7 +699,7 @@ export default function NightMap({
       boxMap.clear();
       busMk.current = null;
       meMk.current = null;
-      hover.current = null;
+      window.clearTimeout(peekOff.current);
       map.current?.remove();
       map.current = null;
     };
@@ -850,18 +851,18 @@ export default function NightMap({
         const meta = make("span", "hz-meta");
         meta.append(make("i", "hz-gem"), make("span", "hz-when"), make("span", "hz-drop", "DROP"));
         text.append(make("b", "hz-name"), meta);
-        face.append(art, text);
+        face.append(art, text, make("span", "hz-tap", "CLICK TO OPEN"));
         const posts = make("span", "hz-posts");
         posts.append(make("i", ""), make("i", ""));
         board.append(face, make("span", "hz-mini"), posts);
         el.append(board);
         el.addEventListener("click", (ev) => {
           ev.stopPropagation();
-          hidePeek();
+          peek.current.hide();
           cbs.current.onSelect(e.id);
         });
         el.addEventListener("mouseenter", () => peek.current.show(e.id));
-        el.addEventListener("mouseleave", () => peek.current.hide());
+        el.addEventListener("mouseleave", () => peek.current.hide(true));
         const mk = new maplibregl.Marker({ element: el, anchor: "bottom", offset: [0, -MARKER_LIFT] })
           .setLngLat([e.lng, e.lat])
           .addTo(m);
@@ -903,21 +904,29 @@ export default function NightMap({
         const art = el.querySelector(".hz-art") as HTMLElement;
         art.dataset.vibe = e.vibe;
         art.replaceChildren();
+        // Up close a sign is just its flyer; with no flyer it keeps its name.
+        el.classList.toggle("hz-noflyer", !flyer);
         if (flyer) {
           // The branded block under it shows until the flyer loads, and stays if it never does.
           const img = document.createElement("img");
           img.alt = "";
           img.decoding = "async";
           img.dataset.src = flyer;
-          img.addEventListener("error", () => img.remove());
+          img.addEventListener("error", () => {
+            img.remove();
+            el.classList.add("hz-noflyer");
+          });
           art.append(img);
         }
         const was = el.dataset.mode;
+        const peeking = el.classList.contains("hz-peeking");
+        el.classList.remove("hz-peeking");
         for (const mode of ["card", "banner", "mini"] as const) {
           el.dataset.mode = mode;
           sg.size[mode] = [el.offsetWidth, el.offsetHeight];
         }
         el.dataset.mode = was ?? "off";
+        if (peeking) el.classList.add("hz-peeking");
       }
     });
     declutter.current();

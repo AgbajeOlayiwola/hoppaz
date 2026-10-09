@@ -539,9 +539,11 @@
 .hz-sign[data-mode="mini"] .hz-mini {
   display: block;
 }
-/* Up close: a card in the card colours, the flyer on top, the name in full */
-.hz-sign[data-mode="card"] .hz-face {
-  width: 132px;
+/* Up close: just the flyer, clean, on a card. With no flyer, the branded block and the name. */
+.hz-sign[data-mode="card"] .hz-face,
+.hz-sign.hz-peeking .hz-face {
+  display: block;
+  width: 120px;
   padding: 0;
   overflow: hidden;
   text-align: left;
@@ -550,14 +552,32 @@
   border-radius: 6px;
   box-shadow: 0 3px 10px rgb(var(--shadow) / 0.35);
 }
-.hz-sign[data-mode="card"] .hz-art {
+.hz-sign[data-mode="card"] .hz-art,
+.hz-sign.hz-peeking .hz-art {
   display: block;
+  height: auto;
+  aspect-ratio: 4 / 5;
+  border-bottom: 0;
 }
-.hz-sign[data-mode="card"] .hz-text {
+.hz-sign[data-mode="card"] .hz-text,
+.hz-sign.hz-peeking .hz-text,
+.hz-sign.hz-noflyer[data-mode="card"] .hz-meta,
+.hz-sign.hz-noflyer.hz-peeking .hz-meta {
+  display: none;
+}
+.hz-sign.hz-noflyer[data-mode="card"] .hz-art,
+.hz-sign.hz-noflyer.hz-peeking .hz-art {
+  aspect-ratio: auto;
+  height: 72px;
+  border-bottom: 1px solid rgb(var(--hairline));
+}
+.hz-sign.hz-noflyer[data-mode="card"] .hz-text,
+.hz-sign.hz-noflyer.hz-peeking .hz-text {
   display: block;
   padding: 6px 8px 7px;
 }
-.hz-sign[data-mode="card"] .hz-name {
+.hz-sign[data-mode="card"] .hz-name,
+.hz-sign.hz-peeking .hz-name {
   display: -webkit-box;
   max-width: none;
   margin: 0;
@@ -567,18 +587,6 @@
   color: rgb(var(--text));
   -webkit-line-clamp: 2;
   -webkit-box-orient: vertical;
-}
-.hz-sign[data-mode="card"] .hz-meta {
-  white-space: normal;
-  flex-wrap: wrap;
-  justify-content: flex-start;
-  row-gap: 3px;
-  margin-top: 3px;
-  color: rgb(var(--text));
-}
-.hz-sign[data-mode="card"] .hz-drop {
-  border-color: rgb(var(--violet));
-  color: rgb(var(--violet));
 }
 /* Outside your radius: still there, still priced, just quieter */
 .hz-sign.hz-far {
@@ -612,43 +620,30 @@
   color: rgb(var(--text));
 }
 
-/* Desktop hover card over an event: above every banner, the bus and your dot (their z-index is 1 to 6) */
-.hz-peek {
-  z-index: 8;
+/* Desktop hover on a dot or its sign: the sign turns into its flyer card, above every banner,
+   the bus and your dot (their z-index is 1 to 6), with an orange tab saying what a click does. */
+.hz-sign.hz-peeking {
+  visibility: visible;
+  opacity: 1;
+  z-index: 7 !important;
 }
-.hz-peek .maplibregl-popup-content {
-  background: rgb(var(--card));
-  color: rgb(var(--text));
-  border: 1px solid rgb(var(--hairline));
-  border-radius: 6px;
-  padding: 10px 12px;
-  box-shadow: 0 8px 24px rgb(var(--shadow) / 0.45);
+.hz-sign.hz-peeking .hz-mini {
+  display: none;
 }
-.hz-peek.maplibregl-popup-anchor-bottom .maplibregl-popup-tip {
-  border-top-color: rgb(var(--hairline));
+.hz-tap {
+  display: none;
 }
-.hz-peek.maplibregl-popup-anchor-top .maplibregl-popup-tip {
-  border-bottom-color: rgb(var(--hairline));
-}
-.hz-peek-title {
-  font-family: var(--font-poppins), system-ui, sans-serif;
-  font-weight: 900;
-  font-size: 14px;
-  line-height: 1.2;
-  color: rgb(var(--text));
-}
-.hz-peek-sub {
-  margin-top: 2px;
-  font-family: var(--font-mono), monospace;
-  font-size: 10px;
-  color: rgb(var(--dim));
-}
-.hz-peek-meta {
-  margin-top: 6px;
+.hz-sign.hz-peeking .hz-tap {
+  display: block;
+  padding: 5px 6px;
+  background: #ff4d00;
+  color: #0e0b0a;
   font-family: var(--font-mono), monospace;
   font-weight: 500;
-  font-size: 11px;
-  color: rgb(var(--text));
+  font-size: 10px;
+  line-height: 1;
+  letter-spacing: 0.1em;
+  text-align: center;
 }
 
 /* The Hop on the map. Violet is the Hop's colour, so it only shows on the Hop's day:
