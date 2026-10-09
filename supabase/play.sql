@@ -13,9 +13,10 @@
 --   lagos_play_day()     the play-day (06:00 to 06:00 Lagos) a moment belongs to.
 --   game_drops           kind 'near' (a small box, only its owner sees it), claim
 --                        method 'avatar' (room for the spot boxes to come), and
---                        needs_presence: false for near boxes and welcome boxes A
---                        and B, which are opened by sending the avatar (no radius,
---                        no coordinates). Everything else keeps needing presence.
+--                        needs_presence: false for near boxes and all three welcome
+--                        boxes (A, B and C), which are opened by sending the avatar
+--                        (no radius, no coordinates). Everything else keeps needing
+--                        presence.
 --   play_fix             one row per Hopper: the last position the heartbeat saw,
 --                        rounded to 3 decimals (about 110 m), its accuracy and
 --                        time, and the small counters later phases use. RLS on,
@@ -31,8 +32,13 @@
 --                        than about 50 s, so on every third tick.
 --   claim_game_drop()    the spawning.sql version plus a remote path for boxes
 --                        with needs_presence = false.
---   spawn_welcome_boxes_for()   new layout: A 25 m, B 90 to 130 m, C 180 to 250 m
---                        (C needs real GPS); night 15 to 45 m for all three.
+--   spawn_welcome_boxes_for()   new layout: A 25 m, B 90 to 130 m, C 180 to 250 m;
+--                        night 15 to 45 m for all three. C, the far one, is reached
+--                        by the avatar run like A and B (no radius check), so every
+--                        Hopper can finish the intro. Walking yourself starts with
+--                        the special box. Welcome boxes made before this change and
+--                        not opened yet are switched to the avatar run when this
+--                        file is applied.
 --
 -- Guests (anonymous users) may call play_tick until their three welcome boxes
 -- are opened; after that it answers need_account. Guests get no small boxes.
@@ -66,8 +72,9 @@ grant execute on function public.lagos_play_day(timestamptz), public.lagos_play_
 
 -- ----------------------------------------------------- game_drops column ---
 -- true: you must be at the box with real GPS. false: send the avatar. Only near
--- boxes and your own welcome boxes are ever opened remotely (claim_game_drop
--- checks the kind and the owner too), so a wrong flag on a staff drop does no harm.
+-- boxes and your own welcome boxes (A, B and C) are ever opened remotely
+-- (claim_game_drop checks the kind and the owner too), so a wrong flag on a staff
+-- drop does no harm.
 alter table public.game_drops add column if not exists needs_presence boolean not null default true;
 
 -- --------------------------------------------------------------- play_fix ---
@@ -204,7 +211,7 @@ grant execute on function public.play_tick(double precision, double precision, d
 
 -- -------------------------------------------------------------- claiming ---
 -- spawning.sql's claim_game_drop with one addition (marked "remote path"): a
--- box with needs_presence = false (a small box, or your own welcome box A or B)
+-- box with needs_presence = false (a small box, or any of your own welcome boxes)
 -- opens without a radius check, a speed check or a position, and stores no
 -- coordinates. The account gate is unchanged: the drop_claims trigger in
 -- chat_accounts.sql still refuses guests, except for their own welcome boxes.
@@ -220,7 +227,7 @@ begin
   if d.owner_id is not null and d.owner_id<>auth.uid() then return jsonb_build_object('ok',false,'reason','not_yours'); end if;
   if not found or now()<d.opens_at or now()>d.closes_at then return jsonb_build_object('ok',false,'reason','closed'); end if;
   if d.max_claims is not null and d.claimed_count>=d.max_claims then return jsonb_build_object('ok',false,'reason','sold_out'); end if;
-  -- remote path (play.sql): a small box or a welcome box of your own that needs no presence. No radius, no speed rule, no coordinates stored.
+  -- remote path (play.sql): a small box or a welcome box of your own (A, B or C) that needs no presence. No radius, no speed rule, no coordinates stored.
   remote:=d.needs_presence is false and d.kind in ('near','welcome') and d.owner_id=auth.uid();
   if remote and d.kind<>'welcome' and not has_account() then return jsonb_build_object('ok',false,'reason','need_account'); end if;
   if remote then null;
@@ -268,11 +275,14 @@ end $$;
 
 -- ----------------------------------------------------------- welcome boxes ---
 -- Three personal boxes for a new Hopper, once. By day: A 25 m away, B 90 to 130 m,
--- C 180 to 250 m. At night all three sit 15 to 45 m away. A and B are opened by
--- sending the avatar (needs_presence false); C needs the Hopper's real GPS. Each
--- box turns its bearing until it clears every no-spawn zone; if none does, there
--- are no boxes this time ('no_clear_spot'). The three rows are stamped in order
--- (A, B, C) so play_tick can tell them apart. Service role only.
+-- C 180 to 250 m. At night all three sit 15 to 45 m away. All three are opened by
+-- sending the avatar (needs_presence false): C, the far one, is the avatar run (a
+-- short cutscene of the avatar running down the road), so everyone can finish the
+-- intro. There is no radius check and no coordinates are stored. Walking yourself
+-- comes later, with the special box. Each box turns its bearing until it clears
+-- every no-spawn zone; if none does, there are no boxes this time
+-- ('no_clear_spot'). The three rows are stamped in order (A, B, C) so play_tick
+-- can tell them apart. Service role only.
 create or replace function public.spawn_welcome_boxes_for(p_user uuid, p_lat double precision, p_lng double precision, p_night boolean)
 returns jsonb language plpgsql security definer set search_path = public as $$
 declare
@@ -300,7 +310,7 @@ begin
     end if;
     insert into game_drops (title, description, area, geog, opens_at, closes_at, radius_m, claim_method, max_claims, reward_model, kind, owner_id, needs_presence, active, created_at)
     values ('Welcome box', 'Just for you. Go find it.', public.lagos_area_for(pos), pos, now(), now() + interval '24 hours',
-            case when p_night then 80 else 60 end, 'proximity', 1, 'fixed', 'welcome', p_user, k = 3, true, clock_timestamp())
+            case when p_night then 80 else 60 end, 'proximity', 1, 'fixed', 'welcome', p_user, false, true, clock_timestamp())
     returning id into new_id;
     insert into drop_rewards (drop_id, reward_type, title, xp_amount)
     values (new_id, 'xp', case when k = 3 and not p_night then 'Worth the walk' else 'Welcome find' end, case when k = 3 and not p_night then 150 else 50 end);
@@ -310,6 +320,12 @@ begin
 end $$;
 revoke all on function public.spawn_welcome_boxes_for(uuid, double precision, double precision, boolean) from public, anon, authenticated;
 grant execute on function public.spawn_welcome_boxes_for(uuid, double precision, double precision, boolean) to service_role;
+
+-- Welcome boxes made before this change still ask the Hopper to walk to C. Switch
+-- the ones that are still open and unopened to the avatar run, so nobody is stuck
+-- on the far box. Opened and expired boxes are left as they were. Safe to run again.
+update public.game_drops set needs_presence = false
+where kind = 'welcome' and needs_presence and claimed_count = 0 and closes_at > now();
 
 -- ------------------------------------------------------------------ purge ---
 -- Rows of Hoppers who have not had Play open for 24 hours. Returns how many.

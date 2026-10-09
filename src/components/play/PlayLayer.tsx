@@ -90,7 +90,7 @@ const REFUSALS: Record<string, string> = {
 };
 const GONE = new Set(["closed", "sold_out", "already", "not_yours"]);
 
-/** Demo mode (development without a database): the same three welcome boxes and three small ones, around you. */
+/** Demo mode (development without a database): the same three welcome boxes (all sent by avatar) and three small ones, around you. */
 function demoBoxes(at: Pt): PlayBox[] {
   const closes = new Date(Date.now() + 24 * 3.6e6).toISOString();
   const spot = (id: string, kind: string, tier: PlayBox["tier"], east: number, north: number, slot: PlayBox["slot"], needsPresence = false): PlayBox => {
@@ -100,7 +100,7 @@ function demoBoxes(at: Pt): PlayBox[] {
   return [
     spot("demo-a", "welcome", "rare", 18, 17, "a"),
     spot("demo-b", "welcome", "rare", -85, 48, "b"),
-    spot("demo-c", "welcome", "legendary", 130, 170, "c", true),
+    spot("demo-c", "welcome", "legendary", 130, 170, "c"),
     spot("demo-n1", "near", "common", -70, -60, null),
     spot("demo-n2", "near", "common", 95, -40, null),
     spot("demo-n3", "near", "common", 20, -120, null),

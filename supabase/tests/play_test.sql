@@ -547,7 +547,7 @@ begin
     perform pg_temp.ok(abs(st_distance(o, (select geog from public.game_drops where id = ids[1])) - 25) < 0.5, 'A is 25 m away');
     perform pg_temp.ok(st_distance(o, (select geog from public.game_drops where id = ids[2])) between 89.5 and 130.5, 'B is 90 to 130 m away');
     perform pg_temp.ok(st_distance(o, (select geog from public.game_drops where id = ids[3])) between 179.5 and 250.5, 'C is 180 to 250 m away');
-    perform pg_temp.eq((select string_agg(needs_presence::text, ',' order by created_at) from public.game_drops where id = any (ids)), 'false,false,true', 'A and B send the avatar, C needs presence');
+    perform pg_temp.eq((select string_agg(needs_presence::text, ',' order by created_at) from public.game_drops where id = any (ids)), 'false,false,false', 'A, B and C all send the avatar (C is the avatar run)');
   end loop;
   select * into r from public.game_drops where id = ids[1];
   perform pg_temp.ok(r.kind = 'welcome' and r.owner_id = u and r.radius_m = 60 and r.max_claims = 1 and r.claim_method = 'proximity' and r.reward_model = 'fixed'
@@ -557,15 +557,19 @@ begin
   -- a repeat call changes nothing
   res := public.spawn_welcome_boxes_for(u, 6.3401, 3.4201, false);
   perform pg_temp.ok(res->>'already' = 'true' and not res ? 'ids', 'already');
-  -- night: all three 15 to 45 m, 50 XP each, C still needs presence
+  -- night: all three 15 to 45 m, 50 XP each, C is the avatar run too
   for i in 1..25 loop
     u := pg_temp.newuser();
     res := public.spawn_welcome_boxes_for(u, 6.3401, 3.4201, true);
     ids := array(select jsonb_array_elements_text(res->'ids')::uuid);
     perform pg_temp.ok((select bool_and(st_distance(o, g.geog) between 14.5 and 45.5 and g.radius_m = 80) from public.game_drops g where g.id = any (ids)), 'night boxes 15 to 45 m, radius 80');
-    perform pg_temp.eq((select string_agg(needs_presence::text, ',' order by created_at) from public.game_drops where id = any (ids)), 'false,false,true', 'night: C needs presence');
+    perform pg_temp.eq((select string_agg(needs_presence::text, ',' order by created_at) from public.game_drops where id = any (ids)), 'false,false,false', 'night: C is the avatar run too');
     perform pg_temp.eq((select string_agg(rw.xp_amount::text, ',' order by g.created_at) from public.drop_rewards rw join public.game_drops g on g.id = rw.drop_id where g.id = any (ids)), '50,50,50', 'night rewards');
   end loop;
+  -- the last night Hopper runs to C as well: 50 XP at night, no position stored
+  a := pg_temp.claim(u, ids[3]);
+  perform pg_temp.ok(a->>'ok' = 'true' and a->>'xp' = '50', 'night C opens with the avatar run: ' || a::text);
+  perform pg_temp.ok((select lat is null and lng is null from public.drop_claims where drop_id = ids[3] and user_id = u), 'no coordinates stored for night C');
   -- standing inside a big zone: no boxes, nothing left behind, and a clear place still works
   perform public.add_no_spawn_zone('big zone', 'test', 6.3401, 3.4401, 500);
   u := pg_temp.newuser();
@@ -582,7 +586,7 @@ end $t$;
 -- A guest: three welcome boxes, no account, then the account wall.
 do $t$
 declare
-  g uuid := pg_temp.newguest(); res jsonb; c jsonb; w jsonb; ids uuid[]; o geography := pg_temp.pt(6.3401, 3.4801); box_c record; xp0 integer; msg text;
+  g uuid := pg_temp.newguest(); u_other uuid := pg_temp.newuser(); res jsonb; c jsonb; w jsonb; ids uuid[]; o geography := pg_temp.pt(6.3401, 3.4801); box_c record; xp0 integer; msg text;
 begin
   -- a guest with no welcome boxes yet may call it
   res := pg_temp.tick(g, 6.3401, 3.4801, 10);
@@ -598,7 +602,7 @@ begin
   perform pg_temp.eq(jsonb_array_length(res->'boxes')::text, '3', 'the three welcome boxes');
   perform pg_temp.eq((select string_agg(b->>'slot', ',' order by ord) from jsonb_array_elements(res->'boxes') with ordinality as t(b, ord)), 'a,b,c', 'slots a, b, c');
   perform pg_temp.eq((select string_agg(b->>'tier', ',' order by ord) from jsonb_array_elements(res->'boxes') with ordinality as t(b, ord)), 'rare,rare,legendary', 'tiers');
-  perform pg_temp.eq((select string_agg(b->>'needs_presence', ',' order by ord) from jsonb_array_elements(res->'boxes') with ordinality as t(b, ord)), 'false,false,true', 'needs_presence');
+  perform pg_temp.eq((select string_agg(b->>'needs_presence', ',' order by ord) from jsonb_array_elements(res->'boxes') with ordinality as t(b, ord)), 'false,false,false', 'needs_presence');
   perform pg_temp.ok((select bool_and(b->>'kind' = 'welcome') from jsonb_array_elements(res->'boxes') b), 'all welcome');
   perform pg_temp.eq(res->>'welcome_left', '3', 'welcome_left');
   perform pg_temp.eq((select count(*) from public.game_drops where owner_id = g and kind = 'near')::text, '0', 'no small boxes for a guest');
@@ -627,14 +631,17 @@ begin
   perform pg_temp.eq(res->>'ok', 'true', 'still ok with one welcome box left');
   perform pg_temp.eq(res->>'welcome_left', '1', 'one left');
   perform pg_temp.eq(res->'boxes'->0->>'slot', 'c', 'it is C');
-  -- C needs presence: no remote path
-  perform pg_temp.eq(pg_temp.claim(g, ids[3])->>'reason', 'location_required', 'C needs a position');
+  -- C is the avatar run: no radius check, no position needed, none stored (even when a far-away fix is sent along)
   select * into box_c from public.game_drops where id = ids[3];
-  perform pg_temp.eq(pg_temp.claim(g, ids[3], 6.40, 3.60)->>'reason', 'too_far', 'C checks the radius');
-  c := pg_temp.claim(g, ids[3], pg_temp.lat(box_c.geog), pg_temp.lng(box_c.geog));
-  perform pg_temp.eq(c->>'ok', 'true', 'C opens at its position: ' || c::text);
+  perform pg_temp.ok(box_c.needs_presence is false and box_c.kind = 'welcome' and box_c.owner_id = g, 'C is a remote welcome box of the guest');
+  perform pg_temp.ok(st_distance(o, box_c.geog) between 179.5 and 250.5, 'C still sits 180 to 250 m away');
+  perform pg_temp.eq(pg_temp.claim(u_other, ids[3])->>'reason', 'not_yours', 'nobody else can run to the guest''s C');
+  c := pg_temp.claim(g, ids[3], 6.40, 3.60);
+  perform pg_temp.eq(c->>'ok', 'true', 'C opens with the avatar run: ' || c::text);
   perform pg_temp.eq(c->>'xp', '150', 'C pays 150');
-  perform pg_temp.ok((select lat is not null from public.drop_claims where drop_id = ids[3] and user_id = g), 'a located welcome claim keeps its position');
+  perform pg_temp.ok((select lat is null and lng is null from public.drop_claims where drop_id = ids[3] and user_id = g), 'no coordinates stored for C');
+  perform pg_temp.eq((select xp - xp0 from public.profiles where id = g)::text, '250', '100 XP from A and B and 150 from C');
+  perform pg_temp.ok(pg_temp.claim(g, ids[3])->>'reason' in ('sold_out', 'already'), 'C cannot be opened twice');
 
   -- three welcome boxes opened: the guest now needs an account
   perform pg_temp.age_fix(g, 20, 60);

@@ -510,7 +510,7 @@ begin
   perform pg_temp.eq((select count(*) from public.game_drops g join public.no_spawn_zones z on st_intersects(z.geog, g.geog) where g.id = any (ids))::text, '0', 'no welcome box in the zone');
   perform pg_temp.eq((select string_agg(r.title || ' ' || r.xp_amount, ', ' order by r.xp_amount, r.title) from public.drop_rewards r where r.drop_id = any (ids)),
                      'Welcome find 50, Welcome find 50, Worth the walk 150', 'day rewards');
-  perform pg_temp.ok((select r.title = 'Worth the walk' from public.drop_rewards r join public.game_drops g on g.id = r.drop_id where g.id = any (ids) and g.needs_presence), 'the box that needs presence pays the most');
+  perform pg_temp.ok((select r.title = 'Worth the walk' from public.drop_rewards r where r.drop_id = any (ids) and r.xp_amount = 150), 'the far box pays the most');
   delete from public.spawn_points;
   raise notice 'ok: f) welcome by day, layout';
 end $t$;
@@ -654,18 +654,16 @@ begin
   perform pg_temp.as_admin();
 
   -- only the owner can open one
-  -- C is the box that needs presence (A and B are opened by sending the avatar, see play_test.sql)
-  select id, geog into v_box, v_g from public.game_drops g where g.id = any (ids) and g.needs_presence limit 1;
+  -- C is the far box: it opens by the avatar run (no radius check), and only for its owner
+  select g.id, g.geog into v_box, v_g from public.game_drops g join public.drop_rewards r on r.drop_id = g.id where g.id = any (ids) and r.title = 'Worth the walk' limit 1;
   perform pg_temp.as_user(uo);
   res := public.claim_game_drop(v_box, pg_temp.lat(v_g), pg_temp.lng(v_g));
   perform pg_temp.as_admin();
   perform pg_temp.eq(res->>'reason', 'not_yours', 'another Hopper cannot open it');
   perform pg_temp.as_user(uw);
   res := public.claim_game_drop(v_box, pg_temp.lat(pg_temp.off(v_g, 400, 0)), pg_temp.lng(pg_temp.off(v_g, 400, 0)));
-  perform pg_temp.eq(res->>'reason', 'too_far', 'the owner still has to be there');
-  res := public.claim_game_drop(v_box, pg_temp.lat(v_g), pg_temp.lng(v_g));
   perform pg_temp.as_admin();
-  perform pg_temp.ok(res->>'ok' = 'true' and (res->>'xp')::integer in (50, 150), 'the owner opens it: ' || res::text);
+  perform pg_temp.ok(res->>'ok' = 'true' and (res->>'xp')::integer in (50, 150), 'the owner opens it by the avatar run, from far away: ' || res::text);
   perform pg_temp.as_user(uw);
   res := public.claim_game_drop(v_box, pg_temp.lat(v_g), pg_temp.lng(v_g));
   perform pg_temp.as_admin();

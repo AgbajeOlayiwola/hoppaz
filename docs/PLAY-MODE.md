@@ -336,6 +336,7 @@ Asked of Ola, not done by us: a server-verified boarding function for `hop_rider
 | Alerts per Hopper: Off, A few, All, with Android push in Phase 6 | No alerts |
 | Events as spots, the venue-verified flag and organiser box rules move to Phase 8; check-in is only tightened now | Events as big spots in v1 |
 | Pushes go to jae/ui-refresh on Ola's repo only | New branch jae/play-v2 |
+| Welcome box C is opened by the avatar run like A and B (no radius check, no coordinates), so every Hopper can finish the intro; walking yourself starts with the special box. Sections 11, 13 and 14 still say real GPS for C: read them with this change. Also new: `supabase/starter_quests.sql` gives every live event its quest kit | Welcome C needed real GPS |
 
 ## 20. Choices made for Jae (reply only if you object)
 

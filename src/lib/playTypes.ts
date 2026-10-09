@@ -4,7 +4,7 @@ export type PlayTier = "common" | "rare" | "epic" | "legendary";
 /**
  * One of the Hopper's own boxes on the Play map, as play_tick returns it
  * (docs/PLAY-API.md). `needsPresence` false means send the avatar (small boxes,
- * welcome A and B); true means walk there (welcome C, and the special box later).
+ * welcome A, B and C); true means walk there (the special box later).
  */
 export type PlayBox = {
   /** The game_drops id, for claim_game_drop. */
@@ -16,7 +16,7 @@ export type PlayBox = {
   lng: number;
   closesAt: string;
   needsPresence: boolean;
-  /** Welcome boxes only: A is the four-box reveal, B is the second run, C needs the walk. */
+  /** Welcome boxes only: A is the four-box reveal, B is the second run, C is the far one, reached by the avatar run too. */
   slot: "a" | "b" | "c" | null;
 };
 

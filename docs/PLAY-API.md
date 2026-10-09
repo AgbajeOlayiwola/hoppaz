@@ -87,6 +87,8 @@ A Hopper standing inside a no-spawn zone (lagoon, military site, estate) gets `o
 
 `spawn_welcome_boxes(p_lat, p_lng)` keeps its signature and answer (`ok`, `already`, `night`, `ids`, or `reason` `no_session`, `location_required`, `outside_lagos`, `no_clear_spot`). Only the layout changed (above). `play_tick` returns the three boxes once they exist; it does not create them. Call `spawn_welcome_boxes` first, with a fresh fix.
 
+Change, 9 Oct 2026: welcome C is opened by the avatar run like A and B (`needs_presence` is `false` for slot `c`, day and night; `claim_game_drop` takes no coordinates for it and stores none), so every Hopper can finish the intro; read the C notes above (the `slot` row, the presence and `location_required` lines) with this change. Also new: `supabase/starter_quests.sql` (run after play.sql) gives every live event its quest kit and repairs `claim_quest`; the app contract does not change.
+
 ## `claim_game_drop(p_drop, p_lat, p_lng, p_code)`
 
 Same function and same answer as before, plus a remote path.
