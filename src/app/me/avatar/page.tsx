@@ -1,6 +1,7 @@
 "use client";
 
 import { useMemo, useState } from "react";
+import RequireAccount from "@/components/app/RequireAccount";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { ArrowLeft, Shuffle } from "lucide-react";
@@ -29,7 +30,7 @@ const lum = (hex: string) => {
 };
 const SKIN_ORDER = SKINS.map((hex, i) => ({ hex, i })).sort((a, b) => lum(a.hex) - lum(b.hex));
 
-export default function AvatarEditor() {
+function AvatarEditorPage() {
   const router = useRouter();
   const { profile, patchProfile } = useSession();
   const stored = useHoppaz((s) => s.look);
@@ -349,5 +350,14 @@ function Tile({
         <span className="block truncate font-display text-[11px] font-black leading-tight">{name}</span>
       </span>
     </button>
+  );
+}
+
+/** Needs an account: anonymous Hoppers get the sign-up here instead. */
+export default function AvatarEditor() {
+  return (
+    <RequireAccount title="Dress your Hopper." caption="Make an account and your look shows up on the map, in chat and with your crew.">
+      <AvatarEditorPage />
+    </RequireAccount>
   );
 }

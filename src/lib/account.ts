@@ -4,9 +4,10 @@ import { useCallback, useEffect, useState } from "react";
 import { getSupabase } from "./supabase/client";
 
 /**
- * Accounts, the client half. Nobody has to make one: the map, rooms and
- * check-ins all work anonymously. An account (name, email, password, gender)
- * is what lets you wave, add people to your crew and chat privately.
+ * Accounts, the client half. Browsing is open to everyone; an account (name,
+ * email, password: three fields, nothing else) is what lets you say WE OUTSIDE,
+ * check in, earn rewards, crew up and chat privately. See accountGate.ts.
+ * Everything else (gender, then birthday) is asked later, one question a day.
  */
 
 export type Gender = "female" | "male" | "other";
@@ -17,7 +18,7 @@ export const GENDERS: ReadonlyArray<[Gender, string]> = [
 ];
 
 /** Returns an error line, or null once the Hopper is signed in to the new account. */
-export async function createAccount(input: { name: string; email: string; password: string; gender: Gender }): Promise<string | null> {
+export async function createAccount(input: { name: string; email: string; password: string; gender?: Gender }): Promise<string | null> {
   const sb = getSupabase();
   if (!sb) return "Not connected";
   const { data } = await sb.auth.getSession();
@@ -26,7 +27,7 @@ export async function createAccount(input: { name: string; email: string; passwo
     // No anonymous session to upgrade (anonymous sign-ins switched off): a plain sign-up.
     const { error } = await sb.auth.signUp({ email: input.email, password: input.password, options: { data: { name: input.name } } });
     if (error) return error.message;
-    await sb.rpc("set_private_details", { p_gender: input.gender });
+    if (input.gender) await sb.rpc("set_private_details", { p_gender: input.gender });
     return null;
   }
   const res = await fetch("/api/account/create", {
@@ -62,8 +63,9 @@ type Details = { gender: Gender | null; birthday: string | null; account_at: str
  * What to ask an account holder, one question at a time, each only once the
  * account is old enough. Add the next question here; nothing else changes.
  */
-export const ASKS: ReadonlyArray<{ key: "birthday"; afterDays: number; missing: (d: Details) => boolean }> = [
-  { key: "birthday", afterDays: 1, missing: (d) => !d.birthday },
+export const ASKS: ReadonlyArray<{ key: "gender" | "birthday"; afterDays: number; missing: (d: Details) => boolean }> = [
+  { key: "gender", afterDays: 1, missing: (d) => !d.gender },
+  { key: "birthday", afterDays: 2, missing: (d) => !d.birthday },
 ];
 
 const SNOOZE = "hoppaz.ask-snooze";
@@ -114,10 +116,10 @@ export function useNextAsk(userId: string | null, hasAccount: boolean) {
     }
   }, []);
 
-  const answer = useCallback(async (patch: { birthday?: string }) => {
+  const answer = useCallback(async (patch: { birthday?: string; gender?: Gender }) => {
     const sb = getSupabase();
     if (!sb) return false;
-    const { data } = await sb.rpc("set_private_details", { p_birthday: patch.birthday ?? null });
+    const { data } = await sb.rpc("set_private_details", { p_gender: patch.gender ?? null, p_birthday: patch.birthday ?? null });
     if (data) setDetails((d) => (d ? { ...d, ...patch } : d));
     return !!data;
   }, []);

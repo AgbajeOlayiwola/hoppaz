@@ -8,7 +8,7 @@ const GENDERS=new Set(["female","male","other"]);
 
 /**
  * Turns the Hopper's anonymous user into an account: same user id, so XP,
- * badges, check-ins and chats come along. Name, email, password and gender only;
+ * badges, check-ins and chats come along. Name, email and password only (gender is optional here and asked later);
  * everything else is asked for later, a bit at a time. Done here with the
  * service role so it takes effect at once, without a confirmation email.
  */
@@ -25,7 +25,6 @@ export async function POST(req:Request){
   if(!name)return NextResponse.json({error:"Add your name"},{status:400});
   if(!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)||email.length>200)return NextResponse.json({error:"That email doesn't look right"},{status:400});
   if(password.length<8||password.length>72)return NextResponse.json({error:"Use at least 8 characters for the password"},{status:400});
-  if(!gender)return NextResponse.json({error:"Pick a gender"},{status:400});
 
   const userClient=createClient(url,anon,{auth:{persistSession:false},global:{headers:{Authorization:`Bearer ${bearer}`}}});
   const {data:{user},error:authError}=await userClient.auth.getUser();if(authError||!user)return NextResponse.json({error:"Session expired, reload and try again"},{status:401});

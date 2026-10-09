@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useState } from "react";
 import { getSupabase } from "./supabase/client";
+import { NEED_ACCOUNT, requireAccount } from "./accountGate";
 
 export type Collectible = { id: string; key: string; name: string; description: string; emoji: string; art_url: string | null };
 export type CollectibleDrop = { id: string; event_id: string; collectible: Collectible };
@@ -24,6 +25,7 @@ export function useEventCollectibles(eventId: string, userId: string | null) {
   useEffect(() => { void reload(); }, [reload]);
   const collect = useCallback(async (dropId: string, fix: { lat: number; lng: number } | null) => {
     const sb = getSupabase();
+    if (sb && !requireAccount("collect this")) return NEED_ACCOUNT;
     if (!sb || !fix) return "SET YOUR LOCATION FIRST";
     setBusy(dropId);
     const { data, error } = await sb.rpc("claim_collectible", { p_drop_id: dropId, p_lat: fix.lat, p_lng: fix.lng });

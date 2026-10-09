@@ -546,3 +546,31 @@ begin
      order by r.updated_at
      limit 200;
 end $$;
+
+-- -------------------------------------------------- doing things needs an account -----
+-- Browsing and chat are open to everyone. Saying you're going, checking in,
+-- claiming rewards and crews need an account (email + password). The app asks
+-- first (accountGate.ts); this makes it true for anyone calling the database
+-- directly, so XP can't be farmed with throwaway anonymous sessions.
+-- Staff tools use the service role (no auth.uid()), so they pass.
+create or replace function public.require_account_row()
+returns trigger language plpgsql security definer set search_path = public as $$
+begin
+  -- "Nah" is open. (Nested: NEW has no decision column on the other tables.)
+  if tg_table_name = 'swipes' then
+    if (to_jsonb(new) ->> 'decision') <> 'in' then return new; end if;
+  end if;
+  if auth.uid() is not null and not has_account() then raise exception 'need_account'; end if;
+  return new;
+end $$;
+
+do $$
+declare t text;
+begin
+  foreach t in array array['swipes', 'checkins', 'collections', 'drop_claims', 'quest_claims',
+                           'crews', 'crew_members', 'crew_move_rsvps'] loop
+    execute format('drop trigger if exists %I on public.%I', t || '_needs_account', t);
+    execute format('create trigger %I before insert on public.%I for each row execute function public.require_account_row()',
+                   t || '_needs_account', t);
+  end loop;
+end $$;

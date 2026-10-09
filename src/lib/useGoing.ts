@@ -1,8 +1,10 @@
 "use client";
 
-import { useCallback, useEffect } from "react";
+import { useCallback, useEffect, useRef } from "react";
 import { create } from "zustand";
 import { getSupabase } from "./supabase/client";
+import { NEED_ACCOUNT, requireAccount } from "./accountGate";
+import { useSessionStore } from "./useSession";
 
 /**
  * "I'm going", shared by the event page, the Today list and the swipe mode.
@@ -91,15 +93,19 @@ export function useGoing(userId: string | null) {
         if (decision === "in") markFirstGoing();
         return null;
       }
-      if (!userId) return "Still connecting. Try again in a moment.";
+      // Saying you're going needs an account; the sheet opens and finishes this after.
+      if (decision === "in" && !requireAccount("say we outside", () => void decideRef.current(eventId, decision))) return NEED_ACCOUNT;
+      // Read the id fresh: a log-in from the sheet may have just swapped users.
+      const uid = useSessionStore.getState().userId ?? userId;
+      if (!uid) return "Still connecting. Try again in a moment.";
       setBusy(eventId, true);
       try {
         if (eventId in useGoingStore.getState().decisions) {
-          const { error } = await sb.from("swipes").delete().eq("user_id", userId).eq("event_id", eventId);
+          const { error } = await sb.from("swipes").delete().eq("user_id", uid).eq("event_id", eventId);
           if (error) return "That didn't save. Try again.";
         }
         if (decision) {
-          const { error } = await sb.from("swipes").insert({ user_id: userId, event_id: eventId, decision });
+          const { error } = await sb.from("swipes").insert({ user_id: uid, event_id: eventId, decision });
           if (error) return "That didn't save. Try again.";
         }
         setDecision(eventId, decision);
@@ -111,6 +117,12 @@ export function useGoing(userId: string | null) {
     },
     [userId, setBusy, setDecision]
   );
+
+  // The sheet finishes a gated decision later; this always reaches the newest decide.
+  const decideRef = useRef(decide);
+  useEffect(() => {
+    decideRef.current = decide;
+  });
 
   /** I'M GOING toggles: going -> not decided, anything else -> going. */
   const toggleGoing = useCallback(

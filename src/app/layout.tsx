@@ -17,6 +17,7 @@ import Toaster from "@/components/Toaster";
 import ThemeClock from "@/components/ThemeClock";
 import OfflineLine from "@/components/app/OfflineLine";
 import InstallSheet from "@/components/app/InstallSheet";
+import SignupSheet from "@/components/app/SignupSheet";
 import { THEME_BOOT_SCRIPT } from "@/lib/theme";
 
 export const metadata: Metadata = {
@@ -59,6 +60,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
           <BottomNav />
         </div>
         <Toaster />
+        <SignupSheet />
         <InstallSheet />
       </body>
     </html>

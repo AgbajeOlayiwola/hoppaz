@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useState } from "react";
+import RequireAccount from "@/components/app/RequireAccount";
 import { useRouter } from "next/navigation";
 import { FileText, Gift, Link2, Ticket } from "lucide-react";
 import Sheet from "@/components/Sheet";
@@ -22,7 +23,7 @@ import { useSession } from "@/lib/useSession";
 import { useHoppaz, useToast } from "@/lib/store";
 import { BADGES, levelFor, statusFor } from "@/lib/brand";
 import { useGameDashboard, useGameDrops } from "@/lib/game";
-import { useNextAsk } from "@/lib/account";
+import { GENDERS, useNextAsk } from "@/lib/account";
 import type { Profile } from "@/lib/types";
 
 type CatalogBadge = { key: string; name: string; icon: string; description: string };
@@ -36,7 +37,7 @@ const DAY_MS = 24 * 3.6e6;
 /** Today's date in Lagos, for "first open of the day". */
 const lagosToday = () => new Date(Date.now() + 3.6e6).toISOString().slice(0, 10);
 
-export default function MePage() {
+function MePagePage() {
   const session = useSession();
   const { userId, email, hasAccount, state } = session;
   const ask = useNextAsk(userId, hasAccount);
@@ -287,6 +288,31 @@ export default function MePage() {
         </RowGroup>
       </section>
 
+      {ask.next?.key === "gender" && (
+        <div className="card mt-4">
+          <p className="font-display font-black">One quick one: your gender?</p>
+          <p className="hint mt-0.5">Helps us plan nights for everyone. Only you see this.</p>
+          <div role="group" aria-label="Your gender" className="mt-3 flex flex-wrap gap-1.5">
+            {GENDERS.map(([k, label]) => (
+              <button
+                key={k}
+                type="button"
+                className="chip min-h-[44px] px-4"
+                onClick={async () => {
+                  const saved = await ask.answer({ gender: k });
+                  say(saved ? "Saved. Thanks." : "That didn't save. Try again.", saved ? "ok" : "error");
+                }}
+              >
+                {label}
+              </button>
+            ))}
+          </div>
+          <button type="button" className="mt-2 min-h-[44px] font-body text-[14px] text-dim underline underline-offset-4" onClick={ask.later}>
+            Later
+          </button>
+        </div>
+      )}
+
       {ask.next?.key === "birthday" && (
         <form
           className="card mt-4"
@@ -349,5 +375,14 @@ export default function MePage() {
 
       <AreaPicker open={picking} onClose={() => setPicking(false)} onPicked={(area) => void patchProfile({ area })} />
     </div>
+  );
+}
+
+/** Needs an account: anonymous Hoppers get the sign-up here instead. */
+export default function MePage() {
+  return (
+    <RequireAccount title="Make it yours." caption="Your nights, XP, badges and your Hopper live here.">
+      <MePagePage />
+    </RequireAccount>
   );
 }
