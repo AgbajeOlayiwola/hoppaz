@@ -24,6 +24,7 @@ const HOW: Record<GameDrop["claim_method"], string> = {
   proximity: "Claim it at the venue.",
   qr: "Scan the venue code to claim.",
   either: "Claim at the venue, or scan its code.",
+  avatar: "Send your avatar to open it, in Play.",
 };
 
 /**
