@@ -2,7 +2,7 @@
 
 What `supabase/play.sql` gives the app. Everything is an RPC called with the signed-in session (anonymous guests count as signed in). Spec: [PLAY-MODE.md](PLAY-MODE.md). Plan: [PLAY-BUILD-PLAN.md](PLAY-BUILD-PLAN.md). Tests: `supabase/tests/play_test.sql`.
 
-Load order: schema.sql, chat_accounts.sql, hunt_items.sql, spawning.sql, spawn_points_lagos.sql, box_guards.sql, daily_box.sql, then play.sql last. Re-running spawning.sql or schema.sql puts the old `claim_game_drop` and welcome layout back, so run play.sql again after them.
+Load order: schema.sql, chat_accounts.sql, hunt_items.sql, spawning.sql, spawn_points_lagos.sql, box_guards.sql, daily_box.sql, then play.sql, then push.sql (Spawn alerts: it needs play.sql's `play_fix`). Re-running spawning.sql or schema.sql puts the old `claim_game_drop` and welcome layout back, so run play.sql again after them (and push.sql after that, if it was loaded).
 
 ## `play_tick(p_lat, p_lng, p_accuracy)`
 

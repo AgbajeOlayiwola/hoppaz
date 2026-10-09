@@ -45,6 +45,10 @@ accounts, event operators, and real partner approvals.
   photos appear in browser responses or public pages.
 - [ ] Smoke-test the deployed app on a current mobile browser and desktop browser.
 - [ ] Confirm Vercel rollback and Supabase backup/recovery procedures are understood.
+- [ ] Before any real Hopper gets Play: check how long the Supabase plan keeps backups
+  (deleted `play_fix` rows and box positions stay in a backup until it expires), write
+  the number here, and keep the "Play and spawn alerts" section of the privacy page
+  true to it. When the 48 hour blanking job (Phase 2) ships, say "48 hours" plainly there.
 
 The schema and screens are prepared in the repository, but a real cloud project,
 production credentials, verified content, partner approvals, and owner privacy details

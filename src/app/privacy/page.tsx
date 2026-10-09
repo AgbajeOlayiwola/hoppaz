@@ -18,6 +18,10 @@ const SECTIONS: Array<{ title: string; body: string }> = [
     body: "If you allow device location, Hoppaz sends your coordinates to verify proximity to an event or drop. The verification functions use those coordinates to return a distance decision; they do not write the submitted coordinates into the activity ledger. The app may remember your selected location on this device. Your exact device coordinates are not shown to other people. Your selected home area and profile are used for the features you enable, such as crew pins.",
   },
   {
+    title: "Play and spawn alerts",
+    body: "While Play is open, the app sends your position to Hoppaz about every 20 seconds so boxes can be placed near you. The server keeps one copy of your last location, rounded to about 110 metres and overwritten each time, and nobody else can read it. A nightly clean-up deletes it once it is more than 24 hours old. A box placed for you keeps its position with the box record, and opening a box in person stores where you stood. We are building the clean-up that clears those box positions 48 hours after a box closes, and until it is live they are kept. If you turn on spawn alerts, we keep your browser's push address and keys (what your browser gives us so it can be reached) until you turn alerts off or remove your account, and alerts travel through your browser's push service, such as Google, Mozilla or Apple. Hoppaz uses your rounded location to decide whether a new spot is near you. Supabase keeps database backups on its own schedule, so a deleted row can remain in a backup for a while before it expires.",
+  },
+  {
     title: "Photos and messages",
     body: "Event photos are private while awaiting review. Approved photos are displayed in Hoppaz with time-limited image access. Chat messages are visible in their room or private thread; moderators may resolve reported content and can map anonymous room aliases to an account when investigating abuse. Blocking and reporting are available in chat.",
   },
