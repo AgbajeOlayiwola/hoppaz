@@ -128,7 +128,10 @@ on conflict (name) do nothing;
 -- ----------------------------------------------------- game_drops columns ---
 alter table public.game_drops add column if not exists kind text not null default 'staff';
 alter table public.game_drops drop constraint if exists game_drops_kind_check;
-alter table public.game_drops add constraint game_drops_kind_check check (kind in ('staff','spawn','welcome'));
+alter table public.game_drops add constraint game_drops_kind_check check (kind in ('staff','spawn','welcome','near','special'));
+-- the full lists, so this file still runs once play.sql has made near, special or avatar rows
+alter table public.game_drops drop constraint if exists game_drops_claim_method_check;
+alter table public.game_drops add constraint game_drops_claim_method_check check (claim_method in ('proximity','qr','either','avatar'));
 alter table public.game_drops add column if not exists spawn_point_id uuid references public.spawn_points(id) on delete set null;
 alter table public.game_drops add column if not exists spawn_rule_id uuid references public.spawn_rules(id) on delete set null;
 alter table public.game_drops add column if not exists owner_id uuid references public.profiles(id) on delete cascade;

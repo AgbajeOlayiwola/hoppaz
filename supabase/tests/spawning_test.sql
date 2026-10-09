@@ -105,6 +105,15 @@ begin
   return v;
 end $f$;
 
+
+-- the welcome layout of play.sql: A 25 m, B 90 to 130 m, C 180 to 250 m (rows are stamped in that order)
+create function pg_temp.layout_ok(p_ids uuid[], p_origin geography) returns boolean language sql as $f$
+  select string_agg(case when r.rn = 1 then (abs(st_distance(r.geog, p_origin) - 25) < 0.5)::text
+                         when r.rn = 2 then (st_distance(r.geog, p_origin) between 89.5 and 130.5)::text
+                         else (st_distance(r.geog, p_origin) between 179.5 and 250.5)::text end, ',' order by r.rn) = 'true,true,true'
+  from (select g.geog, row_number() over (order by g.created_at, g.id) rn from public.game_drops g where g.id = any (p_ids)) r;
+$f$;
+
 -- ----------------------------------------------------------------- setup ---
 do $t$
 declare n text;
@@ -483,38 +492,30 @@ begin
 end $t$;
 
 -- ----------------------------------------------------- f) welcome boxes ---
--- By day: spots in range are used; decoys (too near, in the gap, too far, in a zone, inactive) are not.
+-- By day: the layout no longer follows spawn spots (play.sql): A 25 m, B 90 to 130 m, C 180 to 250 m, whatever spots are around.
 do $t$
 declare
   w geography := pg_temp.pt(6.34, 3.20); v_u uuid := pg_temp.newuser(); res jsonb; ids uuid[];
-  p1 geography := pg_temp.off(pg_temp.pt(6.34, 3.20), 200, 20); p2 geography := pg_temp.off(pg_temp.pt(6.34, 3.20), 300, 200); p3 geography := pg_temp.off(pg_temp.pt(6.34, 3.20), 1000, 110);
-  v_hits integer;
 begin
-  perform pg_temp.mkspot('near 1', 'park', p1, null);
-  perform pg_temp.mkspot('near 2', 'park', p2, null);
-  perform pg_temp.mkspot('far 1', 'park', p3, null);
-  perform pg_temp.mkspot('too near', 'park', pg_temp.off(w, 50, 300), null, false, 1000);
-  perform pg_temp.mkspot('in the gap', 'park', pg_temp.off(w, 520, 60), null, false, 1000);
-  perform pg_temp.mkspot('too far', 'park', pg_temp.off(w, 2000, 250), null, false, 1000);
-  perform pg_temp.mkspot('in a zone', 'park', pg_temp.off(w, 250, 330), null, false, 1000);
-  perform pg_temp.mkspot('inactive', 'park', pg_temp.off(w, 300, 100), null, false, 1000, false);
+  perform pg_temp.mkspot('near 1', 'park', pg_temp.off(w, 200, 20), null);
+  perform pg_temp.mkspot('near 2', 'park', pg_temp.off(w, 300, 200), null);
+  perform pg_temp.mkspot('far 1', 'park', pg_temp.off(w, 1000, 110), null);
   perform public.add_no_spawn_zone('welcome zone', 'test', pg_temp.lat(pg_temp.off(w, 250, 330)), pg_temp.lng(pg_temp.off(w, 250, 330)), 60);
   res := public.spawn_welcome_boxes_for(v_u, 6.34, 3.20, false);
   perform pg_temp.ok(res->>'ok' = 'true' and res->>'already' = 'false' and res->>'night' = 'false', 'day result shape: ' || res::text);
   ids := array(select jsonb_array_elements_text(res->'ids')::uuid);
   perform pg_temp.eq(cardinality(ids)::text, '3', 'three day boxes');
   perform pg_temp.eq((select count(*) from public.game_drops where id = any (ids) and radius_m = 60 and kind = 'welcome' and owner_id = v_u)::text, '3', 'day radius 60');
-  select count(*) into v_hits from public.game_drops g where g.id = any (ids) and (st_dwithin(g.geog, p1, 1) or st_dwithin(g.geog, p2, 1));
-  perform pg_temp.eq(v_hits::text, '2', 'two boxes at the close spots');
-  perform pg_temp.eq((select count(*) from public.game_drops g where g.id = any (ids) and st_dwithin(g.geog, p3, 1))::text, '1', 'one box at the far spot');
+  perform pg_temp.ok(pg_temp.layout_ok(ids, w), 'A 25 m, B 90 to 130 m, C 180 to 250 m');
+  perform pg_temp.eq((select count(*) from public.game_drops g join public.no_spawn_zones z on st_intersects(z.geog, g.geog) where g.id = any (ids))::text, '0', 'no welcome box in the zone');
   perform pg_temp.eq((select string_agg(r.title || ' ' || r.xp_amount, ', ' order by r.xp_amount, r.title) from public.drop_rewards r where r.drop_id = any (ids)),
                      'Welcome find 50, Welcome find 50, Worth the walk 150', 'day rewards');
-  perform pg_temp.ok((select r.title = 'Worth the walk' from public.drop_rewards r join public.game_drops g on g.id = r.drop_id where g.id = any (ids) and st_dwithin(g.geog, p3, 1)), 'the far box pays the most');
+  perform pg_temp.ok((select r.title = 'Worth the walk' from public.drop_rewards r join public.game_drops g on g.id = r.drop_id where g.id = any (ids) and g.needs_presence), 'the box that needs presence pays the most');
   delete from public.spawn_points;
-  raise notice 'ok: f) welcome by day, spots';
+  raise notice 'ok: f) welcome by day, layout';
 end $t$;
 
--- By day with no spots: offsets 200, 320 and 900 m. By night: three boxes 15 to 45 m away.
+-- By day: the layout again. By night: three boxes 15 to 45 m away.
 do $t$
 declare
   v_u uuid := pg_temp.newuser(); v_n uuid := pg_temp.newuser(); res jsonb; ids uuid[];
@@ -522,7 +523,7 @@ declare
 begin
   res := public.spawn_welcome_boxes_for(v_u, 6.34, 3.30, false);
   ids := array(select jsonb_array_elements_text(res->'ids')::uuid);
-  perform pg_temp.eq((select string_agg(round(pg_temp.dist(g.geog, wd))::text, ',' order by pg_temp.dist(g.geog, wd)) from public.game_drops g where g.id = any (ids)), '200,320,900', 'day fallback distances');
+  perform pg_temp.ok(pg_temp.layout_ok(ids, wd), 'day fallback distances');
   perform pg_temp.eq((select string_agg(r.xp_amount::text, ',' order by r.xp_amount) from public.drop_rewards r where r.drop_id = any (ids)), '50,50,150', 'day fallback rewards');
 
   res := public.spawn_welcome_boxes_for(v_n, 6.34, 3.50, true);
@@ -562,7 +563,7 @@ begin
     res := public.spawn_welcome_boxes_for(pg_temp.newuser(), 6.34, 3.40, false);
     ids := array(select jsonb_array_elements_text(res->'ids')::uuid);
     perform pg_temp.ok(not exists (select 1 from public.game_drops g join public.no_spawn_zones z on st_intersects(z.geog, g.geog) where g.id = any (ids) and z.name = 'day zone'), 'day box inside a zone');
-    perform pg_temp.eq((select string_agg(round(pg_temp.dist(g.geog, wz))::text, ',' order by pg_temp.dist(g.geog, wz)) from public.game_drops g where g.id = any (ids)), '200,320,900', 'day boxes kept their distances');
+    perform pg_temp.ok(pg_temp.layout_ok(ids, wz), 'day boxes kept their distances');
   end loop;
   -- standing inside a big zone: nowhere is clear, so nothing is made and nothing is left behind
   perform public.add_no_spawn_zone('big zone', 'test', 6.34, 3.70, 500);
@@ -590,7 +591,7 @@ begin
       res := public.spawn_welcome_boxes_for(pg_temp.newuser(), lat0, 4.50, false);
       ids := array(select jsonb_array_elements_text(res->'ids')::uuid);
       perform pg_temp.ok(not exists (select 1 from public.game_drops g join public.no_spawn_zones sea on st_intersects(sea.geog, g.geog) where g.id = any (ids) and sea.id = z), 'day box in the water at ' || lat0);
-      perform pg_temp.eq((select string_agg(round(pg_temp.dist(g.geog, pg_temp.pt(lat0, 4.50)))::text, ',' order by pg_temp.dist(g.geog, pg_temp.pt(lat0, 4.50))) from public.game_drops g where g.id = any (ids)), '200,320,900', 'day boxes at the coast kept their distances');
+      perform pg_temp.ok(pg_temp.layout_ok(ids, pg_temp.pt(lat0, 4.50)), 'day boxes at the coast kept their distances');
       res := public.spawn_welcome_boxes_for(pg_temp.newuser(), lat0, 4.50, true);
       ids := array(select jsonb_array_elements_text(res->'ids')::uuid);
       perform pg_temp.ok(not exists (select 1 from public.game_drops g join public.no_spawn_zones sea on st_intersects(sea.geog, g.geog) where g.id = any (ids) and sea.id = z), 'night box in the water at ' || lat0);
@@ -617,7 +618,7 @@ begin
   if v_night then
     perform pg_temp.ok((select bool_and(pg_temp.dist(g.geog, v_w) between 14.5 and 45.5) from public.game_drops g where g.id = any (ids)), 'night distances (this run happened at night)');
   else
-    perform pg_temp.eq((select string_agg(round(pg_temp.dist(g.geog, v_w))::text, ',' order by pg_temp.dist(g.geog, v_w)) from public.game_drops g where g.id = any (ids)), '200,320,900', 'day distances (this run happened by day)');
+    perform pg_temp.ok(pg_temp.layout_ok(ids, v_w), 'day distances (this run happened by day)');
   end if;
 
   perform pg_temp.as_user(uw);
@@ -653,7 +654,8 @@ begin
   perform pg_temp.as_admin();
 
   -- only the owner can open one
-  select id, geog into v_box, v_g from public.game_drops g where g.id = any (ids) order by (select r.xp_amount from public.drop_rewards r where r.drop_id = g.id), g.id limit 1;
+  -- C is the box that needs presence (A and B are opened by sending the avatar, see play_test.sql)
+  select id, geog into v_box, v_g from public.game_drops g where g.id = any (ids) and g.needs_presence limit 1;
   perform pg_temp.as_user(uo);
   res := public.claim_game_drop(v_box, pg_temp.lat(v_g), pg_temp.lng(v_g));
   perform pg_temp.as_admin();
@@ -663,7 +665,7 @@ begin
   perform pg_temp.eq(res->>'reason', 'too_far', 'the owner still has to be there');
   res := public.claim_game_drop(v_box, pg_temp.lat(v_g), pg_temp.lng(v_g));
   perform pg_temp.as_admin();
-  perform pg_temp.ok(res->>'ok' = 'true' and (res->>'xp')::integer = 50, 'the owner opens it for 50 XP: ' || res::text);
+  perform pg_temp.ok(res->>'ok' = 'true' and (res->>'xp')::integer in (50, 150), 'the owner opens it: ' || res::text);
   perform pg_temp.as_user(uw);
   res := public.claim_game_drop(v_box, pg_temp.lat(v_g), pg_temp.lng(v_g));
   perform pg_temp.as_admin();

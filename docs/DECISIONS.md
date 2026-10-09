@@ -26,6 +26,7 @@ Jae's calls, newest first, so the team (and Ola) build to the same thing.
 | Rewards | XP plus cards; XP keeps coming once the deck exists. |
 | Profiles | Hide the home area from other people. Name and XP can stay public. |
 | Fake accounts | Verify email with a 6 digit code (Supabase, free; needs an email sender such as Resend). Phone or WhatsApp codes later if needed. |
+| Card mix and odds | A box picks cards by distance: 30% within 3 km of you, 30% from 3 to 8 km, 40% from anywhere (replaces "home area 3x", which gave only about 6% local cards). Special box card tier 84 / 13 / 2.7 / 0.3; the 7-day Golden Box Epic 97, Legendary 3. Details in CARDS.md. |
 | XP level names | JJC, Regular, Plug, Oga, Agba. |
 | XP rebalance | Approved. Ladder JJC 0, Regular 500, Plug 2,000, Oga 6,000, Agba 15,000, each with ranks I, II, III. Going out pays most: check-in 100, Hop stop 250, event quests doubled. Boxes pay mostly cards and Gist: box XP 10, 25, 60, 150 by tier, capped at 150 XP a day. A full-screen level-up moment with Paz and the crowd "ehn". |
 | Organisers | Their own tools in the admin area, run by the organisers themselves on a normal Hopper account (no staff doing it for them). Staff only approve a claim. They claim their events, add lineups and updates, and set venue badges (for example 4 visits makes you a Regular). |

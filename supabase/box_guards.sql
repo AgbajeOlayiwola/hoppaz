@@ -122,7 +122,7 @@ begin
   if exists (select 1 from no_spawn_zones z where z.active and z.zone_type = 'water' and st_intersects(z.geog, new.geog)) then
     raise exception 'That spot is in the water. Pick a spot on land.' using errcode = 'check_violation';
   end if;
-  if new.kind in ('spawn', 'welcome') then
+  if new.kind in ('spawn', 'welcome', 'near', 'special') then
     select z.name into zone_name from no_spawn_zones z where z.active and st_intersects(z.geog, new.geog) limit 1;
     if found then
       raise exception 'That spot is in a no-box area (%). Pick another spot.', zone_name using errcode = 'check_violation';
