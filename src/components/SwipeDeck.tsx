@@ -2,8 +2,9 @@
 
 import { useEffect, useRef, useState } from "react";
 import clsx from "clsx";
-import { Info } from "lucide-react";
-import { factLine, notchAbove, stubPill } from "@/components/today/helpers";
+import { Info, X } from "lucide-react";
+import { factLine, stubPill } from "@/components/today/helpers";
+import { demoFlyer } from "@/components/event/demo";
 import { eventTitle } from "@/lib/geo";
 import { themeForEvent } from "@/lib/theme";
 import type { EventRow } from "@/lib/types";
@@ -11,19 +12,19 @@ import type { EventRow } from "@/lib/types";
 type Decision = "in" | "pass";
 type Saved = void | string | null | Promise<void | string | null>;
 
+/** How far a drag has to go to count, px. A fast flick counts sooner. */
 const THRESHOLD = 110;
+const FLICK = 0.6; // px per ms
 /** The instruction line shows until you have swiped once. */
 const HINT_KEY = "hoppaz.swipeHint";
-const FOOT = 92;
-const NOTCH = notchAbove(FOOT);
 
 /**
- * "Can't decide? Swipe": one compact ticket stub at a time. Right means
- * you're going, left means nah. It is a mode on the Today tab, not the main
- * list, and the buttons underneath do everything a drag does.
+ * The Discover deck, Bumble style: one big card at a time, the flyer filling
+ * it. Right is WE OUTSIDE (you're going), left is nah. The buttons underneath
+ * and the arrow keys do everything a drag does.
  *
- * onDecide saves the choice (Today wires it to useGoing.decide). Hand back an
- * error message, or throw, and the card comes back so nothing is lost.
+ * onDecide saves the choice (Discover wires it to useGoing.decide). Hand back
+ * an error message, or throw, and the card comes back so nothing is lost.
  */
 export default function SwipeDeck({
   events,
@@ -51,7 +52,8 @@ export default function SwipeDeck({
   // Cards you have just swiped, hidden at once so the deck never waits on the network.
   const [hidden, setHidden] = useState<Set<string>>(() => new Set());
   const [hint, setHint] = useState(false);
-  const start = useRef<{ x: number; y: number } | null>(null);
+  const start = useRef<{ x: number; y: number; t: number } | null>(null);
+  const last = useRef<{ x: number; t: number } | null>(null);
 
   useEffect(() => {
     try {
@@ -94,8 +96,23 @@ export default function SwipeDeck({
           return n;
         });
       }
-    }, 190);
-  };
+    }, 220);
+};
+
+  // Arrow keys, for anyone on a laptop. The ref always holds this render's commit.
+  const commitRef = useRef(commit);
+  useEffect(() => {
+    commitRef.current = commit;
+  });
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if ((e.target as HTMLElement)?.closest("input,textarea,select")) return;
+      if (e.key === "ArrowRight") commitRef.current("in");
+      if (e.key === "ArrowLeft") commitRef.current("pass");
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, []);
 
   if (!top) {
     return (
@@ -105,7 +122,7 @@ export default function SwipeDeck({
           <p className="hint mx-auto mt-1.5 max-w-[30ch]">You&apos;ve been through everything on this day.</p>
           {onDone && (
             <button type="button" onClick={onDone} className="btn mt-5 px-5 text-[12.5px]">
-              BACK TO THE LIST
+              SEE THE LIST
             </button>
           )}
         </div>
@@ -115,80 +132,91 @@ export default function SwipeDeck({
 
   const countOf = (e: EventRow) => (goingOf ? goingOf(e) : (e.swipes_in ?? 0));
   const intent: Decision | null = leaving ?? (drag.dx > 56 ? "in" : drag.dx < -56 ? "pass" : null);
-  const offX = leaving ? (leaving === "in" ? 520 : -520) : drag.dx;
-  const spin = leaving ? (leaving === "in" ? 6 : -6) : drag.dx / 30;
+  const offX = leaving ? (leaving === "in" ? 640 : -640) : drag.dx;
+  const spin = leaving ? (leaving === "in" ? 14 : -14) : drag.dx / 18;
+  // The card behind rises to meet you as the top one goes.
+  const pull = Math.min(1, Math.abs(offX) / THRESHOLD);
 
   return (
     <div className="relative flex h-full select-none flex-col">
-      <div className="relative flex min-h-0 flex-1 items-center justify-center">
-        <div className="relative w-full max-w-md">
-          {/* the card behind, so the deck has depth */}
-          {next && (
-            <div aria-hidden className="absolute inset-x-0 top-0 translate-y-2 scale-[0.96] opacity-50">
-              <CardFace event={next} drop={!!dropIds?.has(next.id)} count={countOf(next)} />
-            </div>
-          )}
-
+      <div className="relative mx-auto min-h-0 w-full max-w-md flex-1">
+        {next && (
           <div
-            className="relative touch-none motion-reduce:!transition-none"
-            style={{
-              transform: `translate(${offX}px, ${leaving ? -24 : drag.dy}px) rotate(${spin}deg)`,
-              transition: drag.active ? "none" : "transform .19s cubic-bezier(.2,.8,.2,1)",
-              opacity: leaving ? 0.2 : 1,
-            }}
-            onPointerDown={(e) => {
-              if ((e.target as HTMLElement).closest("button,a")) return;
-              start.current = { x: e.clientX, y: e.clientY };
-              setDrag({ dx: 0, dy: 0, active: true });
-              (e.currentTarget as HTMLElement).setPointerCapture(e.pointerId);
-            }}
-            onPointerMove={(e) => {
-              if (!start.current) return;
-              setDrag({
-                dx: e.clientX - start.current.x,
-                dy: (e.clientY - start.current.y) * 0.35,
-                active: true,
-              });
-            }}
-            onPointerUp={() => {
-              if (!start.current) return;
-              const { dx } = drag;
-              start.current = null;
-              if (dx > THRESHOLD) commit("in");
-              else if (dx < -THRESHOLD) commit("pass");
-              else setDrag({ dx: 0, dy: 0, active: false });
-            }}
-            onPointerCancel={() => {
-              start.current = null;
-              setDrag({ dx: 0, dy: 0, active: false });
-            }}
+            aria-hidden
+            className="absolute inset-0 transition-transform duration-200"
+            style={{ transform: `scale(${0.94 + 0.06 * pull}) translateY(${10 - 10 * pull}px)`, opacity: 0.6 + 0.4 * pull }}
           >
-            <CardFace event={top} drop={!!dropIds?.has(top.id)} count={countOf(top)} intent={intent} />
+            <CardFace event={next} drop={!!dropIds?.has(next.id)} count={countOf(next)} />
           </div>
+        )}
+
+        <div
+          className="absolute inset-0 touch-none motion-reduce:!transition-none"
+          style={{
+            transform: `translate(${offX}px, ${leaving ? -30 : drag.dy}px) rotate(${spin}deg)`,
+            transformOrigin: "50% 110%",
+            transition: drag.active ? "none" : "transform .22s cubic-bezier(.2,.8,.2,1)",
+          }}
+          onPointerDown={(e) => {
+            if ((e.target as HTMLElement).closest("button,a")) return;
+            start.current = { x: e.clientX, y: e.clientY, t: performance.now() };
+            last.current = { x: e.clientX, t: performance.now() };
+            setDrag({ dx: 0, dy: 0, active: true });
+            (e.currentTarget as HTMLElement).setPointerCapture(e.pointerId);
+          }}
+          onPointerMove={(e) => {
+            if (!start.current) return;
+            last.current = { x: e.clientX, t: performance.now() };
+            setDrag({ dx: e.clientX - start.current.x, dy: (e.clientY - start.current.y) * 0.3, active: true });
+          }}
+          onPointerUp={(e) => {
+            const s = start.current;
+            if (!s) return;
+            start.current = null;
+            const dx = e.clientX - s.x;
+            const speed = dx / Math.max(1, performance.now() - s.t);
+            if (dx > THRESHOLD || (dx > 50 && speed > FLICK)) commit("in");
+            else if (dx < -THRESHOLD || (dx < -50 && speed < -FLICK)) commit("pass");
+            else setDrag({ dx: 0, dy: 0, active: false });
+          }}
+          onPointerCancel={() => {
+            start.current = null;
+            setDrag({ dx: 0, dy: 0, active: false });
+          }}
+        >
+          <CardFace event={top} drop={!!dropIds?.has(top.id)} count={countOf(top)} intent={intent} strength={pull} />
         </div>
       </div>
 
       {/* Controls: the deck must be usable without dragging. */}
-      <div className="mx-auto w-full max-w-md flex-none pb-3 pt-1">
-        {hint && (
-          <p className="hint mb-2.5 text-center">Drag right if you&apos;re going. Left if you&apos;re not.</p>
-        )}
-        <div className="flex items-center gap-2.5">
-          <button type="button" onClick={() => commit("pass")} className="btn btn-ghost flex-1 px-3 text-[12.5px]">
-            NAH
+      <div className="mx-auto w-full max-w-md flex-none pb-3 pt-4">
+        {hint && <p className="hint mb-3 text-center">Swipe right if we outside. Left if it&apos;s a nah.</p>}
+        <div className="flex items-center justify-center gap-4">
+          <button
+            type="button"
+            onClick={() => commit("pass")}
+            aria-label={`Nah to ${eventTitle(top)}`}
+            className="grid h-16 w-16 flex-none place-items-center rounded-full border-2 border-line bg-ink-2 text-cream transition-transform active:scale-90"
+          >
+            <X size={28} strokeWidth={2.6} aria-hidden />
           </button>
           {onInfo && (
             <button
               type="button"
               onClick={() => onInfo(top)}
               aria-label="More about this one"
-              className="btn btn-ghost w-11 flex-none px-0"
+              className="grid h-12 w-12 flex-none place-items-center rounded-full border border-line bg-ink-2 text-dim transition-transform active:scale-90"
             >
-              <Info size={18} aria-hidden />
+              <Info size={19} aria-hidden />
             </button>
           )}
-          <button type="button" onClick={() => commit("in")} className="btn flex-1 px-3 text-[12.5px]">
-            I&apos;M GOING
+          <button
+            type="button"
+            onClick={() => commit("in")}
+            aria-label={`We outside: going to ${eventTitle(top)}`}
+            className="flex h-16 flex-none items-center rounded-full bg-orange px-7 font-display text-[16px] font-black tracking-[0.02em] text-brand-ink shadow-chunk transition-transform active:translate-y-0.5 active:scale-95 active:shadow-chunk-sm"
+          >
+            WE OUTSIDE
           </button>
         </div>
       </div>
@@ -196,60 +224,97 @@ export default function SwipeDeck({
   );
 }
 
-/** A compact stub: the title, one mono line, one pill, and the going count as a number. */
+/** A flyer the browser may load: http(s), or the sample flyers' inline SVG. */
+function flyerOf(event: EventRow) {
+  const f = demoFlyer(event);
+  return f && /^(https?:|data:image\/)/i.test(f) ? f : null;
+}
+
+/**
+ * One card: the flyer full bleed (or a type poster when there is none), the
+ * facts over a dark fade at the bottom, and the stamp that lands as you drag.
+ */
 function CardFace({
   event,
   drop,
   count,
   intent,
+  strength = 1,
 }: {
   event: EventRow;
   drop: boolean;
   count: number;
   intent?: Decision | null;
+  strength?: number;
 }) {
   const theme = themeForEvent(event.starts_at);
   const pill = stubPill(event, { drop, count, includeGoing: false });
+  const flyer = flyerOf(event);
+  const title = eventTitle(event);
 
   return (
-    <div
-      className={clsx("stub relative overflow-hidden", theme === "day" ? "stub-day" : "stub-night")}
-      style={NOTCH}
+    <article
+      className={clsx(
+        "relative h-full w-full overflow-hidden rounded-[18px] border border-line bg-ink-2 shadow-[0_18px_40px_rgb(0_0_0/.45)]",
+        theme === "day" ? "stub-day" : "stub-night"
+      )}
+      aria-label={title}
     >
-      {/* The stamp that lands as you drag: 180ms, a degree off square, no bounce. */}
+      {flyer ? (
+        // eslint-disable-next-line @next/next/no-img-element -- flyers come from anywhere, sizes unknown
+        <img src={flyer} alt="" draggable={false} className="absolute inset-0 h-full w-full object-cover" />
+      ) : (
+        <Poster event={event} />
+      )}
+
+      {/* The facts, always cream on a dark fade so they read over any flyer (so night colours, even on a day card). */}
+      <div className="stub-night absolute inset-x-0 bottom-0 bg-gradient-to-t from-black/95 via-black/65 to-transparent px-5 pb-5 pt-28 !text-[#F5EBDD]">
+        {pill && <span className={clsx("pill mb-2.5 bg-black/40", pill.cls)}>{pill.text}</span>}
+        <h2 className="font-display text-[30px] font-black leading-[1.02] tracking-[-0.01em] [text-wrap:balance]">{title}</h2>
+        <p className="mt-2 font-mono text-[11.5px] font-medium uppercase leading-snug tracking-[0.04em] text-[#F5EBDD]/75">
+          {factLine(event, Date.now())}
+        </p>
+        <p className="mt-3 font-body text-[14px] font-medium">
+          {count > 0 ? (
+            <>
+              <span className="font-display text-[18px] font-black text-orange">{count}</span> going
+            </>
+          ) : (
+            "Be the first to say we outside"
+          )}
+          {event.venue_name ? <span className="text-[#F5EBDD]/60"> · {event.venue_name}</span> : null}
+        </p>
+      </div>
+
+      {/* The stamps: WE OUTSIDE top left as you drag right, NAH top right as you drag left. */}
       {intent && (
         <span
           key={intent}
           className={clsx(
-            "pointer-events-none absolute top-4 z-10 animate-stamp rounded-[4px] border-2 px-2.5 py-1 font-display text-[15px] font-black tracking-[0.08em]",
-            intent === "in" ? "left-4 border-keke text-keke" : "right-4 border-dim text-dim"
+            "pointer-events-none absolute top-6 z-10 animate-stamp rounded-[6px] border-[3px] bg-black/70 px-3 py-1.5 font-display text-[24px] font-black tracking-[0.06em]",
+            intent === "in" ? "left-5 -rotate-12 border-[#2FD35C] text-[#2FD35C]" : "right-5 rotate-12 border-[#E5484D] text-[#E5484D]"
           )}
+          style={{ opacity: Math.max(0.35, strength) }}
         >
-          {intent === "in" ? "GOING" : "NAH"}
+          {intent === "in" ? "WE OUTSIDE" : "NAH"}
         </span>
       )}
+    </article>
+  );
+}
 
-      <div className="px-5 pb-6 pt-14">
-        <h2 className="font-display text-[28px] font-black leading-[1.05] tracking-[-0.01em]">{eventTitle(event)}</h2>
-        <p className="mt-2.5 font-mono text-[11.5px] font-medium uppercase leading-snug tracking-[0.04em] text-dim">
-          {factLine(event, Date.now())}
-        </p>
-      </div>
-
-      <div
-        className="flex items-center justify-between gap-3 border-t border-dashed border-line px-5"
-        style={{ height: FOOT }}
+/** No flyer: a poster in the Hoppaz style, the orange sun behind the night's vibe. */
+function Poster({ event }: { event: EventRow }) {
+  return (
+    <div className="absolute inset-0 overflow-hidden bg-ink-3">
+      <span aria-hidden className="absolute -right-16 top-10 h-64 w-64 rounded-full bg-orange" />
+      <span aria-hidden className="absolute -left-10 top-48 h-40 w-40 rounded-full border-[10px] border-violet opacity-70" />
+      <p
+        aria-hidden
+        className="absolute left-5 top-8 max-w-[85%] font-display text-[64px] font-black uppercase leading-[0.85] tracking-[-0.03em] text-cream/90 [overflow-wrap:anywhere]"
       >
-        {count > 0 ? (
-          <div>
-            <p className="num text-[36px]">{count}</p>
-            <p className="seclabel mt-1.5">GOING</p>
-          </div>
-        ) : (
-          <p className="seclabel">BE THE FIRST</p>
-        )}
-        {pill && <span className={clsx("pill", pill.cls)}>{pill.text}</span>}
-      </div>
+        {event.vibe}
+      </p>
     </div>
   );
 }

@@ -19,6 +19,8 @@ const FRIENDLY: Array<[RegExp, string]> = [
 
 /** "DROP IS CLOSED" -> "Drop is closed.", "WAVE SENT. IF THEY..." -> "Wave sent. If they...", QR kept as QR. */
 export function sentence(raw: string) {
+  // A gated claim (accountGate): the sign-up sheet is open over this.
+  if (raw === "need_account") return "Make an account to claim this. It takes 20 seconds.";
   const hit = FRIENDLY.find(([re]) => re.test(raw));
   if (hit) return hit[1];
   const t = raw.replace(/\s*·\s*/g, ". ").trim();

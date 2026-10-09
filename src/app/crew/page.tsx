@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
+import RequireAccount from "@/components/app/RequireAccount";
 import Link from "next/link";
 import { MessageSquare, Plus, Search, UserMinus, UserPlus } from "lucide-react";
 import { useEventGroups } from "@/lib/chat";
@@ -19,7 +20,7 @@ import { useEvents } from "@/lib/useEvents";
 import { useTheme } from "@/lib/useTheme";
 import CrewPanel from "./CrewPanel";
 
-export default function CrewPage() {
+function CrewPagePage() {
   const { userId, profile, state } = useSession();
   const { crew, loading: crewLoading, add, remove, search } = useCrew(userId);
   const { groups, openGroups, create: createGroup, join: joinGroup, plan, rsvp } = useGroups(userId);
@@ -309,4 +310,13 @@ export default function CrewPage() {
 /** One face rule for every row: their look on the neutral circle, or their initial if they never dressed up. */
 function Face({ p }: { p: Pick<Profile, "display_name" | "avatar"> }) {
   return <FaceDisc look={p.avatar} initial={p.display_name ?? undefined} size={36} />;
+}
+
+/** Needs an account: anonymous Hoppers get the sign-up here instead. */
+export default function CrewPage() {
+  return (
+    <RequireAccount title="Crew up." caption="Make an account to start a crew, plan moves together and keep your group chats.">
+      <CrewPagePage />
+    </RequireAccount>
+  );
 }

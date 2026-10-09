@@ -1,10 +1,12 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { getSupabase } from "./supabase/client";
 import { BADGES } from "./brand";
 import { areaByName } from "./geo";
 import { useToast } from "./store";
+import { requireAccount } from "./accountGate";
+import { useSessionStore } from "./useSession";
 import type { CheckinClaim, EventRow } from "./types";
 
 export const CHECKIN_RADIUS_M = 1500;
@@ -30,7 +32,7 @@ function markFirstCheckin() {
  */
 export type CheckinOutcome =
   | { ok: true; /** ISO time the check-in landed. */ at: string; xp: number; badges: string[] }
-  | { ok: false; reason: "no_fix" | "too_far" | "already" | "closed" | "error" };
+  | { ok: false; reason: "no_fix" | "too_far" | "already" | "closed" | "error" | "account" };
 
 /** "latenight" -> "Latenight". Used only when a badge key is not in the BADGES list. */
 function prettyKey(key: string) {
@@ -93,7 +95,10 @@ export function useCheckin(userId: string | null, onDone?: () => void) {
         markFirstCheckin();
         return { ok: true, at, xp: 50, badges: demoBadges(event) };
       }
-      if (!userId) {
+      // Checking in (and the XP and badges with it) needs an account; the sheet finishes it after.
+      if (!requireAccount("check in and earn XP", () => void checkInRef.current(event, fix))) return { ok: false, reason: "account" };
+      const uid = useSessionStore.getState().userId ?? userId;
+      if (!uid) {
         // Signed-in session not ready yet: never pretend it was saved.
         say("Still connecting. Try again in a moment.", "error");
         return { ok: false, reason: "error" };
@@ -132,6 +137,12 @@ export function useCheckin(userId: string | null, onDone?: () => void) {
     },
     [userId, say, onDone]
   );
+
+  // The sign-up sheet finishes a gated check-in later; this always reaches the newest checkIn.
+  const checkInRef = useRef(checkIn);
+  useEffect(() => {
+    checkInRef.current = checkIn;
+  });
 
   return { done, checkedAt, busy, checkIn };
 }

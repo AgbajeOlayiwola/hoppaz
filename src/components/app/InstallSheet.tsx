@@ -2,15 +2,19 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import { usePathname } from "next/navigation";
-import { Share, SquarePlus, X } from "lucide-react";
+import { Bookmark, EllipsisVertical, Share, SquarePlus, X } from "lucide-react";
 import Mascot from "@/components/Mascot";
 import { FIRST_GOING_EVENT } from "@/lib/useGoing";
 import { FIRST_CHECKIN_EVENT } from "@/lib/useCheckin";
+import { SIGNED_IN_EVENT } from "@/components/app/SignupForm";
 
 /**
  * "Keep Hoppaz on your home screen." A sheet, never a screen, and it never
  * leads: it only appears after a win.
  *
+ *   0. Right after making an account or logging in (SIGNED_IN_EVENT), every time
+ *      until it's installed. Where the browser can't install, it shows how to
+ *      bookmark instead.
  *   1. After the first "I'm going" (FIRST_GOING_EVENT).
  *   2. If that was dismissed, once more after the first check-in (FIRST_CHECKIN_EVENT).
  *   3. Then never again, and never inside the installed app.
@@ -72,7 +76,7 @@ export default function InstallSheet() {
   pathRef.current = path;
 
   const [open, setOpen] = useState(false);
-  const [mode, setMode] = useState<"android" | "ios">("ios");
+  const [mode, setMode] = useState<"android" | "ios" | "bookmark">("ios");
   const [bottom, setBottom] = useState(0);
   const deferred = useRef<InstallPromptEvent | null>(null);
   const memory = useRef<Saved>({ stage: 0 }); // when storage is blocked, this phone-session is all we have
@@ -113,12 +117,14 @@ export default function InstallSheet() {
       save({ stage: 2, done: true });
       setOpen(false);
     };
-    const attempt = (moment: "going" | "checkin") => {
+    const attempt = (moment: "signup" | "going" | "checkin") => {
       const s = read();
       if (s.done || isStandalone()) return;
-      if (moment === "going" ? s.stage >= 1 : s.stage >= 2) return;
+      if (moment === "going" && s.stage >= 1) return;
+      if (moment === "checkin" && s.stage >= 2) return;
       if (QUIET_PATHS.some((re) => re.test(pathRef.current))) return;
-      const next = deferred.current ? "android" : isIosBrowser() ? "ios" : null;
+      // Right after sign-up, anywhere that can't install still gets told how to bookmark.
+      const next = deferred.current ? "android" : isIosBrowser() ? "ios" : moment === "signup" ? "bookmark" : null;
       if (!next) return; // nothing to offer here, keep the chance
       const show = () => {
         if (isStandalone() || QUIET_PATHS.some((re) => re.test(pathRef.current))) return;
@@ -126,7 +132,8 @@ export default function InstallSheet() {
         setBottom(nav ? Math.round(nav.getBoundingClientRect().height) : 0);
         setMode(next);
         setOpen(true);
-        save({ ...read(), stage: moment === "going" ? 1 : 2 });
+        // The sign-up nudge doesn't use up the later chances.
+        if (moment !== "signup") save({ ...read(), stage: moment === "going" ? 1 : 2 });
       };
       stop();
       timer = setTimeout(() => {
@@ -139,17 +146,20 @@ export default function InstallSheet() {
         }, WAIT_POLL_MS);
       }, DELAY_MS);
     };
+    const onSignedIn = () => attempt("signup");
     const onGoing = () => attempt("going");
     const onCheckin = () => attempt("checkin");
 
     window.addEventListener("beforeinstallprompt", onPrompt);
     window.addEventListener("appinstalled", onInstalled);
+    window.addEventListener(SIGNED_IN_EVENT, onSignedIn);
     window.addEventListener(FIRST_GOING_EVENT, onGoing);
     window.addEventListener(FIRST_CHECKIN_EVENT, onCheckin);
     return () => {
       stop();
       window.removeEventListener("beforeinstallprompt", onPrompt);
       window.removeEventListener("appinstalled", onInstalled);
+      window.removeEventListener(SIGNED_IN_EVENT, onSignedIn);
       window.removeEventListener(FIRST_GOING_EVENT, onGoing);
       window.removeEventListener(FIRST_CHECKIN_EVENT, onCheckin);
     };
@@ -208,12 +218,14 @@ export default function InstallSheet() {
         <div className="flex items-center gap-4 pr-8">
           <Mascot state="oya" size={88} className="rig-on-raised flex-none" />
           <div className="min-w-0">
-            <h2 className="font-display text-[22px] font-black leading-[1.1]">Keep Hoppaz on your home screen.</h2>
+            <h2 className="font-display text-[22px] font-black leading-[1.1]">{mode === "bookmark" ? "Keep Hoppaz one tap away." : "Keep Hoppaz on your home screen."}</h2>
             <p className="hint mt-1.5">One tap to tonight.</p>
           </div>
         </div>
 
-        {mode === "ios" ? (
+        {mode === "bookmark" ? (
+          <BookmarkSteps />
+        ) : mode === "ios" ? (
           <ol className="mt-4 space-y-2">
             <li className="flex items-center gap-3 rounded-hz border border-line bg-ink-3 px-3 py-2.5">
               <span className="font-mono text-[11px] text-dim">01</span>
@@ -235,11 +247,37 @@ export default function InstallSheet() {
         <button
           type="button"
           onClick={close}
-          className={mode === "ios" ? "btn btn-ghost mt-3 w-full" : "mt-1 flex min-h-[44px] w-full items-center justify-center font-mono text-[11px] font-medium tracking-[0.14em] text-dim"}
+          className={mode !== "android" ? "btn btn-ghost mt-3 w-full" : "mt-1 flex min-h-[44px] w-full items-center justify-center font-mono text-[11px] font-medium tracking-[0.14em] text-dim"}
         >
           NOT NOW
         </button>
       </div>
+    </div>
+  );
+}
+
+/** No install button here (a laptop, or a phone browser without one): how to keep Hoppaz a tap away anyway. */
+function BookmarkSteps() {
+  const touch = typeof window !== "undefined" && window.matchMedia("(pointer: coarse)").matches;
+  const mac = typeof navigator !== "undefined" && /Mac/.test(navigator.platform);
+  const row = "flex items-center gap-3 rounded-hz border border-line bg-ink-3 px-3 py-2.5";
+  return touch ? (
+    <ol className="mt-4 space-y-2">
+      <li className={row}>
+        <span className="font-mono text-[11px] text-dim">01</span>
+        <span className="flex-1 font-body text-[15px]">Open your browser menu</span>
+        <EllipsisVertical size={20} strokeWidth={1.9} aria-hidden />
+      </li>
+      <li className={row}>
+        <span className="font-mono text-[11px] text-dim">02</span>
+        <span className="flex-1 font-body text-[15px]">Tap Add to Home screen</span>
+        <SquarePlus size={20} strokeWidth={1.9} aria-hidden />
+      </li>
+    </ol>
+  ) : (
+    <div className={`mt-4 ${row}`}>
+      <Bookmark size={20} strokeWidth={1.9} aria-hidden />
+      <span className="flex-1 font-body text-[15px]">Bookmark it: press <kbd className="font-mono text-[13px] font-semibold">{mac ? "⌘ + D" : "Ctrl + D"}</kbd></span>
     </div>
   );
 }

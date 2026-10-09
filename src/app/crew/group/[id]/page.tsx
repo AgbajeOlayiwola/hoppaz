@@ -77,7 +77,7 @@ export default function GroupChatPage() {
       ) : (
         <RoomView
           channel={groupChannel(id)}
-          people={{ kind: "group", eventId: id }}
+          people={{ kind: "group", id }}
           userId={userId}
           hasAccount={hasAccount}
           note="STAYS AFTER THE NIGHT"

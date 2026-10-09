@@ -26,6 +26,14 @@ export const AREAS: Area[] = [
 ];
 
 export const LAGOS_CENTER = { lat: 6.5, lng: 3.42 };
+
+/**
+ * Event leads imported without a venue are parked on LAGOS_CENTER, which is in
+ * the lagoon. Those stay in the Today list but are kept off the map until a real
+ * venue is set: a pin there would send someone to the water.
+ */
+export const hasVenue = (e: { lat: number; lng: number }) =>
+  Math.abs(e.lat - LAGOS_CENTER.lat) > 1e-6 || Math.abs(e.lng - LAGOS_CENTER.lng) > 1e-6;
 /** Hard bound so nobody pans the map to Kansas. Lagos only, for now. */
 export const LAGOS_BOUNDS: [[number, number], [number, number]] = [
   [3.05, 6.30],

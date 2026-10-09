@@ -66,7 +66,7 @@ function Chat() {
       {room ? <RoomView
         key={room.id}
         channel={room.id}
-        people={{ kind: "event", eventId: room.id } satisfies PeopleOf}
+        people={{ kind: "event", id: room.id } satisfies PeopleOf}
         userId={userId}
         hasAccount={hasAccount}
         note={room.closesAt ? `CLOSES ${closes(room.closesAt)}` : undefined}

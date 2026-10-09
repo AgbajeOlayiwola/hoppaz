@@ -80,6 +80,9 @@ let toastTimer: ReturnType<typeof setTimeout> | null = null;
 export const useToast = create<ToastState>((set) => ({
   toast: null,
   say: (text, tone = "orange") => {
+    // A gated action that needs an account: the sign-up sheet is already saying so.
+    // (The literal matches NEED_ACCOUNT in accountGate.ts; imported there, not here, to keep the store dependency-free.)
+    if (text === "need_account") return;
     // One toast at a time, and each one gets its full time on screen.
     if (toastTimer) clearTimeout(toastTimer);
     set({ toast: { text, tone, id: Date.now() } });

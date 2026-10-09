@@ -6,7 +6,8 @@
   /*
    * Grounds and state colours, as space-separated RGB so Tailwind's /alpha works.
    * Night is the default. The inline script in layout.tsx sets data-theme="day"
-   * by the Lagos clock before first paint; ?theme=day|night forces one for testing.
+   * before first paint only if the Hopper chose day (or the Lagos clock, in daytime);
+   * ?theme=day|night forces one for testing.
    */
   :root,
   [data-theme="night"] {

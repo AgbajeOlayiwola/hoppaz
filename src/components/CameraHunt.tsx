@@ -5,6 +5,7 @@ import { Camera, Compass, Crosshair, LocateFixed, X } from "lucide-react";
 import type { GameDrop } from "@/lib/game";
 import Hunt3D from "@/components/Hunt3D";
 import { huntItem, RARITY } from "@/lib/huntItems";
+import { isNeedAccount, requireAccount } from "@/lib/accountGate";
 import { pointFromGeog as readPoint } from "@/lib/geo";
 
 type Point = { lat: number; lng: number };
@@ -132,6 +133,8 @@ export default function CameraHunt({
 
   const start = async () => {
     setError("");
+    // Ask for the account before the camera, not after the catch.
+    if (!requireAccount("hunt and keep what you find")) return;
     if (!window.isSecureContext || !navigator.mediaDevices?.getUserMedia) {
       setError("Camera hunts need a phone with a camera, on a secure connection.");
       return;
@@ -171,7 +174,7 @@ export default function CameraHunt({
     const result = await onClaim(at);
     setClaiming(false);
     if (result.error) {
-      setError(result.error);
+      if (!isNeedAccount(result.error)) setError(result.error);
       return;
     }
     setWon(result);
