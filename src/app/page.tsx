@@ -27,6 +27,7 @@ import { useSession } from "@/lib/useSession";
 import { useEvents, useHop } from "@/lib/useEvents";
 import { useCheckin } from "@/lib/useCheckin";
 import { useGameDashboard } from "@/lib/game";
+import { isNeedAccount } from "@/lib/accountGate";
 import { haversineKm, hasVenue } from "@/lib/geo";
 import type { HopStop } from "@/lib/types";
 import { busPosition } from "@/lib/busPosition";
@@ -378,7 +379,16 @@ export default function MapPage() {
   };
   const openBox = async (drop: GameDrop, code: string): Promise<RevealOutcome> => {
     const r: { error?: string; reward?: string; description?: string; code?: string; xp?: number } = DEMO ? demoReveal() : await live.claim(drop, fix, code || undefined);
-    if (r.error) return { error: sentence(r.error) };
+    if (r.error) {
+      // No account yet (claim() has already opened the sign-up sheet, and a welcome box never gets here): the tape is not torn.
+      // The Reveal goes away quietly and the box's sheet is back underneath, so signing up lands on the box.
+      if (isNeedAccount(r.error)) {
+        setOpening(null);
+        setBoxId(drop.id);
+        return { error: "" };
+      }
+      return { error: sentence(r.error) };
+    }
     markOpened(drop.id);
     return outcomeOf(drop, r);
   };
