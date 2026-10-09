@@ -1077,121 +1077,491 @@ svg.rig.poke #character { animation: rig-poke 0.42s cubic-bezier(0.3, 1.6, 0.5, 
   background: #ff4d00 url(/brand/mark-cream.png) center / auto 46px no-repeat;
 }
 
-/* ------------------------------------------------------ boxes on the map -- */
-/* A drop on the map is the same sealed box as the reveal, small. Open boxes glow and bob; sealed ones sit still and say when they open. */
-.hz-boxpin {
-  position: relative;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: 4px;
+/* ------------------------------------------------------------- Play mode -- */
+/*
+ * The shell over the map (components/play). Colours come from the theme tokens, so Play reads in day and night;
+ * tier colours (Common cream, Rare violet, Epic pink, Legendary gold) are the crate artwork's own.
+ * Ambient animation stops on a low tier (.hz-low) and for people who asked their phone for less motion.
+ */
+
+/* Play closes the map: signs, stops, the bus and the zoom buttons fade out of the way. */
+.hz-playing .hz-sign,
+.hz-playing .hz-stop,
+.hz-playing .hz-bus {
+  opacity: 0 !important;
+  pointer-events: none !important;
+  /* After the fade they leave the layout, so a cheap phone is not repositioning 20 hidden markers every frame. */
+  display: none !important;
+  transition: opacity 0.3s, display 0.3s allow-discrete;
+}
+.hz-sign,
+.hz-stop,
+.hz-bus {
+  transition: opacity 0.3s;
+}
+.hz-playing .maplibregl-ctrl-top-right {
+  display: none;
+}
+
+/* Your avatar: a 44 px disc on a neutral ring. Out of Play it asks to be tapped (a slow pulse and a PLAY tag); never orange. */
+.hz-avatar {
+  width: 48px;
+  height: 64px;
   padding: 0;
   border: 0;
   background: none;
   cursor: pointer;
-  animation: hz-boxpin-in 0.5s cubic-bezier(0.34, 1.56, 0.64, 1) var(--d, 0s) backwards;
+  -webkit-tap-highlight-color: transparent;
 }
-@keyframes hz-boxpin-in {
-  from {
-    transform: translateY(-40px) scale(0.6);
-    opacity: 0;
-  }
-}
-.hz-boxpin-box {
-  position: relative;
+.hz-avatar-body {
+  position: absolute;
+  left: 2px;
+  bottom: 9px;
   display: block;
-  width: 30px;
-  height: 30px;
-  border-radius: 5px;
-  background: #f5ebdd;
-  box-shadow:
-    0 3px 0 #b83600,
-    0 8px 16px rgb(0 0 0 / 0.45);
+  width: 44px;
+  height: 44px;
+  transform-origin: 50% 100%;
 }
-.hz-boxpin-box::before {
-  content: "";
-  position: absolute;
-  inset: 0 0 auto;
-  height: 8px;
-  border-radius: 5px 5px 0 0;
-  background: #ece0cd;
-  border-bottom: 1px solid rgb(14 11 10 / 0.15);
+.hz-avatar-ring {
+  display: grid;
+  width: 44px;
+  height: 44px;
+  place-items: center;
+  border-radius: 9999px;
+  background: rgb(var(--text));
+  box-shadow: 0 4px 12px rgb(0 0 0 / 0.45);
 }
-.hz-boxpin-box::after {
-  content: "";
-  position: absolute;
-  left: 0;
-  right: 0;
-  top: 11px;
-  height: 6px;
-  background: #5b2eff;
-}
-.hz-boxpin-label {
-  padding: 2px 6px;
-  border-radius: 3px;
-  background: #0e0b0a;
-  white-space: nowrap;
-  font-family: var(--font-mono), monospace;
-  font-weight: 500;
-  font-size: 10px;
-  line-height: 1.2;
-  letter-spacing: 0.08em;
-  color: #f5ebdd;
-}
-.hz-boxpin-glow {
+.hz-avatar-tip {
   position: absolute;
   left: 50%;
-  top: 15px;
-  width: 64px;
-  height: 64px;
-  margin: -32px 0 0 -32px;
+  bottom: -5px;
+  width: 0;
+  height: 0;
+  margin-left: -5px;
+  border-style: solid;
+  border-width: 6px 5px 0;
+  border-color: rgb(var(--text)) transparent transparent;
+}
+.hz-avatar-shadow {
+  position: absolute;
+  left: 10px;
+  bottom: -2px;
+  width: 28px;
+  height: 8px;
   border-radius: 9999px;
-  pointer-events: none;
-  background: radial-gradient(closest-side, rgb(91 46 255 / 0.55), rgb(91 46 255 / 0));
+  background: rgb(0 0 0 / 0.45);
+  filter: blur(2px);
+}
+.hz-avatar-pulse {
+  position: absolute;
+  left: 50%;
+  bottom: 31px;
+  width: 60px;
+  height: 60px;
+  border: 2px solid #8a66ff;
+  border-radius: 9999px;
   opacity: 0;
+  pointer-events: none;
+  transform: translate(-50%, 50%) scale(0.6);
+  animation: hz-av-pulse 2.4s ease-out infinite;
 }
-.hz-boxpin-open .hz-boxpin-glow {
-  animation: hz-boxpin-glow 1.8s ease-in-out infinite;
+.hz-avatar-pulse-b {
+  animation-delay: 1.2s;
 }
-.hz-boxpin-open .hz-boxpin-box {
-  animation: hz-boxpin-bob 1.8s ease-in-out infinite;
+@keyframes hz-av-pulse {
+  0% {
+    opacity: 0.9;
+    transform: translate(-50%, 50%) scale(0.6);
+  }
+  100% {
+    opacity: 0;
+    transform: translate(-50%, 50%) scale(1.9);
+  }
 }
-.hz-boxpin-open .hz-boxpin-label {
-  background: #5b2eff;
+.hz-avatar-tag {
+  position: absolute;
+  left: 50%;
+  top: -12px;
+  padding: 2px 6px;
+  border-radius: 3px;
+  border: 1.5px solid #5b2eff;
+  background: rgb(var(--raised));
+  color: rgb(var(--text));
+  font-family: var(--font-mono), monospace;
+  font-weight: 500;
+  font-size: 9px;
+  line-height: 1.2;
+  letter-spacing: 0.14em;
+  pointer-events: none;
+  transform: translateX(-50%);
 }
-.hz-boxpin-sealed .hz-boxpin-box {
-  filter: saturate(0.7) brightness(0.88);
+.hz-avatar-play .hz-avatar-pulse,
+.hz-avatar-play .hz-avatar-tag {
+  display: none;
 }
-/* A street box is the same violet box with an orange label: go and get it. */
-.hz-boxpin-street .hz-boxpin-label,
-.hz-boxpin-street.hz-boxpin-open .hz-boxpin-label {
-  background: #ff4d00;
-  color: #0e0b0a;
+/* In Play the avatar is a character, not a button: it sits over crates and must never block a tap on one. */
+.hz-avatar-play {
+  pointer-events: none;
 }
-/* A welcome box is yours alone: cream label, violet border, in both themes. */
-.hz-boxpin-welcome .hz-boxpin-label,
-.hz-boxpin-welcome.hz-boxpin-open .hz-boxpin-label {
-  background: #f5ebdd;
-  color: #0e0b0a;
-  box-shadow: inset 0 0 0 1.5px #5b2eff;
+.hz-avatar-run .hz-avatar-body {
+  animation: hz-av-run 0.34s ease-in-out infinite;
 }
-@keyframes hz-boxpin-bob {
+@keyframes hz-av-run {
+  0%,
+  100% {
+    transform: translateY(0) rotate(-3deg);
+  }
+  50% {
+    transform: translateY(-4px) rotate(3deg);
+  }
+}
+
+/* A box on the Play map. The marker element is MapLibre's to move, so the animations live on the wrapper inside it. */
+.hz-crate {
+  width: 68px;
+  height: 72px;
+  padding: 0;
+  border: 0;
+  background: none;
+  cursor: pointer;
+  -webkit-tap-highlight-color: transparent;
+}
+.hz-crate-wrap {
+  --tc: #c9b9a3;
+  position: absolute;
+  inset: 0;
+  display: block;
+  transform-origin: 50% 90%;
+}
+.hz-crate-wrap.hz-born {
+  animation: hz-crate-born 0.8s cubic-bezier(0.2, 1.4, 0.4, 1) both;
+}
+@keyframes hz-crate-born {
+  0% {
+    opacity: 0;
+    transform: translateY(26px) scale(0.2);
+  }
+  100% {
+    opacity: 1;
+    transform: none;
+  }
+}
+.hz-crate-sh {
+  position: absolute;
+  left: 14px;
+  bottom: 2px;
+  width: 40px;
+  height: 12px;
+  border-radius: 9999px;
+  background: rgb(0 0 0 / 0.55);
+  filter: blur(2px);
+}
+.hz-crate-gr {
+  position: absolute;
+  left: 8px;
+  bottom: -2px;
+  width: 52px;
+  height: 20px;
+  border: 2px solid var(--tc);
+  border-radius: 9999px;
+  opacity: 0.4;
+  transition: all 0.3s;
+}
+/* A box that needs a walk and is out of reach: no text on the map, just quieter than one you can open. */
+.hz-crate-far .hz-crate-body {
+  opacity: 0.8;
+  filter: saturate(0.85);
+}
+.hz-crate-live .hz-crate-gr {
+  opacity: 1;
+  border-color: #8a66ff;
+  background: rgb(91 46 255 / 0.55);
+  box-shadow: 0 0 14px #5b2eff;
+}
+.hz-crate-body {
+  position: absolute;
+  left: 10px;
+  top: 12px;
+  display: block;
+  width: 48px;
+  height: 52px;
+  transform-origin: 50% 100%;
+}
+.hz-crate-epic .hz-crate-body {
+  transform: scale(1.12);
+}
+.hz-crate-legendary .hz-crate-body {
+  transform: scale(1.4);
+}
+.hz-crate-in {
+  display: block;
+  width: 48px;
+  height: 52px;
+  animation: hz-crate-idle 3.2s ease-in-out infinite;
+}
+.hz-crate-legendary .hz-crate-in {
+  filter: drop-shadow(0 0 12px var(--tc));
+}
+.hz-crate-live .hz-crate-in {
+  animation: hz-crate-bounce 0.75s ease-in-out infinite;
+  filter: drop-shadow(0 0 9px var(--tc));
+}
+.hz-crate-wrap.hz-wig .hz-crate-in {
+  animation: hz-crate-wig 0.55s ease-in-out;
+}
+@keyframes hz-crate-idle {
   0%,
   100% {
     transform: translateY(0);
   }
   50% {
-    transform: translateY(-4px);
+    transform: translateY(-3px);
   }
 }
-@keyframes hz-boxpin-glow {
+@keyframes hz-crate-bounce {
   0%,
   100% {
-    opacity: 0.55;
-    transform: scale(0.85);
+    transform: translateY(-8px);
   }
   50% {
-    opacity: 1;
-    transform: scale(1.1);
+    transform: translateY(-17px);
+  }
+}
+@keyframes hz-crate-wig {
+  0%,
+  100% {
+    transform: rotate(0);
+  }
+  15% {
+    transform: rotate(-12deg);
+  }
+  35% {
+    transform: rotate(11deg);
+  }
+  55% {
+    transform: rotate(-8deg);
+  }
+  75% {
+    transform: rotate(5deg);
+  }
+}
+.hz-crate-col {
+  position: absolute;
+  left: 34px;
+  bottom: 12px;
+  width: 20px;
+  height: 150px;
+  margin-left: -10px;
+  background: linear-gradient(to top, var(--tc), rgb(255 255 255 / 0));
+  opacity: 0.55;
+  filter: blur(4px);
+  pointer-events: none;
+  mix-blend-mode: screen;
+}
+.hz-crate-legendary .hz-crate-col {
+  width: 34px;
+  height: 260px;
+  margin-left: -17px;
+  opacity: 0.7;
+}
+.hz-low .hz-crate-in,
+.hz-low .hz-avatar-pulse {
+  animation: none;
+}
+.hz-low .hz-crate-live .hz-crate-in {
+  transform: translateY(-10px);
+}
+.hz-low .hz-crate-col {
+  display: none;
+}
+
+/* The HUD: exit, pips, XP and the tray. Over the map, no blur. */
+.hz-hud {
+  position: absolute;
+  inset: 0;
+  z-index: 25;
+  pointer-events: none;
+  animation: fade 0.4s ease 0.25s both;
+}
+.hz-hud-top {
+  position: absolute;
+  left: 12px;
+  right: 12px;
+  top: calc(12px + env(safe-area-inset-top, 0px));
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 8px;
+}
+.hz-hud-btn {
+  display: grid;
+  width: 44px;
+  height: 44px;
+  place-items: center;
+  border: 1px solid rgb(var(--hairline));
+  border-radius: 9999px;
+  background: rgb(var(--raised) / 0.94);
+  color: rgb(var(--text));
+  pointer-events: auto;
+  -webkit-tap-highlight-color: transparent;
+}
+.hz-flame {
+  position: relative;
+  width: 32px;
+  height: 36px;
+}
+.hz-flame svg {
+  width: 32px;
+  height: 36px;
+}
+.hz-flame b {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 6px;
+  text-align: center;
+  font-family: var(--font-poppins), sans-serif;
+  font-weight: 900;
+  font-size: 13px;
+  line-height: 1;
+  color: #0e0b0a;
+}
+.hz-pips {
+  display: flex;
+  gap: 6px;
+  padding: 5px 8px;
+  border: 1px solid rgb(var(--hairline));
+  border-radius: 9999px;
+  background: rgb(var(--raised) / 0.92);
+}
+.hz-pip {
+  position: relative;
+  display: block;
+  width: 10px;
+  height: 10px;
+  border: 1.5px solid rgb(var(--text) / 0.35);
+  border-radius: 9999px;
+}
+.hz-pip-on {
+  border-color: #ff4d00;
+  background: #ff4d00;
+}
+.hz-pip-today {
+  border-color: #ff4d00;
+  animation: hz-pip-pulse 1.3s ease-in-out infinite;
+}
+.hz-pip-gold {
+  border-color: #f4b728;
+  border-style: dashed;
+}
+.hz-pip-gold.hz-pip-on {
+  border-style: solid;
+  background: #f4b728;
+}
+.hz-pip-stamp {
+  animation: hz-pip-stamp 0.6s cubic-bezier(0.3, 1.7, 0.5, 1);
+}
+@keyframes hz-pip-pulse {
+  0%,
+  100% {
+    box-shadow: 0 0 0 0 rgb(255 77 0 / 0.6);
+  }
+  50% {
+    box-shadow: 0 0 0 5px rgb(255 77 0 / 0);
+  }
+}
+@keyframes hz-pip-stamp {
+  0% {
+    transform: scale(2.4);
+  }
+  60% {
+    transform: scale(0.85);
+  }
+  100% {
+    transform: scale(1);
+  }
+}
+.hz-xp {
+  width: 112px;
+  padding: 6px 8px 7px;
+  border: 1px solid rgb(var(--hairline));
+  border-radius: 10px;
+  background: rgb(var(--raised) / 0.92);
+}
+.hz-xp-bar {
+  height: 9px;
+  margin-top: 5px;
+  overflow: hidden;
+  border: 1px solid rgb(var(--text) / 0.08);
+  border-radius: 9px;
+  background: rgb(var(--text) / 0.14);
+}
+.hz-xp-bar i {
+  display: block;
+  height: 100%;
+  border-radius: 9px;
+  background: linear-gradient(90deg, #b83600, #ff4d00);
+  transition: width 0.5s cubic-bezier(0.2, 0.8, 0.3, 1);
+}
+.hz-play-night {
+  position: absolute;
+  left: 50%;
+  top: calc(96px + env(safe-area-inset-top, 0px));
+  padding: 6px 11px;
+  border: 1px solid rgb(91 46 255 / 0.7);
+  border-radius: 9999px;
+  background: rgb(var(--raised) / 0.94);
+  color: rgb(var(--text));
+  font-family: var(--font-mono), monospace;
+  font-weight: 500;
+  font-size: 10px;
+  letter-spacing: 0.06em;
+  white-space: nowrap;
+  opacity: 0;
+  pointer-events: none;
+  transform: translate(-50%, -6px);
+  transition: opacity 0.3s, transform 0.3s;
+}
+.hz-play-night-on {
+  opacity: 1;
+  transform: translate(-50%, 0);
+}
+.hz-tray {
+  position: absolute;
+  left: 12px;
+  right: 12px;
+  bottom: calc(14px + env(safe-area-inset-bottom, 0px));
+  max-width: 536px;
+  margin: 0 auto;
+  padding: 11px 16px 10px;
+  border: 1px solid rgb(var(--hairline));
+  border-radius: 20px;
+  background: rgb(var(--raised) / 0.96);
+  pointer-events: auto;
+}
+.hz-tray-line {
+  display: flex;
+  min-height: 20px;
+  align-items: center;
+  gap: 8px;
+  margin-top: 9px;
+  padding-top: 8px;
+  border-top: 1px solid rgb(var(--hairline));
+  font-family: var(--font-body), sans-serif;
+  font-size: 13px;
+  line-height: 1.3;
+  color: rgb(var(--text) / 0.85);
+}
+.hz-tray-warn {
+  color: rgb(var(--text));
+}
+@media (prefers-reduced-motion: reduce) {
+  .hz-crate-in,
+  .hz-crate-wrap,
+  .hz-avatar-pulse,
+  .hz-avatar-body,
+  .hz-pip-today,
+  .hz-hud {
+    animation: none !important;
   }
 }

@@ -4,6 +4,7 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { Map, CalendarDays, Users, MessageSquare, CircleUserRound } from "lucide-react";
 import clsx from "clsx";
+import { usePlayMode } from "@/lib/usePlayMode";
 
 const TABS = [
   { href: "/", label: "MAP", Icon: Map },
@@ -30,7 +31,9 @@ const FULL_SCREEN = [/^\/chat\/dm\//, /^\/drop$/, /^\/me\/avatar/, /^\/admin/, /
 
 export default function BottomNav() {
   const path = usePathname();
-  if (FULL_SCREEN.some((re) => re.test(path))) return null;
+  // Play has the whole screen: the map closes around you and the tab bar steps out.
+  const playing = usePlayMode((s) => s.active);
+  if (playing || FULL_SCREEN.some((re) => re.test(path))) return null;
   const parent = PARENT.find(([p]) => path === p || path.startsWith(`${p}/`))?.[1];
   const active = parent ?? path;
   return (

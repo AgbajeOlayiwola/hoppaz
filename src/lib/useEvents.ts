@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { getSupabase } from "./supabase/client";
 import { demoEvents, demoHop } from "./demoData";
 import { haversineKm, LAGOS_CENTER, pointFromGeog } from "./geo";
@@ -22,7 +22,9 @@ function withDistance(rows: EventRow[], fix: Fix): EventRow[] {
     .sort((a, b) => b.heat - a.heat);
 }
 
-export function useEvents(fix: Fix, radiusKm: number) {
+/** `paused`: Play has the screen, so the refresh timer and the live-heat reloads wait (they catch up when it is false again). */
+export function useEvents(fix: Fix, radiusKm: number, opts: { paused?: boolean } = {}) {
+  const paused = !!opts.paused;
   // Development starts on the sample day. Production starts empty (a calm
   // loading state on the map) and only ever shows what the database returns.
   const [events, setEvents] = useState<EventRow[]>(() => (DEV ? withDistance(demoEvents(), fix) : []));
@@ -99,6 +101,7 @@ export function useEvents(fix: Fix, radiusKm: number) {
   // the app was suspended by the browser.
   useEffect(() => {
     const refreshIfVisible = () => {
+      if (paused) return;
       if (document.visibilityState === "visible") void load();
     };
     const timer = window.setInterval(refreshIfVisible, 5 * 60 * 1000);
@@ -107,7 +110,14 @@ export function useEvents(fix: Fix, radiusKm: number) {
       window.clearInterval(timer);
       document.removeEventListener("visibilitychange", refreshIfVisible);
     };
-  }, [load]);
+  }, [load, paused]);
+
+  // Play ended: whatever was skipped while it had the screen is caught up at once.
+  const wasPaused = useRef(paused);
+  useEffect(() => {
+    if (wasPaused.current && !paused) void load();
+    wasPaused.current = paused;
+  }, [paused, load]);
 
   // Live heat: a check-in anywhere nudges the map for everyone watching.
   useEffect(() => {
@@ -116,13 +126,13 @@ export function useEvents(fix: Fix, radiusKm: number) {
     const ch = sb
       .channel("hoppaz-heat")
       .on("postgres_changes", { event: "INSERT", schema: "public", table: "checkins" }, () => {
-        void load();
+        if (!paused) void load();
       })
       .subscribe();
     return () => {
       void sb.removeChannel(ch);
     };
-  }, [load]);
+  }, [load, paused]);
 
   return { events, demo, loading, ready, failed, reload: load };
 }

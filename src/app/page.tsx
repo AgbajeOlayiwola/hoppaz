@@ -4,6 +4,7 @@ import dynamic from "next/dynamic";
 import Link from "next/link";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Plus } from "lucide-react";
+import type { Map as MLMap } from "maplibre-gl";
 import AreaPicker from "@/components/AreaPicker";
 import EventCard from "@/components/EventCard";
 import HopSheet from "@/components/HopSheet";
@@ -27,27 +28,14 @@ import { useSession } from "@/lib/useSession";
 import { useEvents, useHop } from "@/lib/useEvents";
 import { useCheckin } from "@/lib/useCheckin";
 import { useGameDashboard } from "@/lib/game";
-import { isNeedAccount } from "@/lib/accountGate";
 import { haversineKm, hasVenue } from "@/lib/geo";
 import type { HopStop } from "@/lib/types";
 import { busPosition } from "@/lib/busPosition";
 import { useCollectibleEventIds } from "@/lib/useCollectibles";
 import { DEMO_DROP_TITLES } from "@/lib/demoData";
 import NextBar from "@/components/map-chrome/NextBar";
-import BoxSheet from "@/components/reveal/BoxSheet";
-import Reveal, { type RevealItem, type RevealOutcome } from "@/components/reveal/Reveal";
-import CameraHunt from "@/components/CameraHunt";
-import type { MapBox } from "@/components/map/NightMap";
-import { sentence } from "@/components/event/copy";
-import { DEMO, demoDrops, demoReveal } from "@/components/me/demo";
-import { dropPhase, opensShort } from "@/components/me/dropTime";
 import { NEXT_COUNT, nextEvents } from "@/lib/filters";
-import { areaByName, pointFromGeog } from "@/lib/geo";
-import { dropsLeft, useGameDrops, type GameDrop } from "@/lib/game";
-import { huntItem } from "@/lib/huntItems";
-import { useToast } from "@/lib/store";
-import { loadDropReceipts } from "@/lib/useCollectibles";
-import { useWelcomeBoxes } from "@/lib/useWelcomeBoxes";
+import { usePlayMode } from "@/lib/usePlayMode";
 
 // MapLibre touches window on import, so it stays out of the server bundle.
 const NightMap = dynamic(() => import("@/components/map/NightMap"), {
@@ -59,6 +47,9 @@ const NightMap = dynamic(() => import("@/components/map/NightMap"), {
   ),
 });
 
+// Play (the avatar, the crates, the HUD and the open moment) loads in its own chunk, once the map is up.
+const PlayLayer = dynamic(() => import("@/components/play/PlayLayer"), { ssr: false });
+
 // One stable empty list, so memo deps do not change on every render.
 const NO_TYPES: string[] = [];
 const NO_STOPS: HopStop[] = [];
@@ -66,19 +57,7 @@ const NO_STOPS: HopStop[] = [];
 /** Open on a day with something on, once per page load, and never over a day the Hopper chose. */
 let firstDayChosen = false;
 
-/** The "N boxes on the map" toast, once per page load: coming back to the map from another tab is not news. */
-let boxesAnnounced = false;
-
 const IS_DEV = process.env.NODE_ENV !== "production";
-
-/** A street box this close to you is worth a toast. */
-const NEAR_SPAWN_KM = 1.5;
-
-/** "400 m" under a kilometre (to the nearest 10), "1.2 km" after. */
-function awayLabel(km: number) {
-  const m = Math.round(km * 100) * 10;
-  return m < 1000 ? `${Math.max(m, 10)} m` : `${(m / 1000).toFixed(1)} km`;
-}
 
 export default function MapPage() {
   const {
@@ -86,7 +65,10 @@ export default function MapPage() {
     dateFilter, setDateFilter, types, setTypes, look,
   } = useHoppaz();
   const { userId, refresh, profile } = useSession();
-  const { events: allEvents, demo, ready, failed, reload } = useEvents(fix, radiusKm);
+  // Play closes the map around you: the events chrome steps out and the page's own tickers and polls wait.
+  const playing = usePlayMode((s) => s.active);
+  const [map, setMap] = useState<MLMap | null>(null);
+  const { events: allEvents, demo, ready, failed, reload } = useEvents(fix, radiusKm, { paused: playing });
   const hop = useHop();
   const { done, checkedAt, busy, checkIn } = useCheckin(userId, refresh);
   // Only the streak is needed here, so ask for the lite read (one call, signed-in Hoppers only).
@@ -145,6 +127,7 @@ export default function MapPage() {
     const onVisible = () => document.visibilityState === "visible" && snap();
     document.addEventListener("visibilitychange", onVisible);
     const tick = setInterval(() => {
+      if (usePlayMode.getState().active) return;
       setNow(Date.now());
       snap();
     }, 30_000);
@@ -274,124 +257,20 @@ export default function MapPage() {
     [counts, dayKey]
   );
 
-  /* ------------------------------------------------------------ boxes -- */
-  // Drops stand on the map as boxes once you have set where you are.
-  const say = useToast((s) => s.say);
-  const live = useGameDrops();
-  const [sampleDrops] = useState<GameDrop[]>(() => (DEMO ? demoDrops(Date.now()) : []));
-  const allDrops = DEMO ? sampleDrops : live.drops;
-  const [opened, setOpened] = useState<Set<string>>(new Set());
+  /* ------------------------------------------------------------- Play -- */
+  // Opening Play leaves whatever card was open; the camera is Play's from here.
   useEffect(() => {
-    let on = true;
-    void loadDropReceipts(userId).then((rows) => on && setOpened(new Set(rows.map((r) => r.drop_id))));
-    return () => {
-      on = false;
-    };
-  }, [userId]);
-  const placed = useMemo(() => {
-    const out: Array<{ drop: GameDrop; at: { lat: number; lng: number }; eventId: string | null }> = [];
-    for (const d of allDrops) {
-      if (opened.has(d.id) || Date.parse(d.closes_at) <= now) continue;
-      // A street box with nobody left to open it is gone.
-      if (d.kind === "spawn" && dropsLeft(d) === 0) continue;
-      const ev = d.event_id ? allEvents.find((e) => e.id === d.event_id) : undefined;
-      const at = pointFromGeog(d.geog) ?? (ev ? { lat: ev.lat, lng: ev.lng } : null) ?? areaByName(d.area) ?? null;
-      if (at) out.push({ drop: d, at: { lat: at.lat, lng: at.lng }, eventId: ev?.id ?? null });
+    if (playing) {
+      setSelected(null);
+      setHopOpen(false);
+      setFiltering(false);
+      setPicking(false);
     }
-    return out;
-  }, [allDrops, opened, allEvents, now]);
-  const boxes: MapBox[] = useMemo(
-    () =>
-      fix
-        ? placed.map(({ drop, at }) => {
-            const open = dropPhase(drop, now) === "open";
-            const hunt = !!huntItem(drop.hunt_item);
-            const left = dropsLeft(drop);
-            const label = !open
-              ? opensShort(drop.opens_at, now)
-              : drop.kind === "welcome"
-                ? "YOURS"
-                : drop.kind === "spawn"
-                  ? left !== null
-                    ? `${left} LEFT`
-                    : "STREET"
-                  : hunt
-                    ? "HUNT"
-                    : "OPEN";
-            return { id: drop.id, lat: at.lat, lng: at.lng, open, hunt, label, kind: drop.kind };
-          })
-        : [],
-    [placed, fix, now]
-  );
-  const openBoxes = boxes.filter((b) => b.open).length;
-  // The moment you set your location, the boxes drop onto the map; say so once.
+  }, [playing]);
+  // Back on the events map: catch the clock up (it did not tick in Play).
   useEffect(() => {
-    if (!fix || boxesAnnounced || boxes.length === 0) return;
-    boxesAnnounced = true;
-    say(`${boxes.length} ${boxes.length === 1 ? "box" : "boxes"} on the map. Go find ${boxes.length === 1 ? "it" : "them"}.`, "violet");
-  }, [fix, boxes.length, say]);
-
-  // New Hoppers get three personal boxes near where they are, once.
-  useWelcomeBoxes(userId, fix, () => {
-    boxesAnnounced = true;
-    say("3 welcome boxes just dropped near you. You have 24 hours.", "violet");
-    // The page clock ticks every 30 s: catch it up, or the new boxes read as a minute old.
-    void live.reload().then(() => setNow(Date.now()));
-  });
-
-  // A street box that turns up on a refresh, close to you: say so once. The first successful read only learns what is already there
-  // (a failed first read must not count, or every box already out there would toast as new on the next one).
-  const seenSpawns = useRef<Set<string> | null>(null);
-  useEffect(() => {
-    if (DEMO || !live.loaded) return;
-    const spawns = live.drops.filter((d) => d.kind === "spawn");
-    const seen = seenSpawns.current;
-    if (!seen) {
-      seenSpawns.current = new Set(spawns.map((d) => d.id));
-      return;
-    }
-    const fresh = spawns.filter((d) => !seen.has(d.id));
-    fresh.forEach((d) => seen.add(d.id));
-    if (!fix) return;
-    let best: { drop: GameDrop; km: number } | null = null;
-    for (const d of fresh) {
-      const at = pointFromGeog(d.geog);
-      if (!at || opened.has(d.id) || dropsLeft(d) === 0) continue;
-      const km = haversineKm(fix.lat, fix.lng, at.lat, at.lng);
-      if (km <= NEAR_SPAWN_KM && (!best || km < best.km)) best = { drop: d, km };
-    }
-    if (!best) return;
-    boxesAnnounced = true;
-    const n = best.drop.max_claims;
-    say(`A street box just dropped ${awayLabel(best.km)} away.${n ? ` First ${n} get it.` : ""}`, "violet");
-  }, [live.loaded, live.drops, fix, opened, say]);
-
-  const [boxId, setBoxId] = useState<string | null>(null);
-  const [opening, setOpening] = useState<{ drop: GameDrop; code: string; outcome?: RevealOutcome } | null>(null);
-  const [hunting, setHunting] = useState<{ drop: GameDrop; at: { lat: number; lng: number } } | null>(null);
-  const box = boxId ? placed.find((p) => p.drop.id === boxId) ?? null : null;
-  const markOpened = (id: string) => setOpened((s) => new Set(s).add(id));
-  /** What came out of a claim, as the reveal shows it. */
-  const outcomeOf = (drop: GameDrop, r: { reward?: string; description?: string; code?: string; xp?: number }): RevealOutcome => {
-    const items: RevealItem[] = [{ kind: huntItem(drop.hunt_item) ? "collectible" : "reward", title: r.reward ?? "Your reward", line: r.description, code: r.code }];
-    if (r.xp) items.push({ kind: "xp", title: `+${r.xp} XP`, line: "Added to your XP." });
-    return { items };
-  };
-  const openBox = async (drop: GameDrop, code: string): Promise<RevealOutcome> => {
-    const r: { error?: string; reward?: string; description?: string; code?: string; xp?: number } = DEMO ? demoReveal() : await live.claim(drop, fix, code || undefined);
-    if (r.error) {
-      // No account yet (claim() has already opened the sign-up sheet, and a welcome box never gets here): the tape is not torn.
-      // The Reveal goes away quietly and the box's sheet is back underneath, so signing up lands on the box.
-      if (isNeedAccount(r.error)) {
-        setOpening(null);
-        setBoxId(drop.id);
-        return { error: "" };
-      }
-      return { error: sentence(r.error) };
-    }
-    markOpened(drop.id);
-    return outcomeOf(drop, r);
-  };
+    if (!playing) setNow(Date.now());
+  }, [playing]);
 
   /* ---------------------------------------- the side card's left and right -- */
   const navRef = useRef<((fromId: string, dir: -1 | 1) => string | null) | null>(null);
@@ -413,7 +292,7 @@ export default function MapPage() {
     if (topRef.current) ro.observe(topRef.current);
     if (bottomRef.current) ro.observe(bottomRef.current);
     return () => ro.disconnect();
-  }, [mounted, event, todayStr]);
+  }, [mounted, event, todayStr, playing]);
 
   // The toast sits above the bottom card, not on top of its text (the side card has no bottom card under it).
   useEffect(() => {
@@ -458,23 +337,30 @@ export default function MapPage() {
         onBus={() => setHopOpen(true)}
         hudTop={hud.top}
         hudBottom={hud.bottom}
-        play={mounted && seenTitle}
-        myLook={profile?.avatar ?? look}
+        swoop={mounted && seenTitle}
+        mode={playing ? "play" : "events"}
+        onMapReady={setMap}
         sidePanel={!!event}
         allHot={mode === "next"}
-        boxes={boxes}
-        onBox={(id) => {
-          setSelected(null);
-          setBoxId(id);
-        }}
         navRef={navRef}
       />
+
+      {/* Play: your avatar (tap it to play), the crates, the HUD and the open moment. It waits for the map. */}
+      {map && (
+        <PlayLayer
+          map={map}
+          look={profile?.avatar ?? look}
+          fix={fix}
+          streak={streak}
+          onNeedLocation={() => setPicking(true)}
+        />
+      )}
 
       {/* The chrome is all "now" (today's rail, the clock), so it draws on the client only: a page
           prerendered yesterday must not hydrate against today's rail. */}
 
       {/* -------------------------------------------------------------- top -- */}
-      {mounted && (
+      {mounted && !playing && (
         <TopChrome
           key={todayStr} /* a new day (6am) rebuilds the 14-day rail */
           hudRef={topRef}
@@ -510,7 +396,7 @@ export default function MapPage() {
         </TopChrome>
       )}
 
-      {showEmpty && (
+      {showEmpty && !playing && (
         <EmptyDay
           filtered={shownTypes.length > 0}
           nextLabel={nextBusy ? dayTag(nextBusy) : null}
@@ -519,7 +405,7 @@ export default function MapPage() {
       )}
 
       {/* ----------------------------------------------------------- bottom -- */}
-      {mounted && !event && (
+      {mounted && !event && !playing && (
         <div ref={bottomRef} className="pointer-events-none absolute inset-x-0 bottom-0 z-20 px-3.5 pb-2.5">
           <div className="mx-auto flex max-w-[560px] flex-col items-end gap-2.5">
             <Link href="/drop" aria-label="Post a flyer" className="btn pointer-events-auto px-3.5 py-2.5">
@@ -532,8 +418,6 @@ export default function MapPage() {
                 count={next.list.length}
                 from={next.from}
                 to={next.to}
-                boxes={boxes.length}
-                openBoxes={openBoxes}
                 hasFix={!!fix}
                 onLocate={() => setPicking(true)}
               />
@@ -582,68 +466,6 @@ export default function MapPage() {
           onTypes={setTypes}
           onClear={() => setTypes([])}
           onClose={() => setFiltering(false)}
-        />
-      )}
-      {box && (
-        <BoxSheet
-          drop={box.drop}
-          at={box.at}
-          fix={fix}
-          now={now}
-          eventTitle={box.eventId ? allEvents.find((e) => e.id === box.eventId)?.title ?? null : null}
-          onEvent={
-            box.eventId
-              ? () => {
-                  const ev = allEvents.find((e) => e.id === box.eventId);
-                  setBoxId(null);
-                  if (ev) {
-                    if (mode === "day" && nightOf(Date.parse(ev.starts_at)) !== dayKey) setDateFilter({ kind: "night", date: nightOf(Date.parse(ev.starts_at)) });
-                    setSelected(ev.id);
-                  }
-                }
-              : undefined
-          }
-          onOpen={(code) => {
-            setOpening({ drop: box.drop, code });
-            setBoxId(null);
-          }}
-          onHunt={() => {
-            setHunting({ drop: box.drop, at: box.at });
-            setBoxId(null);
-          }}
-          onClose={() => setBoxId(null)}
-        />
-      )}
-      {opening && (
-        <Reveal
-          label={opening.drop.title}
-          where={opening.drop.partner?.name ?? opening.drop.area}
-          open={async () => opening.outcome ?? openBox(opening.drop, opening.code)}
-          // Backing out, or a box that would not open, lands on the box's sheet again (it is gone once the claim went through).
-          onClose={(claimed) => {
-            if (!claimed) setBoxId(opening.drop.id);
-            setOpening(null);
-          }}
-        />
-      )}
-      {hunting && (
-        <CameraHunt
-          drop={hunting.drop}
-          eventPoint={hunting.at}
-          initialFix={fix ?? null}
-          onClaim={async (at) => {
-            const r = DEMO ? demoReveal() : await live.claim(hunting.drop, at);
-            // The server's one-liners are SHOUTING; the hunt shows them the way a box on the map does.
-            if ("error" in r && r.error) return { error: sentence(r.error) };
-            markOpened(hunting.drop.id);
-            return r;
-          }}
-          // A found hunt is already claimed: the box opens on what it paid out.
-          onOpenBox={(won) => {
-            setOpening({ drop: hunting.drop, code: "", outcome: outcomeOf(hunting.drop, won) });
-            setHunting(null);
-          }}
-          onClose={() => setHunting(null)}
         />
       )}
       {hopOpen && <HopSheet hop={hop} fix={fix} onClose={() => setHopOpen(false)} />}

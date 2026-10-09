@@ -6,15 +6,14 @@ import { nightTag } from "@/lib/filters";
 
 /**
  * The map's bottom bar while it shows the next events rather than one day:
- * how many, which nights they cover, and the boxes. Without a location the
- * boxes stay hidden, and this is where you set one.
+ * how many, which nights they cover, and the way into Play. Boxes are not on
+ * this map any more: tap your avatar and they appear around you. Without a
+ * location there is no avatar, and this is where you set one.
  */
 export default function NextBar({
   count,
   from,
   to,
-  boxes,
-  openBoxes,
   hasFix,
   onLocate,
   className,
@@ -22,9 +21,6 @@ export default function NextBar({
   count: number;
   from: string | null;
   to: string | null;
-  /** Boxes on the map (open and sealed). */
-  boxes: number;
-  openBoxes: number;
   hasFix: boolean;
   onLocate: () => void;
   className?: string;
@@ -44,15 +40,13 @@ export default function NextBar({
       <div className="mt-2.5 border-t border-line pt-2.5">
         {hasFix ? (
           <p className="flex items-center gap-2 font-body text-[13px] leading-snug text-cream">
-            <i aria-hidden className={clsx("h-2 w-2 flex-none rounded-full", boxes ? "bg-violet" : "bg-dim")} />
-            {boxes === 0
-              ? "No boxes out right now. They drop at venues."
-              : `${boxes} ${boxes === 1 ? "box" : "boxes"} on the map${openBoxes ? `, ${openBoxes} open now` : ""}. Get close and open ${boxes === 1 ? "it" : "them"}.`}
+            <i aria-hidden className="h-2 w-2 flex-none rounded-full bg-violet" />
+            Tap your avatar to play. Boxes drop around you.
           </p>
         ) : (
           <button type="button" onClick={onLocate} className="flex min-h-[40px] w-full items-center gap-2 text-left font-mono text-[11px] font-medium uppercase tracking-[0.08em] text-cream">
             <Crosshair size={15} className="flex-none text-orange" aria-hidden />
-            <span className="underline decoration-orange decoration-2 underline-offset-4">Set your location to find the boxes near you</span>
+            <span className="underline decoration-orange decoration-2 underline-offset-4">Set your location to play</span>
           </button>
         )}
       </div>

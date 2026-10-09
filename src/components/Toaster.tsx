@@ -1,6 +1,7 @@
 "use client";
 
 import { useToast, type ToastTone } from "@/lib/store";
+import { usePlayMode } from "@/lib/usePlayMode";
 import clsx from "clsx";
 
 /**
@@ -20,6 +21,7 @@ function dotFor(tone: ToastTone, text: string) {
 
 export default function Toaster() {
   const toast = useToast((s) => s.toast);
+  const playing = usePlayMode((s) => s.active);
   if (!toast) return null;
   return (
     <div
@@ -27,7 +29,12 @@ export default function Toaster() {
       aria-live="polite"
       className="pointer-events-none fixed inset-x-0 z-50 flex justify-center px-4"
       // --hz-toast-lift: a page with its own card along the bottom (the map) says how tall it is, so the toast sits above it.
-      style={{ bottom: "calc(5.25rem + var(--hz-toast-lift, 0px) + env(safe-area-inset-bottom, 0px))" }}
+      // In Play the nav is gone and the tray sits at the bottom: the toast rides above the tray (--hz-play-lift, set by the Play layer).
+      style={{
+        bottom: playing
+          ? "calc(var(--hz-play-lift, 7rem) + env(safe-area-inset-bottom, 0px))"
+          : "calc(5.25rem + var(--hz-toast-lift, 0px) + env(safe-area-inset-bottom, 0px))",
+      }}
     >
       <div
         key={toast.id}
