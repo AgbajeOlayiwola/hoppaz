@@ -1,10 +1,12 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { getSupabase } from "./supabase/client";
 
 export type Quest = { id: string; key: string; title: string; description: string; quest_type: "checkin"|"photo"|"qr"|"insight"|"group"; event_id: string|null; starts_at: string; ends_at: string|null; repeat_period: string; xp_reward: number; badge_key: string|null; group_size: number };
-export type GameDrop = { id: string; title: string; description: string; partner_id: string|null; event_id: string|null; area: string|null; geog: unknown; opens_at: string; closes_at: string; radius_m: number; claim_method: "proximity"|"qr"|"either"; reward_model: "fixed"|"random"; /** Set when the drop is a camera hunt for one of the 3D items (huntItems.ts). */ hunt_item?: string|null; partner?: { name: string; logo_url: string|null }|null };
+export type GameDrop = { id: string; title: string; description: string; partner_id: string|null; event_id: string|null; area: string|null; geog: unknown; opens_at: string; closes_at: string; radius_m: number; claim_method: "proximity"|"qr"|"either"; reward_model: "fixed"|"random"; /** Set when the drop is a camera hunt for one of the 3D items (huntItems.ts). */ hunt_item?: string|null; /** staff = desk drop, spawn = street box (shared, first N), welcome = personal box. Missing on older databases. */ kind?: "staff"|"spawn"|"welcome"; /** Set on welcome boxes: only this Hopper can see them. */ owner_id?: string|null; max_claims?: number|null; claimed_count?: number; partner?: { name: string; logo_url: string|null }|null };
+/** How many people can still open a box (first N), or null when there is no cap. Never below 0. */
+export const dropsLeft=(d:Pick<GameDrop,"max_claims"|"claimed_count">)=>d.max_claims!=null?Math.max(0,d.max_claims-(d.claimed_count??0)):null;
 export type CrewGroup = { id: string; name: string; visibility: "open"|"private"; invite_code: string; created_by: string; crew_moves?: CrewMove[] };
 export type CrewMove = { id: string; crew_id: string; title: string; meetup: string|null; starts_at: string; note: string; event_id: string|null };
 
@@ -16,12 +18,24 @@ export function useQuests(userId: string|null) {
   return {quests,claims,busy,claim,reload,/** The first load has finished, whatever it found. */ready};
 }
 
-export function useGameDrops(eventId?:string) {
-  const [drops,setDrops]=useState<GameDrop[]>([]); const [busy,setBusy]=useState<string|null>(null); const [ready,setReady]=useState(false);
-  const reload=useCallback(async()=>{const sb=getSupabase();if(!sb){setReady(true);return;}let q=sb.from("game_drops").select("id,title,description,partner_id,event_id,area,geog,opens_at,closes_at,radius_m,claim_method,reward_model,hunt_item,partner:partners(name,logo_url)").eq("active",true).gt("closes_at",new Date().toISOString()).order("opens_at");if(eventId)q=q.eq("event_id",eventId);const {data}=await q;setDrops((data??[]) as unknown as GameDrop[]);setReady(true);},[eventId]);
-  useEffect(()=>{void reload();},[reload]);
-  const claim=useCallback(async(drop:GameDrop,fix:{lat:number;lng:number}|null,code?:string)=>{const sb=getSupabase();if(!sb)return {error:"NOT CONNECTED"};setBusy(drop.id);const {data,error}=await sb.rpc("claim_game_drop",{p_drop:drop.id,p_lat:fix?.lat??null,p_lng:fix?.lng??null,p_code:code?.trim()||null});setBusy(null);if(error)return {error:"COULD NOT CLAIM"};const r=data as {ok:boolean;reason?:string;reward?:string;description?:string;code?:string;xp?:number};if(!r.ok)return {error:({closed:"DROP IS CLOSED",sold_out:"ALL REWARDS HAVE BEEN CLAIMED",invalid_code:"QR CODE NOT VALID",code_required:"SCAN THE DROP QR CODE",location_required:"TURN ON LOCATION TO CLAIM",too_far:"GET CLOSER TO THE DROP",already:"YOU ALREADY CLAIMED THIS DROP"} as Record<string,string>)[r.reason??""]??"COULD NOT CLAIM"};await reload();return {reward:r.reward,description:r.description,code:r.code,xp:r.xp};},[reload]);
-  return {drops,busy,claim,reload,/** The first load has finished, whatever it found. */ready};
+const DROP_COLS="id,title,description,partner_id,event_id,area,geog,opens_at,closes_at,radius_m,claim_method,reward_model,hunt_item,partner:partners(name,logo_url)";
+// Street box columns (spawning.sql). A database that has not run it yet rejects them, so the read falls back to DROP_COLS.
+const SPAWN_COLS=",kind,owner_id,max_claims,claimed_count";
+/** The boxes list re-reads this often while the tab is visible, so new street boxes and sold-out ones show up on their own. */
+const DROPS_REFRESH_MS=60_000;
+
+/**
+ * `staffOnly` keeps only desk drops (venue rewards): street boxes and welcome boxes belong on the
+ * map, where the sold-out ones are hidden, and not in the lists of venue drops (/drops, Me).
+ */
+export function useGameDrops(eventId?:string,opts:{staffOnly?:boolean}={}) {
+  const staffOnly=!!opts.staffOnly;
+  const [all,setAll]=useState<GameDrop[]>([]); const [busy,setBusy]=useState<string|null>(null); const [ready,setReady]=useState(false); const [loaded,setLoaded]=useState(false); const latest=useRef(0);
+  const drops=useMemo(()=>staffOnly?all.filter(d=>!d.kind||d.kind==="staff"):all,[all,staffOnly]);
+  const reload=useCallback(async()=>{const sb=getSupabase();if(!sb){setReady(true);return;}const mine=++latest.current;const read=(cols:string)=>{let q=sb.from("game_drops").select(cols).eq("active",true).gt("closes_at",new Date().toISOString()).order("opens_at");if(eventId)q=q.eq("event_id",eventId);return q;};let res=await read(DROP_COLS+SPAWN_COLS);if(res.error)res=await read(DROP_COLS);if(mine!==latest.current)return;/* a newer read is already on its way, so this one is stale */setReady(true);if(res.error)return;/* offline, or a phone still waking up: keep the boxes already on the map */setAll((res.data??[]) as unknown as GameDrop[]);setLoaded(true);},[eventId]);
+  useEffect(()=>{void reload();if(!getSupabase())return;const tick=()=>{if(document.visibilityState==="visible")void reload();};const timer=setInterval(tick,DROPS_REFRESH_MS);document.addEventListener("visibilitychange",tick);return()=>{clearInterval(timer);document.removeEventListener("visibilitychange",tick);};},[reload]);
+  const claim=useCallback(async(drop:GameDrop,fix:{lat:number;lng:number}|null,code?:string)=>{const sb=getSupabase();if(!sb)return {error:"NOT CONNECTED"};setBusy(drop.id);const {data,error}=await sb.rpc("claim_game_drop",{p_drop:drop.id,p_lat:fix?.lat??null,p_lng:fix?.lng??null,p_code:code?.trim()||null});setBusy(null);if(error)return {error:"COULD NOT CLAIM"};const r=data as {ok:boolean;reason?:string;reward?:string;description?:string;code?:string;xp?:number};if(!r.ok){/* the list is stale: someone emptied it, or it closed. Re-read so the pin goes now, not in a minute. */if(r.reason==="sold_out"||r.reason==="closed"||r.reason==="already")void reload();return {error:({closed:"DROP IS CLOSED",sold_out:"ALL REWARDS HAVE BEEN CLAIMED",invalid_code:"QR CODE NOT VALID",code_required:"SCAN THE DROP QR CODE",location_required:"TURN ON LOCATION TO CLAIM",too_far:"GET CLOSER TO THE DROP",already:"YOU ALREADY CLAIMED THIS DROP",not_yours:"THIS BOX IS SOMEONE ELSE'S",too_fast:"THAT WAS TOO FAST TO BE ON FOOT",slow_down:"TAKE A BREATHER, THEN TRY AGAIN"} as Record<string,string>)[r.reason??""]??"COULD NOT CLAIM"};}await reload();return {reward:r.reward,description:r.description,code:r.code,xp:r.xp};},[reload]);
+  return {drops,busy,claim,reload,/** The first load has finished, whatever it found. */ready,/** At least one read worked, so `drops` is real and not just empty because the network was down. */loaded};
 }
 
 /**

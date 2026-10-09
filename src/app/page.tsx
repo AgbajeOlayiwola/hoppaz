@@ -39,13 +39,14 @@ import CameraHunt from "@/components/CameraHunt";
 import type { MapBox } from "@/components/map/NightMap";
 import { sentence } from "@/components/event/copy";
 import { DEMO, demoDrops, demoReveal } from "@/components/me/demo";
-import { opensShort } from "@/components/me/dropTime";
+import { dropPhase, opensShort } from "@/components/me/dropTime";
 import { NEXT_COUNT, nextEvents } from "@/lib/filters";
 import { areaByName, pointFromGeog } from "@/lib/geo";
-import { useGameDrops, type GameDrop } from "@/lib/game";
+import { dropsLeft, useGameDrops, type GameDrop } from "@/lib/game";
 import { huntItem } from "@/lib/huntItems";
 import { useToast } from "@/lib/store";
 import { loadDropReceipts } from "@/lib/useCollectibles";
+import { useWelcomeBoxes } from "@/lib/useWelcomeBoxes";
 
 // MapLibre touches window on import, so it stays out of the server bundle.
 const NightMap = dynamic(() => import("@/components/map/NightMap"), {
@@ -65,6 +66,15 @@ const NO_STOPS: HopStop[] = [];
 let firstDayChosen = false;
 
 const IS_DEV = process.env.NODE_ENV !== "production";
+
+/** A street box this close to you is worth a toast. */
+const NEAR_SPAWN_KM = 1.5;
+
+/** "400 m" under a kilometre (to the nearest 10), "1.2 km" after. */
+function awayLabel(km: number) {
+  const m = Math.round(km * 100) * 10;
+  return m < 1000 ? `${Math.max(m, 10)} m` : `${(m / 1000).toFixed(1)} km`;
+}
 
 export default function MapPage() {
   const {
@@ -277,6 +287,8 @@ export default function MapPage() {
     const out: Array<{ drop: GameDrop; at: { lat: number; lng: number }; eventId: string | null }> = [];
     for (const d of allDrops) {
       if (opened.has(d.id) || Date.parse(d.closes_at) <= now) continue;
+      // A street box with nobody left to open it is gone.
+      if (d.kind === "spawn" && dropsLeft(d) === 0) continue;
       const ev = d.event_id ? allEvents.find((e) => e.id === d.event_id) : undefined;
       const at = pointFromGeog(d.geog) ?? (ev ? { lat: ev.lat, lng: ev.lng } : null) ?? areaByName(d.area) ?? null;
       if (at) out.push({ drop: d, at: { lat: at.lat, lng: at.lng }, eventId: ev?.id ?? null });
@@ -287,9 +299,21 @@ export default function MapPage() {
     () =>
       fix
         ? placed.map(({ drop, at }) => {
-            const open = Date.parse(drop.opens_at) <= now;
+            const open = dropPhase(drop, now) === "open";
             const hunt = !!huntItem(drop.hunt_item);
-            return { id: drop.id, lat: at.lat, lng: at.lng, open, hunt, label: open ? (hunt ? "HUNT" : "OPEN") : opensShort(drop.opens_at, now) };
+            const left = dropsLeft(drop);
+            const label = !open
+              ? opensShort(drop.opens_at, now)
+              : drop.kind === "welcome"
+                ? "YOURS"
+                : drop.kind === "spawn"
+                  ? left !== null
+                    ? `${left} LEFT`
+                    : "STREET"
+                  : hunt
+                    ? "HUNT"
+                    : "OPEN";
+            return { id: drop.id, lat: at.lat, lng: at.lng, open, hunt, label, kind: drop.kind };
           })
         : [],
     [placed, fix, now]
@@ -302,6 +326,41 @@ export default function MapPage() {
     announced.current = true;
     say(`${boxes.length} ${boxes.length === 1 ? "box" : "boxes"} on the map. Go find ${boxes.length === 1 ? "it" : "them"}.`, "violet");
   }, [fix, boxes.length, say]);
+
+  // New Hoppers get three personal boxes near where they are, once.
+  useWelcomeBoxes(userId, fix, () => {
+    announced.current = true;
+    say("3 welcome boxes just dropped near you. You have 24 hours.", "violet");
+    // The page clock ticks every 30 s: catch it up, or the new boxes read as a minute old.
+    void live.reload().then(() => setNow(Date.now()));
+  });
+
+  // A street box that turns up on a refresh, close to you: say so once. The first successful read only learns what is already there
+  // (a failed first read must not count, or every box already out there would toast as new on the next one).
+  const seenSpawns = useRef<Set<string> | null>(null);
+  useEffect(() => {
+    if (DEMO || !live.loaded) return;
+    const spawns = live.drops.filter((d) => d.kind === "spawn");
+    const seen = seenSpawns.current;
+    if (!seen) {
+      seenSpawns.current = new Set(spawns.map((d) => d.id));
+      return;
+    }
+    const fresh = spawns.filter((d) => !seen.has(d.id));
+    fresh.forEach((d) => seen.add(d.id));
+    if (!fix) return;
+    let best: { drop: GameDrop; km: number } | null = null;
+    for (const d of fresh) {
+      const at = pointFromGeog(d.geog);
+      if (!at || opened.has(d.id) || dropsLeft(d) === 0) continue;
+      const km = haversineKm(fix.lat, fix.lng, at.lat, at.lng);
+      if (km <= NEAR_SPAWN_KM && (!best || km < best.km)) best = { drop: d, km };
+    }
+    if (!best) return;
+    announced.current = true;
+    const n = best.drop.max_claims;
+    say(`A street box just dropped ${awayLabel(best.km)} away.${n ? ` First ${n} get it.` : ""}`, "violet");
+  }, [live.loaded, live.drops, fix, opened, say]);
 
   const [boxId, setBoxId] = useState<string | null>(null);
   const [opening, setOpening] = useState<{ drop: GameDrop; code: string } | null>(null);

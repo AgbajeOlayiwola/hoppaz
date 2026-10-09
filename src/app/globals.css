@@ -1166,6 +1166,19 @@ svg.rig.poke #character { animation: rig-poke 0.42s cubic-bezier(0.3, 1.6, 0.5, 
 .hz-boxpin-sealed .hz-boxpin-box {
   filter: saturate(0.7) brightness(0.88);
 }
+/* A street box is the same violet box with an orange label: go and get it. */
+.hz-boxpin-street .hz-boxpin-label,
+.hz-boxpin-street.hz-boxpin-open .hz-boxpin-label {
+  background: #ff4d00;
+  color: #0e0b0a;
+}
+/* A welcome box is yours alone: cream label, violet border, in both themes. */
+.hz-boxpin-welcome .hz-boxpin-label,
+.hz-boxpin-welcome.hz-boxpin-open .hz-boxpin-label {
+  background: #f5ebdd;
+  color: #0e0b0a;
+  box-shadow: inset 0 0 0 1.5px #5b2eff;
+}
 @keyframes hz-boxpin-bob {
   0%,
   100% {

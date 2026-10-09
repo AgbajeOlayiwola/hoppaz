@@ -34,7 +34,7 @@ const HOW: Record<GameDrop["claim_method"], string> = {
 export default function DropsPage() {
   const { userId } = useSession();
   const { fix } = useHoppaz();
-  const live = useGameDrops();
+  const live = useGameDrops(undefined, { staffOnly: true });
   const say = useToast((s) => s.say);
   const now = useNow(15_000);
 

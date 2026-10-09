@@ -6,13 +6,14 @@ import Sheet from "@/components/Sheet";
 import QrScanner from "@/components/QrScanner";
 import { haversineKm } from "@/lib/geo";
 import { huntItem, RARITY } from "@/lib/huntItems";
-import type { GameDrop } from "@/lib/game";
-import { opensLabel } from "@/components/me/dropTime";
+import { dropsLeft, type GameDrop } from "@/lib/game";
+import { dropPhase, opensLabel, timeLeft } from "@/components/me/dropTime";
 
 /**
  * What a box on the map says when you tap it. Open and close enough: open it
  * (the reveal) or, for a hunt, find it with the camera. Open but far: how far,
- * and directions. Sealed: when it opens. It also links to its event.
+ * and directions. Sealed: when it opens. It also links to its event. A street
+ * box says how many are left and how long it has; a welcome box says it is yours.
  */
 export default function BoxSheet({
   drop,
@@ -39,19 +40,28 @@ export default function BoxSheet({
 }) {
   const [code, setCode] = useState("");
   const [scanning, setScanning] = useState(false);
-  const sealed = Date.parse(drop.opens_at) > now;
+  const sealed = dropPhase(drop, now) === "sealed";
   const item = huntItem(drop.hunt_item);
   const metres = fix ? Math.round(haversineKm(fix.lat, fix.lng, at.lat, at.lng) * 1000) : null;
   const near = metres !== null && metres <= drop.radius_m;
   const far = metres === null ? "Set your location to open it." : metres < 1000 ? `${metres} m away` : `${(metres / 1000).toFixed(1)} km away`;
   const needsCode = drop.claim_method === "qr";
+  const street = drop.kind === "spawn";
+  const welcome = drop.kind === "welcome";
+  const left = dropsLeft(drop);
+  const status = street
+    ? [left !== null ? `${left} of ${drop.max_claims} left` : null, `gone in ${timeLeft(drop.closes_at, now)}`].filter(Boolean).join(" · ")
+    : welcome
+      ? `Yours for ${timeLeft(drop.closes_at, now)}`
+      : null;
+  const head = street ? ["STREET BOX", drop.area].filter(Boolean).join(" · ") : welcome ? "WELCOME BOX" : drop.partner?.name ?? "HOPPAZ DROP";
   const directions = `https://www.google.com/maps/dir/?api=1&destination=${at.lat},${at.lng}`;
 
   return (
     <Sheet open onClose={onClose} label={drop.title}>
       <p className="seclabel flex items-center gap-2">
         <i aria-hidden className="h-2 w-2 flex-none rounded-full bg-violet" />
-        <span className="truncate">{drop.partner?.name ?? "HOPPAZ DROP"}</span>
+        <span className="truncate">{head}</span>
         {item && (
           <span className="ml-auto flex-none font-mono text-[10px] tracking-[0.12em]" style={{ color: RARITY[item.rarity].color }}>
             {RARITY[item.rarity].label} HUNT
@@ -60,6 +70,7 @@ export default function BoxSheet({
       </p>
       <h2 className="mt-2 font-display text-[24px] font-black leading-tight">{item ? `${item.name} is hiding here` : drop.title}</h2>
       {drop.description && <p className="hint mt-1">{drop.description}</p>}
+      {status && <p className="mt-3 font-mono text-[11px] font-medium uppercase tracking-[0.08em] text-cream">{status}</p>}
 
       {eventTitle && onEvent && (
         <button type="button" onClick={onEvent} className="mt-3 flex min-h-[44px] items-center gap-2 font-mono text-[11px] font-medium uppercase tracking-[0.08em] text-cream underline decoration-orange decoration-2 underline-offset-4">

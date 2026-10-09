@@ -89,8 +89,8 @@ export type NightMapProps = {
   navRef?: React.MutableRefObject<((fromId: string, dir: -1 | 1) => string | null) | null>;
 };
 
-/** A drop on the map: a sealed box at its spot. Open ones glow; sealed ones carry when they open. */
-export type MapBox = { id: string; lat: number; lng: number; open: boolean; label: string; hunt: boolean };
+/** A drop on the map: a sealed box at its spot. Open ones glow; sealed ones carry when they open. `kind` is a staff drop (default), a street box (spawn) or a personal welcome box. */
+export type MapBox = { id: string; lat: number; lng: number; open: boolean; label: string; hunt: boolean; kind?: "staff" | "spawn" | "welcome" };
 
 type Mode = "card" | "banner" | "mini";
 type Box = [number, number, number, number];
@@ -1063,7 +1063,7 @@ export default function NightMap({
 
   /* ------------------------------------------------------------ boxes ---- */
   // Drops stand on the map as sealed boxes: open ones glow and bob, sealed ones say when they open.
-  const boxKey = boxes.map((b) => `${b.id}:${b.lat.toFixed(5)},${b.lng.toFixed(5)}:${b.open}:${b.hunt}:${b.label}`).join("|");
+  const boxKey = boxes.map((b) => `${b.id}:${b.lat.toFixed(5)},${b.lng.toFixed(5)}:${b.open}:${b.hunt}:${b.kind ?? "staff"}:${b.label}`).join("|");
   useEffect(() => {
     const m = map.current;
     if (!m || !ready.current) return;
@@ -1096,8 +1096,11 @@ export default function NightMap({
       el.classList.toggle("hz-boxpin-open", b.open);
       el.classList.toggle("hz-boxpin-sealed", !b.open);
       el.classList.toggle("hz-boxpin-hunt", b.hunt);
+      el.classList.toggle("hz-boxpin-street", b.kind === "spawn");
+      el.classList.toggle("hz-boxpin-welcome", b.kind === "welcome");
       (el.querySelector(".hz-boxpin-label") as HTMLElement).textContent = b.label;
-      el.setAttribute("aria-label", `${b.hunt ? "Hunt" : "Drop"}: ${b.label.toLowerCase()}. ${b.open ? "Open it nearby." : ""}`);
+      const what = b.kind === "spawn" ? "Street box" : b.kind === "welcome" ? "Welcome box" : b.hunt ? "Hunt" : "Drop";
+      el.setAttribute("aria-label", `${what}: ${b.label.toLowerCase()}. ${b.open ? "Open it nearby." : ""}`);
       mk.setLngLat([b.lng, b.lat]);
     });
     declutter.current();

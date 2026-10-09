@@ -41,7 +41,7 @@ export default function MePage() {
   const { userId, email, hasAccount, state } = session;
   const ask = useNextAsk(userId, hasAccount);
   const { stats, makeReport, busy: reportBusy, ready: statsReady } = useGameDashboard(userId, { lite: true });
-  const { drops, ready: dropsReady } = useGameDrops();
+  const { drops, ready: dropsReady } = useGameDrops(undefined, { staffOnly: true });
   const { fix, look, setSeenTitle } = useHoppaz();
   const say = useToast((s) => s.say);
   const router = useRouter();

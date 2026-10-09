@@ -12,9 +12,11 @@ const MONTHS = ["JAN", "FEB", "MAR", "APR", "MAY", "JUN", "JUL", "AUG", "SEP", "
 
 export type DropPhase = "sealed" | "open" | "closed";
 
-export function dropPhase(d: Pick<GameDrop, "opens_at" | "closes_at">, now: number): DropPhase {
-  if (now < Date.parse(d.opens_at)) return "sealed";
+export function dropPhase(d: Pick<GameDrop, "opens_at" | "closes_at" | "kind">, now: number): DropPhase {
   if (now >= Date.parse(d.closes_at)) return "closed";
+  // Street and welcome boxes open the moment they are made, so a phone clock a little behind never shows them sealed.
+  if (d.kind === "spawn" || d.kind === "welcome") return "open";
+  if (now < Date.parse(d.opens_at)) return "sealed";
   return "open";
 }
 
@@ -75,4 +77,11 @@ export function opensShort(opensAt: string, now: number) {
   const night = (ms: number) => new Date(ms + HOUR - 6 * HOUR).toISOString().slice(0, 10);
   if (night(at) === night(now)) return `OPENS ${clock12(at)}`;
   return `OPENS ${DAYS[new Date(at + HOUR).getUTCDay()]}`;
+}
+
+/** How long a box has left: "12 min" up to two hours, "23 h" after that. Never below "1 min". */
+export function timeLeft(closesAt: string, now: number) {
+  const left = Math.max(0, Date.parse(closesAt) - now);
+  if (left < 2 * HOUR) return `${Math.max(1, Math.ceil(left / MIN))} min`;
+  return `${Math.ceil(left / HOUR)} h`;
 }
