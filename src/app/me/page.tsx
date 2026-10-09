@@ -2,12 +2,16 @@
 
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
-import { FileText, Gift, Link2, Ticket } from "lucide-react";
+import { FileText, Gift, Link2 } from "lucide-react";
 import Sheet from "@/components/Sheet";
 import AreaPicker from "@/components/AreaPicker";
 import type { MascotState } from "@/components/Mascot";
+import Reveal, { type RevealOutcome } from "@/components/reveal/Reveal";
 import MeHeader from "@/components/me/MeHeader";
+import MonthCard, { useMonthCard } from "@/components/me/MonthCard";
 import NumberTiles, { type TileKey } from "@/components/me/NumberTiles";
+import TodaysBox from "@/components/me/TodaysBox";
+import ShelfStrip from "@/components/me/ShelfStrip";
 import BadgeShelf, { shelfBadges } from "@/components/me/BadgeShelf";
 import WaysToEarn from "@/components/me/WaysToEarn";
 import YourNights, { type Visit } from "@/components/me/YourNights";
@@ -15,6 +19,7 @@ import SettingsGroup from "@/components/me/SettingsGroup";
 import { RowButton, RowGroup, RowLink } from "@/components/me/Rows";
 import { DEMO, demoBadges, demoEmpty, demoProfile, demoStats, demoVisits } from "@/components/me/demo";
 import { dropPhase } from "@/components/me/dropTime";
+import { lagosDate, weekDates } from "@/components/me/lagosDay";
 import { readJSON, writeJSON } from "@/components/me/seen";
 import { useNow } from "@/components/me/useNow";
 import { getSupabase } from "@/lib/supabase/client";
@@ -22,25 +27,24 @@ import { useSession } from "@/lib/useSession";
 import { useHoppaz, useToast } from "@/lib/store";
 import { BADGES, levelFor, statusFor } from "@/lib/brand";
 import { useGameDashboard, useGameDrops } from "@/lib/game";
+import { useDailyBox } from "@/lib/useDailyBox";
 import { useNextAsk } from "@/lib/account";
 import type { Profile } from "@/lib/types";
 
 type CatalogBadge = { key: string; name: string; icon: string; description: string };
-type Seen = { streak: number; xp: number; hot: TileKey; level: string };
+type Seen = { streak: number; xp: number; level: string };
 
 const SEEN_KEY = "hoppaz.me.seen";
 const BADGES_KEY = "hoppaz.me.badges";
 const WAVE_KEY = "hoppaz.me.wave";
 const DAY_MS = 24 * 3.6e6;
 
-/** Today's date in Lagos, for "first open of the day". */
-const lagosToday = () => new Date(Date.now() + 3.6e6).toISOString().slice(0, 10);
-
 export default function MePage() {
   const session = useSession();
   const { userId, email, hasAccount, state } = session;
   const ask = useNextAsk(userId, hasAccount);
-  const { stats, makeReport, busy: reportBusy, ready: statsReady } = useGameDashboard(userId, { lite: true });
+  const { stats, makeReport, busy: reportBusy, ready: statsReady, reload: reloadStats } = useGameDashboard(userId, { lite: true });
+  const daily = useDailyBox(userId, { demo: DEMO });
   const { drops, ready: dropsReady } = useGameDrops(undefined, { staffOnly: true });
   const { fix, look, setSeenTitle } = useHoppaz();
   const say = useToast((s) => s.say);
@@ -62,8 +66,12 @@ export default function MePage() {
   const [catalog, setCatalog] = useState<CatalogBadge[]>([]);
   const [visits, setVisits] = useState<Visit[]>([]);
   const [loaded, setLoaded] = useState(false);
+  // The nights and badges could not be read (a dropped connection). `loaded` stays false: it means "we know what you have",
+  // and the badge stamps and the mascot's mood must not read an empty answer as the truth.
+  const [loadFailed, setLoadFailed] = useState(false);
   const [picking, setPicking] = useState(false);
   const [earnOpen, setEarnOpen] = useState(false);
+  const [revealing, setRevealing] = useState(false);
   const [birthday, setBirthday] = useState("");
 
   useEffect(() => {
@@ -83,7 +91,7 @@ export default function MePage() {
     if (!userId) return;
     let cancelled = false;
     (async () => {
-      const [b, bc, c] = await Promise.all([
+      const got = await Promise.all([
         sb.from("badges").select("key, earned_at").eq("user_id", userId),
         sb.from("badge_catalog").select("key,name,icon,description"),
         sb
@@ -92,8 +100,14 @@ export default function MePage() {
           .eq("user_id", userId)
           .order("created_at", { ascending: false })
           .limit(40),
-      ]);
+      ]).catch(() => null);
       if (cancelled) return;
+      if (!got || got[0].error || got[2].error) {
+        setLoadFailed(true);
+        return;
+      }
+      const [b, bc, c] = got;
+      setLoadFailed(false);
       setOwned(Object.fromEntries(((b.data ?? []) as { key: string; earned_at: string }[]).map((r) => [r.key, r.earned_at])));
       setCatalog(((bc.data ?? []) as CatalogBadge[]).filter((x) => !BADGES.some((badge) => badge.key === x.key)));
       setVisits(
@@ -124,30 +138,33 @@ export default function MePage() {
   const lvl = levelFor(xp);
   const numbersReady = DEMO ? !!demoMe : (state !== "loading" && (state === "offline" || (!!profile && statsReady)));
 
-  // The one that moved since you last looked is orange, and stamps in once.
-  const [hot, setHot] = useState<TileKey>("streak");
+  // A number that moved since you last looked stamps in once.
   const [stamp, setStamp] = useState<Partial<Record<TileKey | "level", boolean>>>({});
   useEffect(() => {
     if (!numbersReady) return;
     const prev = readJSON<Seen | null>(SEEN_KEY, null);
-    let nextHot: TileKey = prev?.hot ?? "streak";
     const moved: Partial<Record<TileKey | "level", boolean>> = {};
     if (prev) {
-      // A streak only moves once a day, so when both moved it is the news.
-      if (xp !== prev.xp) {
-        nextHot = "xp";
-        moved.xp = true;
-      }
-      if (streak !== prev.streak) {
-        nextHot = "streak";
-        moved.streak = true;
-      }
+      if (xp !== prev.xp) moved.xp = true;
+      if (streak !== prev.streak) moved.streak = true;
       if (lvl.name !== prev.level) moved.level = true;
     }
-    setHot(nextHot);
     setStamp(moved);
-    writeJSON(SEEN_KEY, { streak, xp, hot: nextHot, level: lvl.name } satisfies Seen);
+    writeJSON(SEEN_KEY, { streak, xp, level: lvl.name } satisfies Seen);
   }, [numbersReady, streak, xp, lvl.name]);
+
+  // This week's seven dots: the days that counted toward the streak.
+  const today = now === null ? null : lagosDate(now);
+  const week = useMemo(() => (today ? weekDates(today) : null), [today]);
+  const weekDone = useMemo(() => {
+    const done = new Set(daily.week);
+    // Development without a database: the sample streak, so the dots have something to show.
+    if (DEMO && week && today) {
+      const at = week.indexOf(today);
+      week.forEach((d, i) => i < at && i >= at - 4 && done.add(d));
+    }
+    return done;
+  }, [daily.week, week, today]);
 
   /* -------------------------------------------------------- badges ---- */
   const badges = useMemo(() => shelfBadges(catalog), [catalog]);
@@ -163,17 +180,16 @@ export default function MePage() {
 
   const hopBadges = Object.keys(owned).filter((k) => k === "hop" || /^hop[-_]/.test(k)).length;
   const status = statusFor(hopBadges);
-  const stamps = loaded ? Object.keys(owned).length : null;
 
   /* --------------------------------------------------------- mascot ---- */
   const [waving, setWaving] = useState(false);
   useEffect(() => {
     // It waves once, on the first open of each day.
-    if (readJSON<string | null>(WAVE_KEY, null) === lagosToday()) return;
+    if (readJSON<string | null>(WAVE_KEY, null) === lagosDate(Date.now())) return;
     setWaving(true);
     const t = setTimeout(() => {
       setWaving(false);
-      writeJSON(WAVE_KEY, lagosToday());
+      writeJSON(WAVE_KEY, lagosDate(Date.now()));
     }, 2400);
     return () => clearTimeout(t);
   }, []);
@@ -210,19 +226,45 @@ export default function MePage() {
   const liveDrops = now === null ? 0 : drops.filter((d) => dropPhase(d, now) === "open").length;
   const dropsHint = !dropsReady || now === null ? "Rewards that land at venues." : liveDrops ? `${liveDrops} open now` : "None open. They land at the venue.";
 
-  const makeCard = async () => {
+  // The report card: make it, copy the link (as it always did), and from the month card open it too.
+  const makeCard = async (andOpen = false) => {
     const token = await makeReport();
     if (!token) {
       say("Couldn't make your card. Try again.", "error");
       return;
     }
-    const url = `${location.origin}/report/share/${token}`;
+    const path = `/report/share/${token}`;
+    const url = `${location.origin}${path}`;
     try {
       await navigator.clipboard.writeText(url);
       say("Link copied.", "ok");
     } catch {
       say(url);
     }
+    if (andOpen) router.push(path);
+  };
+  const month = useMonthCard(userId, now, Object.values(owned));
+
+  /* ------------------------------------------------------ today's box ---- */
+  const boxShown = DEMO || (state !== "offline" && daily.status !== "unavailable");
+  const openDaily = async (): Promise<RevealOutcome> => {
+    const r = await daily.open();
+    if ("error" in r) return r;
+    if (r.already) return { error: "You already opened today's box. Back tomorrow." };
+    if (DEMO) setDemoMe((p) => (p ? { ...p, xp: p.xp + r.box.xp } : p));
+    return {
+      items: [
+        { kind: "reward", title: r.box.title, line: "Your box for today." },
+        { kind: "xp", title: `+${r.box.xp} XP`, line: "Added to your XP. Streak kept." },
+      ],
+    };
+  };
+  const closeDaily = () => {
+    setRevealing(false);
+    // What the box paid shows up on the tiles, the dots and the card.
+    void daily.reload();
+    void reloadStats();
+    session.refresh();
   };
 
   const deleteAccount = async () => {
@@ -246,46 +288,46 @@ export default function MePage() {
 
   return (
     <div className="h-full overflow-y-auto px-4 pb-8">
+      {month.card && (
+        <div className="pad-top">
+          <MonthCard card={month.card} busy={reportBusy} onOpen={() => void makeCard(true)} onDismiss={month.dismiss} />
+        </div>
+      )}
+
       <MeHeader
         look={profile?.avatar ?? look}
         name={profile?.display_name || "Hopper"}
+        levelNo={lvl.index + 1}
         level={lvl.name}
         status={status}
-        stamps={stamps}
         mascot={waving ? "wave" : mood}
         stampLevel={!!stamp.level}
+        belowCard={!!month.card}
       />
 
       <NumberTiles
         streak={streak}
         xp={xp}
-        hot={hot}
+        level={lvl}
         stamp={stamp}
         ready={numbersReady}
+        week={week}
+        weekDone={weekDone}
+        today={today}
         onXp={() => setEarn(true)}
       />
 
-      <BadgeShelf badges={badges} earned={owned} fresh={fresh} />
+      {boxShown && (
+        <TodaysBox
+          status={daily.status === "unavailable" ? "loading" : daily.status}
+          box={daily.box}
+          onOpen={() => setRevealing(true)}
+        />
+      )}
 
-      <section aria-label="More" className="mt-7">
-        <RowGroup>
-          <RowButton
-            icon={FileText}
-            title="Month report card"
-            hint={reportBusy ? "Making your card." : "Last month, as a link you can send."}
-            disabled={reportBusy}
-            trailing={<Link2 size={18} aria-hidden className="flex-none text-dim" />}
-            onClick={() => void makeCard()}
-          />
-          <RowLink
-            href="/drops"
-            title="Live drops"
-            hint={dropsHint}
-            lead={<Gift size={19} strokeWidth={1.9} aria-hidden className={liveDrops ? "flex-none text-violet" : "flex-none text-dim"} />}
-          />
-          <RowLink href="/collection" icon={Ticket} title="Your shelf" hint="Collectibles and rewards you've claimed." />
-        </RowGroup>
-      </section>
+      <ShelfStrip userId={userId} offline={state === "offline"} />
+
+      <BadgeShelf badges={badges} earned={owned} fresh={fresh} />
 
       {ask.next?.key === "birthday" && (
         <form
@@ -314,9 +356,30 @@ export default function MePage() {
         </form>
       )}
 
-      <YourNights visits={visits} loaded={loaded} />
+      <YourNights visits={visits} loaded={loaded} failed={!DEMO && (loadFailed || state === "offline")} />
+
+      <section aria-label="More" className="mt-7">
+        <p className="seclabel mb-2.5">MORE</p>
+        <RowGroup>
+          <RowLink
+            href="/drops"
+            title="Live drops"
+            hint={dropsHint}
+            lead={<Gift size={19} strokeWidth={1.9} aria-hidden className={liveDrops ? "flex-none text-violet" : "flex-none text-dim"} />}
+          />
+          <RowButton
+            icon={FileText}
+            title="Month report card"
+            hint={reportBusy ? "Making your card." : "Last month, as a link you can send."}
+            disabled={reportBusy}
+            trailing={<Link2 size={18} aria-hidden className="flex-none text-dim" />}
+            onClick={() => void makeCard()}
+          />
+        </RowGroup>
+      </section>
 
       <SettingsGroup
+        className="mt-3"
         name={profile?.display_name ?? null}
         handle={profile?.handle ?? null}
         area={profile?.area || fix?.area || "Not set"}
@@ -348,6 +411,17 @@ export default function MePage() {
       </Sheet>
 
       <AreaPicker open={picking} onClose={() => setPicking(false)} onPicked={(area) => void patchProfile({ area })} />
+
+      {revealing && (
+        <Reveal
+          label="Today's box"
+          kicker="TODAY'S BOX"
+          doneLine="XP added. Streak kept."
+          shareLine={(what) => `I opened today's box on Hoppaz and pulled ${what}.`}
+          open={openDaily}
+          onClose={closeDaily}
+        />
+      )}
     </div>
   );
 }

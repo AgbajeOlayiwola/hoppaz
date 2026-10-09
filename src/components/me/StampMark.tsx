@@ -3,8 +3,9 @@ import { Building2, Bus, MapPinned, Mic, Moon, Palmtree, Stamp, Ticket, Waves } 
 
 /**
  * A badge as a rubber stamp: one colour, a ring inside a ring, a line icon in
- * the middle, a couple of degrees off square. The colour is the text colour,
- * so it is cream on the night ground and ink on the day ground by itself.
+ * the middle, a couple of degrees off square. A badge you have is a solid disc
+ * in the text colour (cream on the night ground, ink on the day ground by
+ * itself) with the icon cut out of it; one you do not have is a dashed ring.
  * The names are the `icon` field on a BADGES entry (src/lib/brand.ts).
  */
 function Glyph({ name, size }: { name?: string; size: number }) {
@@ -48,7 +49,7 @@ export default function StampMark({
       <span
         className={clsx(
           "relative grid place-items-center rounded-full border-2 border-current",
-          earned ? "text-cream" : "border-dashed text-dim opacity-80"
+          earned ? "border-cream bg-cream text-ink" : "border-dashed text-dim opacity-80"
         )}
         style={{ width: size, height: size, transform: "rotate(-4deg)" }}
       >

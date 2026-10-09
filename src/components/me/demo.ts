@@ -30,6 +30,11 @@ export function demoStats() {
   return { daily_streak: 4, verified_outings: 5, outing_streak: 2 };
 }
 
+/** Last month, for the month card. */
+export function demoMonth() {
+  return { nights: 9, days: 14, boxes: 3, badges: 2 as number | null, rank: 41 };
+}
+
 export function demoBadges(now: number) {
   return [
     { key: "mainland", earned_at: iso(now - 20 * DAY) },

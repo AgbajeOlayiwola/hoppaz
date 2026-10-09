@@ -65,6 +65,9 @@ const NO_STOPS: HopStop[] = [];
 /** Open on a day with something on, once per page load, and never over a day the Hopper chose. */
 let firstDayChosen = false;
 
+/** The "N boxes on the map" toast, once per page load: coming back to the map from another tab is not news. */
+let boxesAnnounced = false;
+
 const IS_DEV = process.env.NODE_ENV !== "production";
 
 /** A street box this close to you is worth a toast. */
@@ -320,16 +323,15 @@ export default function MapPage() {
   );
   const openBoxes = boxes.filter((b) => b.open).length;
   // The moment you set your location, the boxes drop onto the map; say so once.
-  const announced = useRef(false);
   useEffect(() => {
-    if (!fix || announced.current || boxes.length === 0) return;
-    announced.current = true;
+    if (!fix || boxesAnnounced || boxes.length === 0) return;
+    boxesAnnounced = true;
     say(`${boxes.length} ${boxes.length === 1 ? "box" : "boxes"} on the map. Go find ${boxes.length === 1 ? "it" : "them"}.`, "violet");
   }, [fix, boxes.length, say]);
 
   // New Hoppers get three personal boxes near where they are, once.
   useWelcomeBoxes(userId, fix, () => {
-    announced.current = true;
+    boxesAnnounced = true;
     say("3 welcome boxes just dropped near you. You have 24 hours.", "violet");
     // The page clock ticks every 30 s: catch it up, or the new boxes read as a minute old.
     void live.reload().then(() => setNow(Date.now()));
@@ -357,23 +359,27 @@ export default function MapPage() {
       if (km <= NEAR_SPAWN_KM && (!best || km < best.km)) best = { drop: d, km };
     }
     if (!best) return;
-    announced.current = true;
+    boxesAnnounced = true;
     const n = best.drop.max_claims;
     say(`A street box just dropped ${awayLabel(best.km)} away.${n ? ` First ${n} get it.` : ""}`, "violet");
   }, [live.loaded, live.drops, fix, opened, say]);
 
   const [boxId, setBoxId] = useState<string | null>(null);
-  const [opening, setOpening] = useState<{ drop: GameDrop; code: string } | null>(null);
+  const [opening, setOpening] = useState<{ drop: GameDrop; code: string; outcome?: RevealOutcome } | null>(null);
   const [hunting, setHunting] = useState<{ drop: GameDrop; at: { lat: number; lng: number } } | null>(null);
   const box = boxId ? placed.find((p) => p.drop.id === boxId) ?? null : null;
   const markOpened = (id: string) => setOpened((s) => new Set(s).add(id));
+  /** What came out of a claim, as the reveal shows it. */
+  const outcomeOf = (drop: GameDrop, r: { reward?: string; description?: string; code?: string; xp?: number }): RevealOutcome => {
+    const items: RevealItem[] = [{ kind: huntItem(drop.hunt_item) ? "collectible" : "reward", title: r.reward ?? "Your reward", line: r.description, code: r.code }];
+    if (r.xp) items.push({ kind: "xp", title: `+${r.xp} XP`, line: "Added to your XP." });
+    return { items };
+  };
   const openBox = async (drop: GameDrop, code: string): Promise<RevealOutcome> => {
     const r: { error?: string; reward?: string; description?: string; code?: string; xp?: number } = DEMO ? demoReveal() : await live.claim(drop, fix, code || undefined);
     if (r.error) return { error: sentence(r.error) };
     markOpened(drop.id);
-    const items: RevealItem[] = [{ kind: "reward", title: r.reward ?? "Your reward", line: r.description, code: r.code }];
-    if (r.xp) items.push({ kind: "xp", title: `+${r.xp} XP`, line: "Added to your XP." });
-    return { items };
+    return outcomeOf(drop, r);
   };
 
   /* ---------------------------------------- the side card's left and right -- */
@@ -397,6 +403,15 @@ export default function MapPage() {
     if (bottomRef.current) ro.observe(bottomRef.current);
     return () => ro.disconnect();
   }, [mounted, event, todayStr]);
+
+  // The toast sits above the bottom card, not on top of its text (the side card has no bottom card under it).
+  useEffect(() => {
+    const root = document.documentElement;
+    root.style.setProperty("--hz-toast-lift", `${event ? 0 : hud.bottom}px`);
+    return () => {
+      root.style.removeProperty("--hz-toast-lift");
+    };
+  }, [event, hud.bottom]);
 
   const noLiveEvents = failed && allEvents.length === 0;
   const line = !ready
@@ -592,8 +607,12 @@ export default function MapPage() {
         <Reveal
           label={opening.drop.title}
           where={opening.drop.partner?.name ?? opening.drop.area}
-          open={() => openBox(opening.drop, opening.code)}
-          onClose={() => setOpening(null)}
+          open={async () => opening.outcome ?? openBox(opening.drop, opening.code)}
+          // Backing out, or a box that would not open, lands on the box's sheet again (it is gone once the claim went through).
+          onClose={(claimed) => {
+            if (!claimed) setBoxId(opening.drop.id);
+            setOpening(null);
+          }}
         />
       )}
       {hunting && (
@@ -603,8 +622,15 @@ export default function MapPage() {
           initialFix={fix ?? null}
           onClaim={async (at) => {
             const r = DEMO ? demoReveal() : await live.claim(hunting.drop, at);
-            if (!("error" in r) || !r.error) markOpened(hunting.drop.id);
+            // The server's one-liners are SHOUTING; the hunt shows them the way a box on the map does.
+            if ("error" in r && r.error) return { error: sentence(r.error) };
+            markOpened(hunting.drop.id);
             return r;
+          }}
+          // A found hunt is already claimed: the box opens on what it paid out.
+          onOpenBox={(won) => {
+            setOpening({ drop: hunting.drop, code: "", outcome: outcomeOf(hunting.drop, won) });
+            setHunting(null);
           }}
           onClose={() => setHunting(null)}
         />

@@ -1,15 +1,17 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import clsx from "clsx";
 import { X } from "lucide-react";
 import DayRail from "@/components/DayRail";
 import EventCard from "@/components/EventCard";
-import SwipeDeck from "@/components/SwipeDeck";
-import EventStub, { GhostStub } from "@/components/today/EventStub";
-import { EmptyDay, FilteredOut, LoadFailed, NextBusyLine } from "@/components/today/Empty";
+import { SIDE_PANEL, sidePanelWidth } from "@/components/event/side";
+import Deck from "@/components/today/Deck";
+import DeckCard, { GhostDeck } from "@/components/today/DeckCard";
+import Marquee from "@/components/today/Marquee";
+import { EmptyDay, FilteredOut, LoadFailed } from "@/components/today/Empty";
 import YourDays from "@/components/today/YourDays";
 import { useEventQuests } from "@/components/today/useEventQuests";
+import { useViewport } from "@/components/today/useViewport";
 import {
   HOUR,
   byGoingThenStart,
@@ -20,9 +22,18 @@ import {
   weekdayLong,
 } from "@/components/today/helpers";
 import { DEMO_DROP_TITLES } from "@/lib/demoData";
-import { TODAY, countByDay, matchesType, nightOf, todayKey, type DateFilter } from "@/lib/filters";
-import { haversineKm } from "@/lib/geo";
-import { useHoppaz, useToast } from "@/lib/store";
+import {
+  NEXT_COUNT,
+  TODAY,
+  countByDay,
+  matchesType,
+  nextEvents,
+  nightOf,
+  todayKey,
+  type DateFilter,
+} from "@/lib/filters";
+import { eventTitle, haversineKm } from "@/lib/geo";
+import { useHoppaz } from "@/lib/store";
 import { useCheckin } from "@/lib/useCheckin";
 import { useCollectibleEventIds } from "@/lib/useCollectibles";
 import { useEvents, useHop } from "@/lib/useEvents";
@@ -34,23 +45,28 @@ import type { EventRow } from "@/lib/types";
 const NO_TYPES: string[] = [];
 
 /**
- * TODAY (the /discover route). One day at a time, picked on the same rail the
- * Map uses: a title, one line in the conductor's voice, then the day's events
- * as ticket stubs, most Hoppers going first. Swiping is an optional mode.
+ * TODAY (the /discover route): the night as a deck of big flyer cards you
+ * slide through, one centred and the neighbours peeking. Pick the night on the
+ * same rail the Map uses (or NEXT, the next twenty). Tap the centred card and
+ * it opens into the breakdown: the event card as a sheet on a phone, docked on
+ * the right on a wide screen. A slow strip of tags underneath scrolls what is
+ * coming up and jumps the deck to whichever one you tap.
  */
 export default function TodayPage() {
-  const { fix, radiusKm, dateFilter, setDateFilter, types, setTypes, look: savedLook } = useHoppaz();
-  const { userId, refresh, profile } = useSession();
+  const { fix, radiusKm, dateFilter, setDateFilter, types, setTypes } = useHoppaz();
+  const { userId, refresh } = useSession();
   const { events: allEvents, demo, ready, failed, reload } = useEvents(fix, 45);
   const hop = useHop();
   const { done, checkedAt, busy, checkIn } = useCheckin(userId, refresh);
   const going = useGoing(userId);
-  const say = useToast((s) => s.say);
+  const { width, wide } = useViewport();
 
-  const [selected, setSelected] = useState<string | null>(null);
-  const [swipe, setSwipe] = useState(false);
-  /** The stub that was just tapped to "going", so only that one plays the stamp. */
-  const [stamped, setStamped] = useState<string | null>(null);
+  /** Which night the deck shows: one chosen day, or the next twenty events whatever night they fall on. */
+  const [mode, setMode] = useState<"day" | "next">("day");
+  /** The card in the middle, remembered by event (not place) so a list that shifts under it keeps it there. */
+  const [cursor, setCursor] = useState<{ key: string; id: string | null }>({ key: "", id: null });
+  /** The breakdown is open on the card in the middle. */
+  const [open, setOpen] = useState(false);
   /** Your own taps, added to the loaded going counts until a fresh load brings the real ones. */
   const [delta, setDelta] = useState<Record<string, number>>({});
 
@@ -99,17 +115,59 @@ export default function TodayPage() {
   // Rail counts: everything loaded, narrowed by type only (the same numbers the Map's rail shows).
   const typed = useMemo(() => allEvents.filter((e) => matchesType(e, shownTypes)), [allEvents, shownTypes]);
   const counts = useMemo(() => countByDay(typed), [typed]);
+  // The next events from now, whatever night: the deck's NEXT view and the strip under it.
+  const next = useMemo(() => nextEvents(typed, NEXT_COUNT, now), [typed, now]);
+  // One night: the busiest first, the ones already over at the back.
   const dayEvents = useMemo(
-    () => typed.filter((e) => nightOf(Date.parse(e.starts_at)) === dayKey).sort(byGoingThenStart),
-    [typed, dayKey]
+    () =>
+      typed
+        .filter((e) => nightOf(Date.parse(e.starts_at)) === dayKey)
+        .sort((a, b) => Number(hasEnded(a, now)) - Number(hasEnded(b, now)) || byGoingThenStart(a, b)),
+    [typed, dayKey, now]
   );
   const dayTotal = useMemo(
     () => allEvents.filter((e) => nightOf(Date.parse(e.starts_at)) === dayKey).length,
     [allEvents, dayKey]
   );
-  const next = useMemo(() => nextBusyDay(counts, dayKey), [counts, dayKey]);
+  const nextBusy = useMemo(() => nextBusyDay(counts, dayKey), [counts, dayKey]);
 
   const goingOf = useCallback((e: EventRow) => Math.max(0, (e.swipes_in ?? 0) + (delta[e.id] ?? 0)), [delta]);
+
+  /* ------------------------------------------------------------ the deck -- */
+  const deckKey = mode === "next" ? "next" : `day:${dayKey}`;
+  const deckEvents = mode === "next" ? next.list : dayEvents;
+  const index = useMemo(() => {
+    const i = cursor.key === deckKey && cursor.id ? deckEvents.findIndex((e) => e.id === cursor.id) : -1;
+    return i < 0 ? 0 : i;
+  }, [cursor, deckKey, deckEvents]);
+  const event = open ? deckEvents[index] ?? null : null;
+
+  const setIndex = useCallback(
+    (i: number) => setCursor({ key: deckKey, id: deckEvents[i]?.id ?? null }),
+    [deckKey, deckEvents]
+  );
+
+  const pickDay = useCallback(
+    (f: DateFilter) => {
+      setDateFilter(f);
+      setMode("day");
+      setOpen(false);
+    },
+    [setDateFilter]
+  );
+
+  /** A tag in the strip: jump the deck to that event, and to its night if it is not on this deck. */
+  const jump = (e: EventRow) => {
+    setOpen(false);
+    if (mode === "next" && next.list.some((x) => x.id === e.id)) {
+      setCursor({ key: "next", id: e.id });
+      return;
+    }
+    const night = nightOf(Date.parse(e.starts_at));
+    setDateFilter({ kind: "night", date: night });
+    setMode("day");
+    setCursor({ key: `day:${night}`, id: e.id });
+  };
 
   /* ----------------------------------------------- drops, quests, your days -- */
   const liveDropIds = useCollectibleEventIds(allEvents.map((e) => e.id));
@@ -119,7 +177,7 @@ export default function TodayPage() {
       new Set(demo ? allEvents.filter((e) => DEMO_DROP_TITLES.includes(e.title)).map((e) => e.id) : liveDropIds),
     [demo, allEvents, liveDropIds]
   );
-  const questsByEvent = useEventQuests(userId, dayEvents);
+  const questsByEvent = useEventQuests(userId, deckEvents);
 
   const mine = useMemo(
     () =>
@@ -134,208 +192,195 @@ export default function TodayPage() {
     [allEvents, going.decisions, now]
   );
 
-  // Your own face, for the stamp on a stub you said you are going to.
-  const look = profile?.avatar ?? savedLook;
+  /* ---------------------------------------------------- the breakdown -- */
+  // The event card can change your going. When it closes or moves on, fold that change into the count.
+  const goingRef = useRef(going);
+  useEffect(() => {
+    goingRef.current = going;
+  });
+  const openId = event?.id ?? null;
+  useEffect(() => {
+    if (!openId) return;
+    const was = goingRef.current.isGoing(openId);
+    return () => {
+      const is = goingRef.current.isGoing(openId);
+      if (is !== was) setDelta((d) => ({ ...d, [openId]: (d[openId] ?? 0) + (is ? 1 : -1) }));
+    };
+  }, [openId]);
 
-  /* ------------------------------------------------------------ actions -- */
-  const pickDay = useCallback(
-    (f: DateFilter) => {
-      setDateFilter(f);
-      setSelected(null);
-      openedWith.current = null;
-    },
-    [setDateFilter]
-  );
-
-  const toggleGoing = async (e: EventRow) => {
-    if (going.busy[e.id]) return;
-    const was = going.isGoing(e.id);
-    const err = await going.toggleGoing(e.id);
-    if (err) {
-      say(err, "error");
-      return;
-    }
-    setDelta((d) => ({ ...d, [e.id]: (d[e.id] ?? 0) + (was ? -1 : 1) }));
-    setStamped(was ? null : e.id);
-  };
-
-  // Swipe mode saves through the same hook. Hand the error back and the card returns.
-  const swipeDecide = async (e: EventRow, decision: "in" | "pass") => {
-    const err = await going.decide(e.id, decision);
-    if (err) {
-      say(err, "error");
-      return err;
-    }
-    if (decision === "in") setDelta((d) => ({ ...d, [e.id]: (d[e.id] ?? 0) + 1 }));
-    return null;
-  };
-
-  // The event page can change your going too. When it closes, fold that change into the count.
-  const openedWith = useRef<{ id: string; going: boolean } | null>(null);
-  const settle = () => {
-    const o = openedWith.current;
-    openedWith.current = null;
-    if (!o) return;
-    const now = going.isGoing(o.id);
-    if (now !== o.going) setDelta((d) => ({ ...d, [o.id]: (d[o.id] ?? 0) + (now ? 1 : -1) }));
-  };
-  const open = (e: EventRow) => {
-    settle();
-    openedWith.current = { id: e.id, going: going.isGoing(e.id) };
-    setSelected(e.id);
-  };
-  const closeCard = () => {
-    settle();
-    setSelected(null);
-  };
-  const event = useMemo(() => allEvents.find((e) => e.id === selected) ?? null, [allEvents, selected]);
   const isHopStop = useMemo(() => {
     if (!event || !hop) return false;
     return hop.stops.some((s) => haversineKm(s.lat, s.lng, event.lat, event.lng) < 0.2);
   }, [event, hop]);
 
+  // Docked on the right, the card sits under the rail and the deck slides left to stay in view beside it.
+  const root = useRef<HTMLDivElement>(null);
+  const deckBox = useRef<HTMLDivElement>(null);
+  const [sideTop, setSideTop] = useState(140);
+  useEffect(() => {
+    if (!event || !wide) return;
+    const r = root.current?.getBoundingClientRect();
+    const d = deckBox.current?.getBoundingClientRect();
+    if (r && d) setSideTop(Math.max(8, Math.round(d.top - r.top)));
+  }, [event, wide]);
+  const shift = event && wide ? Math.round((sidePanelWidth(width) + SIDE_PANEL.gap * 2) / 2) : 0;
+
   /* ------------------------------------------------------------ what shows -- */
   const loading = !mounted || !ready;
   const noLiveEvents = ready && failed && allEvents.length === 0;
-  const empty = !loading && !noLiveEvents && dayEvents.length === 0;
-  const swiping = swipe && !loading && dayEvents.length > 0;
-  // Swiping is for the ones you have not decided on yet.
-  const deck = useMemo(() => dayEvents.filter((e) => !going.hasJudged(e.id)), [dayEvents, going]);
+  const empty = !loading && !noLiveEvents && deckEvents.length === 0;
 
   const line = loading
     ? "Checking what's on…"
-    : conductorLine({ events: dayEvents, dropIds: dropSet, dayKey, now, goingOf });
+    : empty
+      ? "Nothing listed for this night yet."
+      : conductorLine({ events: deckEvents, dropIds: dropSet, dayKey: mode === "next" ? "" : dayKey, now, goingOf });
+
+  const title = mode === "next" ? "Next up" : isToday ? "Today" : weekdayLong(dayKey);
 
   return (
-    <div className="relative flex h-full flex-col overflow-hidden">
-      <div className={clsx("min-h-0 flex-1", swiping ? "flex flex-col overflow-hidden" : "overflow-y-auto overscroll-contain")}>
-        {/* -------------------------------------------------------- header -- */}
-        <header className="pad-top flex-none px-4 pb-4">
-          <div className="flex items-end justify-between gap-3">
-            <div className="flex min-w-0 items-baseline gap-2.5">
-              <h1 className="truncate font-display text-[34px] font-black leading-none tracking-[-0.01em]">
-                {isToday ? "Today" : weekdayLong(dayKey)}
-              </h1>
-              {!isToday && mounted && <span className="seclabel flex-none">{dateTag(dayKey)}</span>}
+    <div
+      ref={root}
+      className="relative flex h-full flex-col overflow-hidden"
+      style={{ ["--hz-side-top" as string]: `${sideTop}px` }}
+    >
+      <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain">
+        <div className="flex min-h-full flex-col">
+          {/* -------------------------------------------------------- header -- */}
+          <header className="pad-top flex-none px-4 pb-3">
+            <div className="flex items-baseline gap-2.5">
+              <h1 className="truncate font-display text-[34px] font-black leading-none tracking-[-0.01em]">{title}</h1>
+              {mode === "day" && !isToday && mounted && <span className="seclabel flex-none">{dateTag(dayKey)}</span>}
             </div>
-            {(swiping || (!loading && deck.length > 0)) && (
-              <button
-                type="button"
-                onClick={() => setSwipe((v) => !v)}
-                className="-mb-2.5 flex-none px-1 py-3 font-body text-[13px] text-dim underline underline-offset-4"
-              >
-                {swiping ? "Back to the list" : "Can't decide? Swipe"}
-              </button>
-            )}
-          </div>
-          <p className="mt-2.5 min-h-[22px] font-body text-[15px] font-medium leading-snug text-cream">
-            {line}
-          </p>
-        </header>
+            <p className="mt-2.5 min-h-[22px] font-body text-[15px] font-medium leading-snug text-cream">{line}</p>
+          </header>
 
-        <div className="flex-none px-4">
-          {mounted ? (
-            <DayRail key={today} value={dayFilter} onChange={pickDay} counts={counts} />
-          ) : (
-            <div className="h-[72px]" aria-hidden />
-          )}
-        </div>
-
-        {shownTypes.length > 0 && (
-          <div className="flex flex-none items-center gap-1.5 overflow-x-auto px-4 pt-3 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
-            {shownTypes.map((t) => (
-              <button
-                key={t}
-                type="button"
-                aria-pressed="true"
-                aria-label={`Remove ${t}`}
-                onClick={() => setTypes(types.filter((x) => x !== t))}
-                className="chip min-h-[32px] flex-none gap-1.5 px-2.5 text-[10.5px]"
-              >
-                {t}
-                <X size={12} aria-hidden />
-              </button>
-            ))}
-            <button
-              type="button"
-              onClick={() => setTypes([])}
-              className="flex h-[32px] flex-none items-center px-2.5 font-mono text-[10.5px] font-medium uppercase tracking-[0.1em] text-cream underline underline-offset-4"
-            >
-              Clear
-            </button>
-          </div>
-        )}
-
-        {!swiping && mine.length > 0 && (
-          <YourDays events={mine} now={now} onOpen={open} />
-        )}
-
-        {/* ----------------------------------------------------------- body -- */}
-        {swiping ? (
-          <div className="relative mt-4 min-h-0 flex-1 px-4">
-            <SwipeDeck
-              events={deck}
-              onDecide={swipeDecide}
-              onInfo={open}
-              onDone={() => setSwipe(false)}
-              dropIds={dropSet}
-              goingOf={goingOf}
-            />
-          </div>
-        ) : loading ? (
-          <ul aria-label="Loading the day" className="space-y-4 px-4 pb-6 pt-4">
-            <li>
-              <GhostStub />
-            </li>
-            <li>
-              <GhostStub />
-            </li>
-          </ul>
-        ) : noLiveEvents ? (
-          <LoadFailed onRetry={() => void reload()} />
-        ) : empty ? (
-          dayTotal > 0 && shownTypes.length > 0 ? (
-            <FilteredOut
-              onClear={() => setTypes([])}
-              next={next}
-              onNext={() => next && pickDay({ kind: "night", date: next.key })}
-            />
-          ) : (
-            <EmptyDay next={next} onNext={() => next && pickDay({ kind: "night", date: next.key })} />
-          )
-        ) : (
-          <>
-            <ul className="space-y-4 px-4 pb-4 pt-4">
-              {dayEvents.map((e) => (
-                <li key={e.id}>
-                  <EventStub
-                    event={e}
-                    now={now}
-                    going={going.isGoing(e.id)}
-                    count={goingOf(e)}
-                    drop={dropSet.has(e.id)}
-                    quests={questsByEvent.get(e.id) ?? []}
-                    look={look}
-                    saving={!!going.busy[e.id]}
-                    stamped={stamped === e.id}
-                    onOpen={() => open(e)}
-                    onToggle={() => void toggleGoing(e)}
-                  />
-                </li>
-              ))}
-            </ul>
-            {dayEvents.length <= 5 && next && (
-              <NextBusyLine
-                next={next}
-                onNext={() => pickDay({ kind: "night", date: next.key })}
-                className="pb-6"
+          <div className="flex-none px-4">
+            {mounted ? (
+              <DayRail
+                key={today}
+                value={mode === "next" ? { kind: "any" } : dayFilter}
+                onChange={pickDay}
+                counts={counts}
+                lead={{
+                  label: "NEXT",
+                  sub: String(next.list.length || NEXT_COUNT),
+                  aria: `Next ${next.list.length} events`,
+                  on: mode === "next",
+                  onClick: () => {
+                    setMode("next");
+                    setOpen(false);
+                  },
+                }}
               />
+            ) : (
+              <div className="h-[72px]" aria-hidden />
             )}
-          </>
-        )}
+          </div>
+
+          {shownTypes.length > 0 && (
+            <div className="flex flex-none items-center gap-1.5 overflow-x-auto px-4 pt-3 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+              {shownTypes.map((t) => (
+                <button
+                  key={t}
+                  type="button"
+                  aria-pressed="true"
+                  aria-label={`Remove ${t}`}
+                  onClick={() => setTypes(types.filter((x) => x !== t))}
+                  className="chip min-h-[32px] flex-none gap-1.5 px-2.5 text-[10.5px]"
+                >
+                  {t}
+                  <X size={12} aria-hidden />
+                </button>
+              ))}
+              <button
+                type="button"
+                onClick={() => setTypes([])}
+                className="flex h-[32px] flex-none items-center px-2.5 font-mono text-[10.5px] font-medium uppercase tracking-[0.1em] text-cream underline underline-offset-4"
+              >
+                Clear
+              </button>
+            </div>
+          )}
+
+          {/* ------------------------------------------------------- the deck -- */}
+          <div
+            ref={deckBox}
+            className="flex min-h-[400px] flex-1 flex-col pt-2 transition-transform duration-300 ease-[cubic-bezier(.2,.8,.2,1)]"
+            style={{ transform: shift ? `translate3d(${-shift}px,0,0)` : undefined }}
+          >
+            {loading ? (
+              <GhostDeck />
+            ) : noLiveEvents ? (
+              <LoadFailed onRetry={() => void reload()} />
+            ) : empty ? (
+              <div className="my-auto">
+                {mode === "day" && dayTotal > 0 && shownTypes.length > 0 ? (
+                  <FilteredOut
+                    onClear={() => setTypes([])}
+                    next={nextBusy}
+                    onNext={() => nextBusy && pickDay({ kind: "night", date: nextBusy.key })}
+                  />
+                ) : (
+                  <EmptyDay
+                    next={nextBusy}
+                    onNext={() => nextBusy && pickDay({ kind: "night", date: nextBusy.key })}
+                  />
+                )}
+              </div>
+            ) : (
+              <div key={deckKey} className="flex min-h-0 flex-1 animate-fade flex-col">
+                <Deck
+                  count={deckEvents.length}
+                  index={index}
+                  onIndex={setIndex}
+                  onOpen={() => setOpen(true)}
+                  label={(i) => `${i === index ? "Open" : "Show"} ${eventTitle(deckEvents[i])}`}
+                  slide={(i, s) => {
+                    const e = deckEvents[i];
+                    return (
+                      <DeckCard
+                        event={e}
+                        now={now}
+                        count={goingOf(e)}
+                        going={going.isGoing(e.id)}
+                        box={dropSet.has(e.id)}
+                        quests={questsByEvent.get(e.id)?.length ?? 0}
+                        near={s.near}
+                      />
+                    );
+                  }}
+                />
+              </div>
+            )}
+          </div>
+
+          {/* --------------------------------------------- the moving strip -- */}
+          {!loading && !noLiveEvents && <Marquee events={next.list} now={now} onPick={jump} />}
+
+          {!loading && mine.length > 0 && <YourDays
+              events={mine}
+              now={now}
+              onOpen={(e) => {
+                // A night you are going to: slide the deck to it and open it, like a tap on its card.
+                jump(e);
+                setOpen(true);
+              }}
+            />}
+          <div className="h-3 flex-none" />
+        </div>
       </div>
 
-      {/* ---------------------------------------------------- the event page -- */}
+      {/* ------------------------------------------------------ the breakdown -- */}
+      {event && !wide && (
+        <button
+          type="button"
+          aria-label="Close"
+          tabIndex={-1}
+          onClick={() => setOpen(false)}
+          className="absolute inset-0 z-30 animate-fade bg-brand-ink/50"
+        />
+      )}
       {event && (
         <EventCard
           event={event}
@@ -346,8 +391,11 @@ export default function TodayPage() {
           checkedAt={checkedAt[event.id] ?? null}
           busy={busy === event.id}
           onCheckIn={() => checkIn(event, fix)}
-          onClose={closeCard}
+          onClose={() => setOpen(false)}
           isHopStop={isHopStop}
+          placement={wide ? "side" : "sheet"}
+          onPrev={wide && index > 0 ? () => setIndex(index - 1) : undefined}
+          onNext={wide && index < deckEvents.length - 1 ? () => setIndex(index + 1) : undefined}
         />
       )}
     </div>

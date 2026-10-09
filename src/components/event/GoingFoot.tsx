@@ -26,6 +26,9 @@ function linkLabel(event: EventRow) {
 const CELL =
   "flex min-h-[44px] flex-1 items-center justify-center gap-1 whitespace-nowrap px-1 font-mono text-[11px] font-medium uppercase tracking-[0.04em] text-cream hover:bg-ink-3";
 
+/** The cells of the secondary row, on a short phone in the narrow card: smaller type, nothing that makes three words overflow. */
+const SHORT_CELL = "short:text-[10px] short:tracking-normal";
+
 /**
  * Pinned under the perforation: the guest list (the going count, your face),
  * the one button that matters, and the ways to pass the night on.
@@ -81,7 +84,7 @@ export default function GoingFoot({
       {/* ---------------------------------------------------- the guest list -- */}
       <div className="flex items-end justify-between gap-4">
         <div className="min-w-0">
-          <p className="num text-[36px] text-cream" aria-live="polite">
+          <p className={clsx("num text-[36px] text-cream", compact && "short:text-[28px]")} aria-live="polite">
             {count}
           </p>
           <p className="mt-1.5 font-mono text-[11px] font-medium uppercase tracking-[0.12em] text-dim">
@@ -100,21 +103,21 @@ export default function GoingFoot({
             {going ? (
               <span
                 key="face-on"
-                className="block h-11 w-11 overflow-hidden rounded-full border border-line bg-ink-3 animate-stamp"
+                className={clsx("block h-11 w-11 overflow-hidden rounded-full border border-line bg-ink-3 animate-stamp", compact && "short:h-9 short:w-9")}
                 title="You"
               >
                 <Avatar look={look} crop="head" label="You" />
               </span>
             ) : (
-              <span aria-hidden className="block h-11 w-11 rounded-full border border-dashed border-dim/60" />
+              <span aria-hidden className={clsx("block h-11 w-11 rounded-full border border-dashed border-dim/60", compact && "short:h-9 short:w-9")} />
             )}
-            <span className="font-mono text-[10px] font-medium uppercase tracking-[0.12em] text-dim">YOU</span>
+            <span className={clsx("font-mono text-[10px] font-medium uppercase tracking-[0.12em] text-dim", compact && "short:hidden")}>YOU</span>
           </div>
         </div>
       </div>
 
       {/* --------------------------------------------------- the one button -- */}
-      <div className="mt-3">
+      <div className={clsx("mt-3", compact && "short:mt-2")}>
         {ended ? (
           <button className="btn w-full disabled:border disabled:border-line" disabled>
             ENDED
@@ -130,7 +133,8 @@ export default function GoingFoot({
             <span key="going" className="inline-flex items-center gap-2 animate-stamp">
               <Check size={16} strokeWidth={3} /> YOU&apos;RE GOING
             </span>
-            <span className="absolute right-3 font-mono text-[10px] font-medium tracking-[0.1em] text-dim">UNDO</span>
+            {/* In the narrow card the word runs into "YOU'RE GOING"; the tap still undoes it (the label says so). */}
+            <span className={clsx("absolute right-3 font-mono text-[10px] font-medium tracking-[0.1em] text-dim", compact && "hidden")}>UNDO</span>
           </button>
         ) : (
           <button type="button" onClick={onGoing} aria-busy={saving} className="btn w-full">
@@ -144,19 +148,23 @@ export default function GoingFoot({
         className={clsx(
           "mt-2 overflow-hidden rounded-hz border border-line",
           // Narrow: a two-column grid whose 1px gaps show the hairline; the chat link takes a row of its own when it is the odd one out.
-          compact ? "grid grid-cols-2 gap-px bg-line [&>*]:bg-ink-2" : "flex divide-x divide-line"
+          // On a short phone it is one row of three (the arrows and the word "event" go), to give the card's body its room.
+          compact ? "grid grid-cols-2 gap-px bg-line short:flex [&>*]:bg-ink-2" : "flex divide-x divide-line"
         )}
       >
-        <button type="button" onClick={onShare} className={CELL}>
+        <button type="button" onClick={onShare} className={clsx(CELL, compact && SHORT_CELL)}>
           <Share2 size={14} className="text-orange" aria-hidden /> SHARE
         </button>
         {event.ig_url && (
-          <a href={event.ig_url} target="_blank" rel="noreferrer noopener" className={CELL}>
-            {linkLabel(event)} <ArrowUpRight size={14} className="text-orange" aria-hidden />
+          <a href={event.ig_url} target="_blank" rel="noreferrer noopener" className={clsx(CELL, compact && SHORT_CELL)}>
+            {linkLabel(event)} <ArrowUpRight size={14} className={clsx("text-orange", compact && "short:hidden")} aria-hidden />
           </a>
         )}
-        <Link href={`/chat?c=${event.id}`} className={clsx(CELL, compact && event.ig_url && "col-span-2")}>
-          EVENT CHAT <ArrowRight size={14} className="text-orange" aria-hidden />
+        <Link href={`/chat?c=${event.id}`} className={clsx(CELL, compact && SHORT_CELL, compact && event.ig_url && "col-span-2")}>
+          <span>
+            <span className={clsx(compact && "short:hidden")}>EVENT </span>CHAT
+          </span>
+          <ArrowRight size={14} className={clsx("text-orange", compact && "short:hidden")} aria-hidden />
         </Link>
       </div>
     </>

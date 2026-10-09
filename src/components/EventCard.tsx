@@ -166,7 +166,7 @@ function EventSheet({ event, fix, userId, checkedIn, busy, onCheckIn, onClose, i
       }
       footer={<GoingFoot event={event} userId={userId} compact={side} />}
     >
-      <ArtPanel tall={page} flyer={flyer} alt={`${title} flyer`} vibe={event.vibe} tone={theme === "day" ? "ink" : "cream"} />
+      <ArtPanel tall={page} compact={side} flyer={flyer} alt={`${title} flyer`} vibe={event.vibe} tone={theme === "day" ? "ink" : "cream"} />
 
       {/* ----------------------------------------------- title and the facts -- */}
       <div className="px-5 pt-4">

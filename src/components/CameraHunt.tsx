@@ -1,14 +1,19 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState } from "react";
-import { Camera, Compass, LocateFixed, X } from "lucide-react";
+import { Camera, Compass, Crosshair, LocateFixed, X } from "lucide-react";
 import type { GameDrop } from "@/lib/game";
 import Hunt3D from "@/components/Hunt3D";
 import { huntItem, RARITY } from "@/lib/huntItems";
 import { pointFromGeog as readPoint } from "@/lib/geo";
 
 type Point = { lat: number; lng: number };
-type ClaimResult = { error?: string; reward?: string; description?: string; code?: string };
+type ClaimResult = { error?: string; reward?: string; description?: string; code?: string; xp?: number };
+
+/** Development only: lets a laptop (no compass, maybe no camera) claim a hunt so the rest of the flow can be seen. A production build drops it. */
+const IS_DEV = process.env.NODE_ENV !== "production";
+/** How long to wait for a compass reading before saying this device has none. */
+const COMPASS_WAIT_MS = 3500;
 
 /** The drop's own spot if it has one (any format the API sends), else the event's. */
 function pointFromGeog(value: unknown, fallback: Point): Point {
@@ -52,12 +57,15 @@ export default function CameraHunt({
   eventPoint,
   initialFix,
   onClaim,
+  onOpenBox,
   onClose,
 }: {
   drop: GameDrop;
   eventPoint: Point;
   initialFix: Point | null;
   onClaim: (fix: Point) => Promise<ClaimResult>;
+  /** The map opens what you won as a box. Without it the found card points to the event card instead. */
+  onOpenBox?: (won: ClaimResult) => void;
   onClose: () => void;
 }) {
   const video = useRef<HTMLVideoElement>(null);
@@ -68,6 +76,8 @@ export default function CameraHunt({
   const [error, setError] = useState("");
   const [claiming, setClaiming] = useState(false);
   const [found, setFound] = useState(false);
+  const [won, setWon] = useState<ClaimResult | null>(null);
+  const [waited, setWaited] = useState(false);
   const dropPoint = useMemo(() => pointFromGeog(drop.geog, eventPoint), [drop.geog, eventPoint]);
   const spot = useMemo(() => targetPoint(dropPoint, drop.id, drop.radius_m), [dropPoint, drop.id, drop.radius_m]);
   const distance = fix ? distanceMeters(fix, dropPoint) : null;
@@ -75,6 +85,8 @@ export default function CameraHunt({
   const turn = targetBearing !== null && heading !== null ? ((targetBearing - heading + 540) % 360) - 180 : null;
   const aligned = turn !== null && Math.abs(turn) <= 10;
   const inRange = distance !== null && distance <= drop.radius_m;
+  // A laptop never reports a compass heading: say so, rather than searching forever.
+  const noCompass = started && waited && heading === null;
   const canCatch = started && aligned && inRange && !!fix && !claiming;
   const left = turn === null ? 50 : Math.max(6, Math.min(94, 50 + turn * 1.8));
   // A 3D collectible when the drop has one, the old emoji target otherwise.
@@ -110,12 +122,18 @@ export default function CameraHunt({
     };
   }, [started]);
 
+  useEffect(() => {
+    if (!started || heading !== null) return;
+    const t = setTimeout(() => setWaited(true), COMPASS_WAIT_MS);
+    return () => clearTimeout(t);
+  }, [started, heading]);
+
   useEffect(() => () => stream.current?.getTracks().forEach((track) => track.stop()), []);
 
   const start = async () => {
     setError("");
     if (!window.isSecureContext || !navigator.mediaDevices?.getUserMedia) {
-      setError("Camera hunts need a secure HTTPS connection and a supported mobile browser.");
+      setError("Camera hunts need a phone with a camera, on a secure connection.");
       return;
     }
     try {
@@ -123,7 +141,7 @@ export default function CameraHunt({
       if (typeof Orientation?.requestPermission === "function") {
         const permission = await Orientation.requestPermission(true);
         if (permission !== "granted") {
-          setError("Allow compass access to find the target in camera mode.");
+          setError("Compass access is off, or this device has none. Allow it, or open this hunt on your phone.");
           return;
         }
       }
@@ -134,22 +152,41 @@ export default function CameraHunt({
         await video.current.play();
       }
       setStarted(true);
-    } catch {
-      setError("Camera or compass access was blocked. Allow both permissions and try again.");
+    } catch (e) {
+      const name = e instanceof DOMException ? e.name : "";
+      setError(
+        name === "NotFoundError" || name === "OverconstrainedError"
+          ? "No camera on this device. Camera hunts work on a phone."
+          : name === "NotReadableError"
+            ? "Your camera is busy in another app. Close it and try again."
+            : "Camera or compass access was blocked. Allow both permissions and try again."
+      );
     }
   };
 
-  const catchTarget = async () => {
-    if (!fix || !canCatch) return;
+  // `force` is the development shortcut: claim from where the Hopper stands, no camera and no compass needed.
+  const catchTarget = async (at: Point | null = fix, force = false) => {
+    if (!at || claiming || (!force && !canCatch)) return;
     setClaiming(true);
-    const result = await onClaim(fix);
+    const result = await onClaim(at);
     setClaiming(false);
     if (result.error) {
       setError(result.error);
       return;
     }
+    setWon(result);
     setFound(true);
   };
+  const devFound = IS_DEV && (
+    <button
+      type="button"
+      disabled={claiming}
+      onClick={() => void catchTarget(initialFix ?? fix, true)}
+      className="mt-2 flex min-h-[44px] w-full items-center justify-center gap-2 border border-dashed border-white/40 font-mono text-[11px] font-medium uppercase tracking-[0.08em] text-white/70 hover:text-white disabled:opacity-50"
+    >
+      <Crosshair size={14} aria-hidden /> DEV: FOUND IT
+    </button>
+  );
 
   return (
     <div className="fixed inset-0 z-[80] overflow-hidden bg-black text-white" role="dialog" aria-modal="true" aria-label="Camera reward hunt">
@@ -175,12 +212,13 @@ export default function CameraHunt({
               : <div className={`grid h-16 w-16 place-items-center rounded-2xl border-2 border-orange bg-black/65 shadow-[0_0_38px_rgba(255,77,0,0.8)] transition-transform ${aligned ? "scale-125" : ""}`} aria-label="Digital reward target">{target("")}</div>}
           </div>
           <div className="absolute inset-x-4 bottom-24 z-20 rounded-xl border border-white/20 bg-black/70 p-4 text-center backdrop-blur">
-            <p className="flex items-center justify-center gap-2 font-mono text-[10px] font-bold tracking-widest text-orange"><Compass size={14}/>{heading === null ? "SEARCHING FOR COMPASS" : aligned ? "TARGET LOCKED" : `${Math.round(Math.abs(turn ?? 0))}° ${turn !== null && turn > 0 ? "RIGHT" : "LEFT"}`}</p>
-            <p className="mt-2 font-display text-sm font-black">{!fix ? "FINDING YOUR LOCATION…" : !inRange ? `${Math.round(distance ?? 0)}M AWAY · MOVE CLOSER` : aligned ? "YOU FOUND IT" : "TURN YOUR PHONE TO FIND IT"}</p>
+            <p className="flex items-center justify-center gap-2 font-mono text-[10px] font-bold tracking-widest text-orange"><Compass size={14}/>{heading === null ? (noCompass ? "NO COMPASS" : "SEARCHING FOR COMPASS") : aligned ? "TARGET LOCKED" : `${Math.round(Math.abs(turn ?? 0))}° ${turn !== null && turn > 0 ? "RIGHT" : "LEFT"}`}</p>
+            <p className="mt-2 font-display text-sm font-black">{!fix ? "FINDING YOUR LOCATION…" : !inRange ? `${Math.round(distance ?? 0)}M AWAY · MOVE CLOSER` : aligned ? "YOU FOUND IT" : noCompass ? "THIS HUNT NEEDS A PHONE" : "TURN YOUR PHONE TO FIND IT"}</p>
             <p className="hint mt-1 text-white/60">{Math.round(distance ?? 0)}m from drop · within {drop.radius_m}m to claim</p>
-            {heading === null && <p className="hint mt-2 text-orange">This phone/browser is not sharing compass direction. Allow motion access or use the venue QR.</p>}
+            {noCompass && <p className="hint mt-2 text-orange">No compass on this device, so the target can&apos;t be lined up. Camera hunts work on a phone.</p>}
             {error && <p role="alert" className="mt-2 text-xs text-orange">{error}</p>}
             <button className="btn mt-3 w-full" disabled={!canCatch} onClick={() => void catchTarget()}>{claiming ? "CLAIMING…" : canCatch ? "CATCH & CLAIM REWARD" : "SEARCH THE CAMERA VIEW"}</button>
+            {devFound}
           </div>
         </>
       )}
@@ -193,11 +231,12 @@ export default function CameraHunt({
           <p className="hint mt-2 text-white/70">Move your phone to search the camera view. Line up the target and claim the event reward. Camera frames stay on this device.</p>
           {error && <p role="alert" className="mt-3 text-xs text-orange">{error}</p>}
           <button className="btn mt-4 w-full" onClick={() => void start()}><Camera size={15}/> START CAMERA HUNT</button>
+          {devFound}
           {!initialFix && <p className="mt-2 flex items-center justify-center gap-1 text-[9px] text-white/60"><LocateFixed size={12}/> Location permission is needed to claim.</p>}
         </div>
       )}
 
-      {found && <div className="absolute inset-0 z-30 grid place-items-center bg-black/80 p-6 text-center"><div className="card max-w-sm border-orange/60 bg-ink-2">{item ? <div className="mx-auto h-44 w-44"><Hunt3D item={item.key} spin={1} className="h-full w-full" /></div> : <div className="text-7xl">{targetEmoji(drop.id)}</div>}<p className="seclabel mt-4" style={{ color: item ? RARITY[item.rarity].color : undefined }}>{item ? `${RARITY[item.rarity].label} · FOUND` : "TARGET FOUND"}</p><h2 className="mt-2 font-display text-2xl font-black">{item ? item.name : "Reward unlocked"}</h2><p className="hint mt-2">{item ? `${item.blurb} It's in your collection, and your reward is on the event card.` : "Your reward is ready in the event card and your collection."}</p><button className="btn mt-5 w-full" onClick={onClose}>BACK TO EVENT</button></div></div>}
+      {found && <div className="absolute inset-0 z-30 grid place-items-center bg-black/80 p-6 text-center"><div className="card max-w-sm border-orange/60 bg-ink-2">{item ? <div className="mx-auto h-44 w-44"><Hunt3D item={item.key} spin={1} className="h-full w-full" /></div> : <div className="text-7xl">{targetEmoji(drop.id)}</div>}<p className="seclabel mt-4" style={{ color: item ? RARITY[item.rarity].color : undefined }}>{item ? `${RARITY[item.rarity].label} · FOUND` : "TARGET FOUND"}</p><h2 className="mt-2 font-display text-2xl font-black">{item ? item.name : "Reward unlocked"}</h2><p className="hint mt-2">{item ? `${item.blurb} It's in your collection${onOpenBox ? "." : ", and your reward is on the event card."}` : onOpenBox ? "Your reward is in your collection." : "Your reward is ready in the event card and your collection."}</p><button className="btn mt-5 w-full" onClick={() => (onOpenBox && won ? onOpenBox(won) : onClose())}>{onOpenBox ? "OPEN YOUR BOX" : "BACK TO EVENT"}</button></div></div>}
     </div>
   );
 }

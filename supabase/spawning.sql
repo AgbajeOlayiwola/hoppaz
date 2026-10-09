@@ -2,7 +2,8 @@
 -- Hoppaz: street box spawning (Pokemon GO style)
 -- Run order: schema.sql, hunt_items.sql, then this file in the Supabase SQL
 -- editor. Then spawn_points_lagos.sql (real Lagos spots, made by
--- scripts/spawn-points/import-osm.mjs). Safe to run again. If you ever re-run
+-- scripts/spawn-points/import-osm.mjs), then box_guards.sql (no box in the
+-- water). Safe to run again. If you ever re-run
 -- schema.sql, run this file after it, because schema.sql restores the old
 -- drops_read_active policy and the old claim_game_drop.
 --
@@ -263,7 +264,12 @@ begin
         exit when not exists (select 1 from no_spawn_zones z where z.active and st_intersects(z.geog, pos));
         pos := null;
       end loop;
-      if pos is null then pos := origin; end if;
+      if pos is null then
+        -- nowhere is clear (the Hopper stands inside a big zone, on a bridge over the lagoon): no boxes
+        -- this time, the app asks again when the location changes. box_guards.sql refuses a box in a zone.
+        delete from game_drops where id = any (ids);
+        return jsonb_build_object('ok', false, 'reason', 'no_clear_spot');
+      end if;
     end if;
     picks := picks || pos;
     insert into game_drops (title, description, area, geog, opens_at, closes_at, radius_m, claim_method, max_claims, reward_model, kind, owner_id, active)

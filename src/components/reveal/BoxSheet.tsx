@@ -1,13 +1,17 @@
 "use client";
 
 import { useState } from "react";
-import { Camera, Lock, MapPin, Navigation, QrCode } from "lucide-react";
+import { Camera, Footprints, Lock, MapPin, Navigation, QrCode } from "lucide-react";
 import Sheet from "@/components/Sheet";
 import QrScanner from "@/components/QrScanner";
 import { haversineKm } from "@/lib/geo";
+import { useHoppaz } from "@/lib/store";
 import { huntItem, RARITY } from "@/lib/huntItems";
 import { dropsLeft, type GameDrop } from "@/lib/game";
 import { dropPhase, opensLabel, timeLeft } from "@/components/me/dropTime";
+
+/** Development only: a play-test button that walks you to the box. A production build drops it. */
+const IS_DEV = process.env.NODE_ENV !== "production";
 
 /**
  * What a box on the map says when you tap it. Open and close enough: open it
@@ -56,6 +60,13 @@ export default function BoxSheet({
       : null;
   const head = street ? ["STREET BOX", drop.area].filter(Boolean).join(" · ") : welcome ? "WELCOME BOX" : drop.partner?.name ?? "HOPPAZ DROP";
   const directions = `https://www.google.com/maps/dir/?api=1&destination=${at.lat},${at.lng}`;
+  // On a laptop every box is kilometres away: this moves you onto it so the open and hunt paths can be tried.
+  const standHere = () => {
+    const { fix: here, setFix } = useHoppaz.getState();
+    // "area", not "gps": a play-test position is a guess. In production that keeps it from spending the one-time welcome boxes.
+    // In development useWelcomeBoxes accepts an area fix too, so on a Hopper who has not had them yet this does spend them here.
+    setFix({ lat: at.lat, lng: at.lng, source: "area", area: drop.area ?? here?.area ?? null });
+  };
 
   return (
     <Sheet open onClose={onClose} label={drop.title}>
@@ -80,9 +91,12 @@ export default function BoxSheet({
 
       <div className="mt-4 border-t border-dashed border-line pt-4">
         {sealed ? (
-          <button type="button" disabled className="btn w-full border border-line">
-            <Lock size={15} aria-hidden /> {opensLabel(drop.opens_at, now)}
-          </button>
+          <>
+            <button type="button" disabled className="btn w-full border border-line">
+              <Lock size={15} aria-hidden /> {opensLabel(drop.opens_at, now)}
+            </button>
+            <p className="hint mt-2">Sealed until then. Be within {drop.radius_m} m of it when it opens.</p>
+          </>
         ) : near ? (
           <>
             {needsCode && !item && (
@@ -111,6 +125,15 @@ export default function BoxSheet({
             <a href={directions} target="_blank" rel="noreferrer noopener" className="btn btn-ghost mt-3 w-full">
               <Navigation size={15} aria-hidden /> DIRECTIONS
             </a>
+            {IS_DEV && (
+              <button
+                type="button"
+                onClick={standHere}
+                className="mt-2 flex min-h-[44px] w-full items-center justify-center gap-2 border border-dashed border-dim font-mono text-[11px] font-medium uppercase tracking-[0.08em] text-dim hover:text-cream"
+              >
+                <Footprints size={14} aria-hidden /> DEV: STAND HERE
+              </button>
+            )}
           </>
         )}
       </div>

@@ -20,6 +20,10 @@ import { FIRST_CHECKIN_EVENT } from "@/lib/useCheckin";
  * Anywhere that can do neither (desktop, in-app browsers) it stays quiet and
  * keeps its chances for later.
  *
+ * If another sheet is open when its moment comes (the event card the Hopper just
+ * tapped "I'm going" on), it waits for that sheet to close: it never covers the
+ * "you're going" stamp.
+ *
  * Fixed above the tab bar (the app's own Sheet is absolute inside <main>, which
  * the event page already uses). Mounted once in layout.tsx.
  */
@@ -28,6 +32,13 @@ const KEY = "hoppaz.install";
 const DELAY_MS = 1400; // let the stamp and the toast land first
 /** Where an install nudge is never right: public posters and staff tools. */
 const QUIET_PATHS = [/^\/report\//, /^\/admin/];
+/** How often to look again while another sheet is still open, and the breath after it closes. */
+const WAIT_POLL_MS = 500;
+const AFTER_CLOSE_MS = 500;
+const LABEL = "Add Hoppaz to your home screen";
+
+/** Any sheet or reveal on screen other than this one. */
+const otherDialogOpen = () => !!document.querySelector(`[role="dialog"]:not([aria-label="${LABEL}"])`);
 
 type Stage = 0 | 1 | 2; // how many times it has been shown
 type Saved = { stage: Stage; done?: boolean };
@@ -87,6 +98,11 @@ export default function InstallSheet() {
 
   useEffect(() => {
     let timer: ReturnType<typeof setTimeout> | undefined;
+    let poll: ReturnType<typeof setInterval> | undefined;
+    const stop = () => {
+      clearTimeout(timer);
+      clearInterval(poll);
+    };
 
     const onPrompt = (e: Event) => {
       e.preventDefault(); // keep the browser's own bar away; we ask at the right moment
@@ -104,14 +120,23 @@ export default function InstallSheet() {
       if (QUIET_PATHS.some((re) => re.test(pathRef.current))) return;
       const next = deferred.current ? "android" : isIosBrowser() ? "ios" : null;
       if (!next) return; // nothing to offer here, keep the chance
-      clearTimeout(timer);
-      timer = setTimeout(() => {
-        if (isStandalone()) return;
+      const show = () => {
+        if (isStandalone() || QUIET_PATHS.some((re) => re.test(pathRef.current))) return;
         const nav = document.querySelector('nav[aria-label="Main"]');
         setBottom(nav ? Math.round(nav.getBoundingClientRect().height) : 0);
         setMode(next);
         setOpen(true);
         save({ ...read(), stage: moment === "going" ? 1 : 2 });
+      };
+      stop();
+      timer = setTimeout(() => {
+        if (!otherDialogOpen()) return show();
+        // The chance is kept (the stage is only saved once it shows): look again until that sheet closes.
+        poll = setInterval(() => {
+          if (otherDialogOpen()) return;
+          stop();
+          timer = setTimeout(show, AFTER_CLOSE_MS);
+        }, WAIT_POLL_MS);
       }, DELAY_MS);
     };
     const onGoing = () => attempt("going");
@@ -122,7 +147,7 @@ export default function InstallSheet() {
     window.addEventListener(FIRST_GOING_EVENT, onGoing);
     window.addEventListener(FIRST_CHECKIN_EVENT, onCheckin);
     return () => {
-      clearTimeout(timer);
+      stop();
       window.removeEventListener("beforeinstallprompt", onPrompt);
       window.removeEventListener("appinstalled", onInstalled);
       window.removeEventListener(FIRST_GOING_EVENT, onGoing);
@@ -165,7 +190,7 @@ export default function InstallSheet() {
       <div
         ref={box}
         role="dialog"
-        aria-label="Add Hoppaz to your home screen"
+        aria-label={LABEL}
         tabIndex={-1}
         className="pointer-events-auto relative w-full max-w-[480px] animate-rise rounded-t-[12px] border-t border-line bg-ink-2 px-4 pt-3 shadow-sheet outline-none"
         style={{ paddingBottom: bottom ? "1rem" : "calc(1rem + env(safe-area-inset-bottom, 0px))" }}

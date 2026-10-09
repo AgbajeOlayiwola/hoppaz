@@ -185,7 +185,7 @@ export default function StubSheet({
         </div>
 
         {footer && (
-          <div ref={foot} className={clsx("flex-none border-t border-dashed border-line pt-4", side ? "px-4 pb-3" : "px-5 pb-4")}>
+          <div ref={foot} className={clsx("flex-none border-t border-dashed border-line pt-4", side ? "px-4 pb-3 short:pb-2 short:pt-3" : "px-5 pb-4")}>
             {footer}
           </div>
         )}

@@ -4,7 +4,7 @@
 // Run again any time (Node 18+, no packages):
 //   node scripts/spawn-points/import-osm.mjs
 // It writes supabase/spawn_points_lagos.sql. Run that file in the Supabase SQL
-// editor after spawning.sql. Safe to run again: spots and zones are upserted by
+// editor after spawning.sql, then run box_guards.sql. Safe to run again: spots and zones are upserted by
 // (source, source_ref), and a staff on/off switch on an existing spot is kept
 // (except spots inside an active zone, which are switched off again).
 // Options:
@@ -25,6 +25,10 @@
 //
 // If every mirror fails it writes a short hand-made list of well-known Lagos
 // spots and zones instead and says so.
+//
+// Every zone is written with a zone_type (water, military, airport, prison, port,
+// landfill, power, estate, staff). supabase/box_guards.sql uses it: a box is
+// refused inside a water zone, and a spot within 40 m of one is switched off.
 // Data (c) OpenStreetMap contributors, ODbL.
 // ============================================================================
 import { mkdir, readFile, writeFile } from "node:fs/promises";
@@ -557,7 +561,7 @@ const FALLBACK_COAST = [
 const HEADER = (mode, counts) => `-- ============================================================================
 -- Hoppaz: Lagos spawn spots and no-spawn zones
 -- Made by scripts/spawn-points/import-osm.mjs. Run in the Supabase SQL editor
--- after spawning.sql. Safe to run again (upserts by source and source_ref; a
+-- after spawning.sql, then run box_guards.sql. Safe to run again (upserts by source and source_ref; a
 -- staff on/off switch on an existing spot is kept, except spots inside an active
 -- zone, which are switched off again).
 --
@@ -590,16 +594,33 @@ on conflict (source, source_ref) do update set name = excluded.name, kind = excl
     .join("\n\n");
 }
 
+// What a zone is, from its reason. Same words as no_spawn_zone_type() in box_guards.sql.
+const ZONE_TYPE = {
+  water: "water",
+  military: "military",
+  airport: "airport",
+  prison: "prison",
+  port: "port",
+  landfill: "landfill",
+  "power plant": "power",
+  "private estate": "estate",
+};
+const zoneType = (z) => z.type ?? ZONE_TYPE[z.reason] ?? "staff";
+
 function zonesSql(zones, source) {
   return chunk(zones, 25)
     .map((part) => {
-      const rows = part.map((z) => `(${q(z.name)},${q(z.reason)},${z.expr},'${z.source ?? source}',${q(z.ref)})`).join(",\n");
-      return `insert into public.no_spawn_zones (name, reason, geog, source, source_ref) values
+      const rows = part.map((z) => `(${q(z.name)},${q(z.reason)},${z.expr},'${z.source ?? source}',${q(z.ref)},${q(zoneType(z))})`).join(",\n");
+      return `insert into public.no_spawn_zones (name, reason, geog, source, source_ref, zone_type) values
 ${rows}
-on conflict (source, source_ref) do update set name = excluded.name, reason = excluded.reason, geog = excluded.geog;`;
+on conflict (source, source_ref) do update set name = excluded.name, reason = excluded.reason, geog = excluded.geog, zone_type = excluded.zone_type;`;
     })
     .join("\n\n");
 }
+
+// box_guards.sql adds the column too. Adding it here lets this file run before or after that one.
+const ZONE_TYPE_SQL = `-- What each zone is (water, military, ...). box_guards.sql adds this column as well, so run order does not matter.
+alter table public.no_spawn_zones add column if not exists zone_type text;`;
 
 const VENUES_SQL = `-- Venues from live events: a safe, lit place with people at night.
 insert into public.spawn_points (name, kind, geog, night_safe, weight, source, source_ref)
@@ -696,6 +717,7 @@ async function viaOverpass() {
   const sql = [
     HEADER("osm", `${spots.length} spots (${counts}), ${zones.length + water.length + HAND_ZONES.length} zones.`),
     "begin;",
+    ZONE_TYPE_SQL,
     zones.length ? `-- No-spawn zones from OpenStreetMap, each buffered by ${ZONE_BUFFER_M} m.\n` + zonesSql(zones, "osm") : "",
     water.length ? "-- Water from OpenStreetMap, as drawn: the lagoon, creeks and bays, and the sea south of the coastline.\n" + zonesSql(water, "osm") : "",
     "-- Hand-made zone: places only a boat reaches.\n" + zonesSql(HAND_ZONES, "staff"),
@@ -721,6 +743,7 @@ function viaFallback() {
   const sql = [
     HEADER("fallback", `${FALLBACK_SPOTS.length} spots, ${zones.length + HAND_ZONES.length + 1} zones.`),
     "begin;",
+    ZONE_TYPE_SQL,
     "-- No-spawn zones as circles, plus the hand-made boat-only zone and the sea.\n" + zonesSql([...zones, ...HAND_ZONES, seaFrom(FALLBACK_COAST, "lagos-core/sea")], "staff"),
     "-- Spawn spots.\n" + spotsSql(FALLBACK_SPOTS, "staff", (s) => `lagos-core/${slug(s.name)}`),
     VENUES_SQL,

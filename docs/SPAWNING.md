@@ -26,6 +26,7 @@ schedule and a few extra checks when a box is claimed.
 |---|---|
 | Spawn points | Boxes only appear at a known list of public spots: parks, beaches, landmarks, markets, run routes, bus stops, fuel stations, and venues from live events. They are in `spawn_points`. |
 | No-spawn zones | Some places never get a box: the Atlantic, the lagoon, creeks and the harbour, military land, the airport, prisons, ports, power plants, landfills, gated estates. They are in `no_spawn_zones`. A spot inside an active zone is never used, and neither is a welcome box position. |
+| No box in the water | The database itself refuses a box whose point is in the sea, the lagoon, a creek or any other water zone, from any source: the spawner, a welcome box, a drop made in the admin desk, a script. A street or welcome box is also refused inside any other blocked area. See "No box in the water" below. |
 | Night safe | Between 21:00 and 06:00 Lagos time, a rule can only use spots marked `night_safe`. Today that means fuel stations and venues. Parks, beaches and bus stops are day only. |
 | One wave at a time | A rule drops `boxes_per_wave` boxes each time it is due. Two boxes in one wave are at least 300 m apart. No box is placed within 50 m of another live street or welcome box. |
 | First N | Each box has `max_claims`. The first N people to open it get a reward. After that it is sold out and disappears from the map. |
@@ -53,8 +54,11 @@ they share their location. They are worth 250 XP in total by day (50, 50 and 150
 They last 24 hours and can only be opened once. If no spot fits, the box is placed
 at an offset from the Hopper, turning the direction until it clears every no-spawn
 zone. That is what keeps a box out of the sea or the lagoon for a Hopper on the
-waterfront: the water is a zone. Outside Lagos the call does nothing and tries again
-if the location changes.
+waterfront: the water is a zone. If even that finds nothing clear (the Hopper stands
+inside a zone, say on a bridge over the lagoon), no boxes are made and nothing is left
+behind: the call answers `no_clear_spot`. The app asks again when the location changes,
+and from a clear place the Hopper still gets all three. Outside Lagos the call does
+nothing and tries again if the location changes.
 
 A daytime welcome box can sit at a spot that is not night safe (a bus stop, a market)
 and stays open for its 24 hours, so it can still be opened after 21:00. The night rule
@@ -76,7 +80,9 @@ to anyone else. Do not loosen the policy.
 | `supabase/spawning.sql` | Tables, columns, policy, the spawner, welcome boxes, the new `claim_game_drop`, the pg_cron job. Safe to run again. |
 | `supabase/spawn_points_lagos.sql` | The Lagos spots and zones from OpenStreetMap (623 spots, 119 zones when it was made, 58 of them water), plus venue spots from live events. Made by the script below. Safe to run again. |
 | `scripts/spawn-points/import-osm.mjs` | Makes `spawn_points_lagos.sql`. Node 18 or newer, no packages. |
+| `supabase/box_guards.sql` | The water guard: `no_spawn_zones.zone_type`, the trigger that refuses a box in the water, and the 40 m rule for spawn spots. Runs after `spawn_points_lagos.sql`. Safe to run again. |
 | `supabase/tests/spawning_test.sql` | Test suite for a local database. Rolls back, keeps nothing. |
+| `supabase/tests/box_guards_test.sql` | Tests for the water guard, on the real Lagos data and on zones of its own. Rolls back, keeps nothing. |
 | `src/components/admin/SpawnerSection.tsx` | The staff controls on `/admin`. |
 | `src/app/api/admin/game/route.ts` | Admin API: reads the spawner, plus the actions `save_spawn_rule`, `toggle_spawn_rule`, `spawn_now`, `add_spawn_point`, `toggle_spawn_point`, `add_no_spawn_zone`, `toggle_no_spawn_zone`, `end_box`. |
 | `src/lib/game.ts` | `useGameDrops()` reads boxes, refreshes every 60 seconds (a failed refresh keeps the boxes already on the map), re-reads at once when a claim finds a box sold out or closed, and has friendly copy for the new claim errors. With `{ staffOnly: true }` it lists desk drops only, which is what `/drops` and Me use. |
@@ -96,10 +102,15 @@ Run these in the SQL editor, in this order:
 2. `supabase/chat_accounts.sql`
 3. `supabase/hunt_items.sql`
 4. `supabase/spawning.sql`
-5. `supabase/spawn_points_lagos.sql`
+5. `supabase/daily_box.sql` (Today's box on Me. It is not a street box feature; it sits
+   here because it follows the same run order.)
+6. `supabase/spawn_points_lagos.sql`
+7. `supabase/box_guards.sql`
 
 Do not run `seed.sql` in production. If the project already has steps 1 to 3, it
-only needs steps 4 and 5.
+only needs steps 4 to 7. If it already has steps 4 and 6, it only needs step 7, and
+`spawning.sql` once more first (it changed what a welcome box does when nowhere is clear).
+`daily_box.sql` only needs `schema.sql`, and it is safe to run twice.
 
 Rules for this order:
 
@@ -111,7 +122,9 @@ Rules for this order:
   runs inside one transaction and ends with a table of spot counts per kind.
 - **If `schema.sql` is ever run again, run `spawning.sql` after it.** `schema.sql`
   puts back the old `drops_read_active` policy and the old `claim_game_drop`. That
-  would show welcome boxes to everyone and drop the speed check.
+  would show welcome boxes to everyone and drop the speed check. Run `daily_box.sql`
+  after it too: `schema.sql` puts back the old rank rule, which ranks a Hopper who
+  only opened daily boxes.
 - **Check the 16 areas exist before step 5.** The `areas` rows are inserted by
   `seed.sql`, which we do not run in production, so confirm they are there with
   `select count(*) from areas;` (it should say 16). Spots get their area from that
@@ -121,6 +134,10 @@ Rules for this order:
 - Venue spots come from events with status `live` at the time `spawn_points_lagos.sql`
   runs. Run it again after real events go live to add their venues. Existing rows
   are left alone.
+- `box_guards.sql` goes after `spawn_points_lagos.sql`: it types the zones that file
+  made, switches off the spots by the water and then guards `game_drops`. Run it again
+  after you re-import the spots; it is harmless. The guard also catches a later import,
+  because new spots by the water are born switched off.
 - No new env vars and no Vercel cron. The spawner runs inside Postgres.
 
 ### Turn on pg_cron
@@ -257,10 +274,11 @@ and Yaba. A spot's area is its nearest area within 5 km, filled by a trigger.
 Spot weights are on each spot. Landmarks, parks, beaches and run routes are 2,
 street spots 1, markets 0.8, venues 1.5. Higher weight means picked more often.
 
-Things in the code, not in a rule. To change them, edit `spawning.sql` and run it again:
+Things in the code, not in a rule. To change them, edit `spawning.sql` (or `box_guards.sql`) and run it again:
 
 | Setting | Where | Value |
 |---|---|---|
+| Water margin for spawn spots | `spawn_points_keep_off_water()` and the first update in `box_guards.sql` | 40 m |
 | Welcome box layout and rewards | `spawn_welcome_boxes_for()` | see above |
 | Min distance between boxes in a wave | `spawn_boxes()` | 300 m |
 | Free space around a live box | `spawn_boxes()` | 50 m |
@@ -339,6 +357,11 @@ If every mirror fails, the script writes a short hand-made list (about 40 public
 spots, a few zones and a thinned copy of the Atlantic coastline) and says so. In that
 mode there is no lagoon zone.
 
+Every zone is written with its `zone_type` (see "No box in the water"). The first line of the
+file adds the column if it is missing, so the file runs before or after `box_guards.sql`.
+The copy of `spawn_points_lagos.sql` made before this change has no types; `box_guards.sql`
+fills them in, and the next regeneration carries them.
+
 Re-running is safe. Spots and zones are upserted by `(source, source_ref)`. A staff
 on/off switch on an existing OSM spot is kept, except spots inside an active zone,
 which are switched off again. Spots and zones with source `staff` are never changed.
@@ -362,6 +385,44 @@ To block somewhere new, use **BLOCK THIS AREA** on the desk, or SQL:
 ```sql
 select public.add_no_spawn_zone('Name', 'Why', 6.4281, 3.4219, 300);  -- lat, lng, radius in metres
 ```
+
+## No box in the water
+
+Jae saw boxes in the sea. The spawner already skipped zones, but any other insert could
+still land in the water (a staff drop typed with the wrong coordinates, a test script,
+a welcome box placed as a last resort), and a beach spot can sit on the waterline.
+`supabase/box_guards.sql` closes that in the database, so it does not matter who inserts.
+
+**Zone types.** Every row of `no_spawn_zones` now has a `zone_type`: `water`, `military`,
+`airport`, `prison`, `port`, `landfill`, `power`, `estate` or `staff` (a zone drawn by
+hand). Water is a type, not a guess from the name: the sea is "Atlantic Ocean", most
+creeks are just called "Water". The importer writes the type itself. A zone made without
+one gets it from its reason (`water`, `military`, `airport`, `prison`, `port`, `landfill`,
+`power plant`, `private estate`, and the sea and the harbour mouth by their `source_ref`);
+any other reason is `staff`. So to block a stretch of water by hand, give it the reason
+`water` in **BLOCK THIS AREA**.
+
+**The guard** is a trigger on `game_drops`, on insert and on a change of `geog` or `kind`.
+
+| The drop | Result |
+|---|---|
+| Its point is in an active water zone, any kind | Refused: "That spot is in the water. Pick a spot on land." |
+| Kind `spawn` or `welcome`, its point is in any other active zone | Refused: "That spot is in a no-box area (zone name). Pick another spot." |
+| A staff drop in a military zone, an estate and so on | Allowed. Staff know what they are doing there. |
+| A staff drop tied to an event, with no point of its own | Left alone. It uses the venue. |
+| A drop that is already in the table | Not rechecked. Claiming it, renaming it or closing it still works. |
+
+The admin desk shows the message when it refuses a drop. Switching a water zone off in
+the desk lifts its guard.
+
+**Spots by the water.** A spawn spot within 40 m of an active water zone is switched off,
+when `box_guards.sql` runs and whenever a spot is added or moved, so a re-import cannot
+bring one back. Why 40 m: the map tiles and the OSM shapes disagree by a few metres, and
+a pin that near the waterline can show in the sea. A beach stays only if it is on the
+sand. Staff can still switch such a spot on by hand (it stays on until it is moved or
+imported again). On the Lagos data of 2026-10-09 it switched off 8 spots: 3 fuel stations,
+a park, and the National Theatre venue (4 event names, one place), each 15 to 40 m from a
+small OSM water shape.
 
 ## Anti-cheat
 
@@ -445,11 +506,14 @@ contributors and licensed under the ODbL (https://www.openstreetmap.org/copyrigh
 
 ### Local database
 
-Needs a local database with `schema.sql`, `hunt_items.sql` and `spawning.sql` loaded.
+Needs a local database with `schema.sql`, `hunt_items.sql` and `spawning.sql` loaded
+(and `spawn_points_lagos.sql` plus `box_guards.sql` for the second test).
 Never run this on a real project.
 
 ```bash
 docker exec -i supabase_db_hoppaz-local psql -U postgres -d postgres -v ON_ERROR_STOP=1 < supabase/tests/spawning_test.sql
+docker exec -i supabase_db_hoppaz-local psql -U postgres -d postgres -v ON_ERROR_STOP=1 < supabase/tests/box_guards_test.sql
+docker exec -i supabase_db_hoppaz-local psql -U postgres -d postgres -v ON_ERROR_STOP=1 < supabase/tests/daily_box_test.sql
 ```
 
 It runs in one transaction that always rolls back, and it clears the spawn tables
@@ -458,12 +522,27 @@ result. The last line is `ALL SPAWNING TESTS PASSED`. If a check fails, it raise
 `TEST FAILED` with what it got and what it wanted. It covers: forced waves, windows
 and timing (including a window past midnight), night spots, first N, too far, closed,
 no session, too fast, slow down, the per-Hopper claim lock, QR code claims, the street
-box score, welcome boxes by day and night (including next to a coast), owner-only
-visibility, privileges and the admin summary.
+box score, welcome boxes by day and night (including next to a coast and with nowhere
+clear), owner-only visibility, privileges and the admin summary.
+
+`box_guards_test.sql` ends with `ALL BOX GUARD TESTS PASSED`. It runs in one transaction
+that always rolls back. On the real Lagos data it proves a staff drop in the sea and a
+street box in the lagoon are refused, a drop on land is fine, an event drop with no
+point is fine, no active spot is within 40 m of water, the forced spawner and welcome
+boxes at the coast stay on land. On zones of its own (at open sea east of Lagos) it
+checks every rule edge by edge: water against other zones, each kind, the zone edge,
+a zone switched off, moving a drop, an old drop already in the water, and spots at 30 m,
+60 m, on the waterline and on the sand.
+
+`daily_box_test.sql` (needs `daily_box.sql` loaded) ends with `ALL DAILY BOX TESTS PASSED`
+and rolls back the same way. It covers the prize table edges and odds, once a day, the XP
+and the streak, this week's days, the Lagos day boundary (22:59:59 and 23:00:00 UTC),
+a second call after the row exists, privileges, and the rank rule (a Hopper who only
+opened daily boxes is not ranked, on the stats, the report card and the public board).
 
 ### In the app
 
-1. Run `spawning.sql` and `spawn_points_lagos.sql` on your database.
+1. Run `spawning.sql`, `spawn_points_lagos.sql` and `box_guards.sql` on your database.
 2. In `/admin`, press **SPAWN NOW** on **Day street boxes**. At night it only uses fuel
    stations and venues. To use any spot at night, turn the night limit off on that rule.
 3. Open the map with your location set near a spawned box. You see an orange "N LEFT" pin.

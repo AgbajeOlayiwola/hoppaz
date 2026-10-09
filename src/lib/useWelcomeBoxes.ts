@@ -3,6 +3,9 @@
 import { useEffect, useRef } from "react";
 import { getSupabase } from "./supabase/client";
 
+/** Development only: a laptop has no GPS worth trusting, so a picked area counts too and the welcome boxes can be seen. */
+const IS_DEV = process.env.NODE_ENV !== "production";
+
 const doneKey = (userId: string) => `hz-welcome-v1:${userId}`;
 
 function wasDone(userId: string) {
@@ -28,7 +31,7 @@ function markDone(userId: string) {
  * missing session do nothing. `onDropped` runs only when boxes were just made.
  * Only a GPS fix counts. A picked area is the centre of that area, not where the
  * Hopper is, and the one-time grant must not be spent on a guess: the call waits
- * until they share their location.
+ * until they share their location (in development a picked area counts as well).
  */
 export function useWelcomeBoxes(
   userId: string | null,
@@ -41,8 +44,9 @@ export function useWelcomeBoxes(
   });
   const asked = useRef<string | null>(null);
 
-  const lat = fix?.source === "gps" ? fix.lat : undefined;
-  const lng = fix?.source === "gps" ? fix.lng : undefined;
+  const trusted = fix?.source === "gps" || IS_DEV;
+  const lat = trusted ? fix?.lat : undefined;
+  const lng = trusted ? fix?.lng : undefined;
   useEffect(() => {
     const sb = getSupabase();
     if (!sb || !userId || lat === undefined || lng === undefined) return;

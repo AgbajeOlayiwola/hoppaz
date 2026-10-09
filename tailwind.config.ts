@@ -21,6 +21,10 @@ const config: Config = {
   content: ["./src/**/*.{ts,tsx}"],
   theme: {
     extend: {
+      screens: {
+        // A short phone (an iPhone SE, or any phone with the browser bars out): the `short:` variant.
+        short: { raw: "(max-height: 719px)" },
+      },
       colors: {
         ink: { DEFAULT: v("ground"), 2: v("raised"), 3: v("card") },
         line: v("hairline"),

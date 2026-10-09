@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { createPortal } from "react-dom";
+import clsx from "clsx";
 import { Maximize2, X } from "lucide-react";
 import Wordmark from "@/components/Wordmark";
 
@@ -18,9 +19,12 @@ export default function ArtPanel({
   vibe,
   tone,
   tall = false,
+  compact = false,
 }: {
   /** The full event page: a hero, not a strip. */
   tall?: boolean;
+  /** The card docked beside the map: on a short phone the art gives way, so the title and the facts show. */
+  compact?: boolean;
   flyer: string | null;
   alt: string;
   vibe: string;
@@ -44,7 +48,7 @@ export default function ArtPanel({
 
   if (!flyer || broken) {
     return (
-      <div className="flex h-[72px] flex-none items-end justify-between border-y border-line bg-ink-3 px-5 pb-3">
+      <div className={clsx("flex h-[72px] flex-none items-end justify-between border-y border-line bg-ink-3 px-5 pb-3", compact && "short:hidden")}>
         <span className="font-mono text-[11px] font-medium uppercase tracking-[0.14em] text-dim">{vibe}</span>
         <Wordmark size={13} tone={tone} className="opacity-60" />
       </div>
@@ -57,8 +61,11 @@ export default function ArtPanel({
         type="button"
         onClick={() => setZoom(true)}
         aria-label="Open the flyer full size"
-        className="relative block w-full flex-none overflow-hidden border-y border-line bg-ink-3"
-        style={{ height: tall ? "clamp(240px, 46svh, 460px)" : "clamp(140px, 23svh, 210px)" }}
+        className={clsx(
+          "relative block w-full flex-none overflow-hidden border-y border-line bg-ink-3",
+          tall ? "h-[clamp(240px,46svh,460px)]" : "h-[clamp(140px,23svh,210px)]",
+          compact && "short:h-[clamp(84px,15svh,140px)]"
+        )}
       >
         <img src={flyer} alt="" aria-hidden className="absolute inset-0 h-full w-full scale-125 object-cover opacity-50 blur-xl" />
         <img src={flyer} alt={alt} onError={() => setBroken(true)} className="relative h-full w-full object-contain" />

@@ -10,6 +10,7 @@ import { RowButton, RowLink, RowValue } from "./Rows";
  * the intro, privacy, community rules, staff (only for staff) and delete.
  */
 export default function SettingsGroup({
+  className = "mt-7",
   name,
   handle,
   area,
@@ -22,6 +23,7 @@ export default function SettingsGroup({
   onReplayIntro,
   onDelete,
 }: {
+  className?: string;
   name: string | null;
   handle: string | null;
   area: string;
@@ -42,7 +44,7 @@ export default function SettingsGroup({
   const [deleting, setDeleting] = useState(false);
 
   return (
-    <section aria-label="Settings" className="mt-7">
+    <section aria-label="Settings" className={className}>
       <div className="overflow-hidden rounded-hz border border-line bg-ink-2">
         <button
           type="button"

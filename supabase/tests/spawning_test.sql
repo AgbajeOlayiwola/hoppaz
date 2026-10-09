@@ -539,11 +539,12 @@ begin
   raise notice 'ok: f) welcome fallback and night';
 end $t$;
 
--- Zones: every welcome box avoids them, and the Hopper's own point is the last resort.
+-- Zones: every welcome box avoids them. With nowhere clear there are no boxes at all (box_guards.sql
+-- refuses a box inside a zone, so the old last resort, the Hopper's own point, is gone).
 do $t$
 declare
-  i integer; res jsonb; ids uuid[]; v_zone geography;
-  wq geography := pg_temp.pt(6.34, 3.60); wz geography := pg_temp.pt(6.34, 3.40); wl geography := pg_temp.pt(6.34, 3.70);
+  i integer; res jsonb; ids uuid[]; v_zone geography; v_big uuid;
+  wq geography := pg_temp.pt(6.34, 3.60); wz geography := pg_temp.pt(6.34, 3.40);
 begin
   -- night: a zone 60 m north with a 55 m radius covers a big arc of the 15 to 45 m ring
   v_zone := pg_temp.off(wq, 60, 0);
@@ -563,11 +564,17 @@ begin
     perform pg_temp.ok(not exists (select 1 from public.game_drops g join public.no_spawn_zones z on st_intersects(z.geog, g.geog) where g.id = any (ids) and z.name = 'day zone'), 'day box inside a zone');
     perform pg_temp.eq((select string_agg(round(pg_temp.dist(g.geog, wz))::text, ',' order by pg_temp.dist(g.geog, wz)) from public.game_drops g where g.id = any (ids)), '200,320,900', 'day boxes kept their distances');
   end loop;
-  -- standing inside a big zone: nowhere is clear, so the boxes go to the Hopper's own point
+  -- standing inside a big zone: nowhere is clear, so nothing is made and nothing is left behind
   perform public.add_no_spawn_zone('big zone', 'test', 6.34, 3.70, 500);
-  res := public.spawn_welcome_boxes_for(pg_temp.newuser(), 6.34, 3.70, true);
-  ids := array(select jsonb_array_elements_text(res->'ids')::uuid);
-  perform pg_temp.ok((select bool_and(pg_temp.dist(g.geog, wl) < 1) from public.game_drops g where g.id = any (ids)), 'last resort is the Hopper own point');
+  v_big := pg_temp.newuser();
+  res := public.spawn_welcome_boxes_for(v_big, 6.34, 3.70, true);
+  perform pg_temp.eq(res->>'ok', 'false', 'no clear spot is not ok');
+  perform pg_temp.eq(res->>'reason', 'no_clear_spot', 'no clear spot reason');
+  perform pg_temp.eq((select count(*) from public.game_drops where owner_id = v_big)::text, '0', 'no clear spot leaves no box behind');
+  -- the Hopper is not marked as served: from a clear place the same Hopper still gets the three boxes
+  res := public.spawn_welcome_boxes_for(v_big, 6.34, 3.65, true);
+  perform pg_temp.eq(res->>'already', 'false', 'a clear place still gets welcome boxes');
+  perform pg_temp.eq((select count(*) from public.game_drops where owner_id = v_big and kind = 'welcome')::text, '3', 'three boxes from a clear place');
   raise notice 'ok: f) welcome zones';
 end $t$;
 
@@ -745,9 +752,10 @@ begin
   perform pg_temp.mkspot('sum 2', 'venue', pg_temp.pt(6.31, 4.31), null, false);
   perform pg_temp.mkspot('sum 3', 'street', pg_temp.pt(6.31, 4.32), null, true, 1, false);
   perform public.add_no_spawn_zone('sum zone', 'test', 6.31, 4.30, 100);
-  v_d := pg_temp.mkdrop(pg_temp.pt(6.31, 4.30), 'spawn');
-  perform pg_temp.mkdrop(pg_temp.pt(6.31, 4.30), 'welcome', 1, 60, now(), now() + interval '1 hour', pg_temp.newuser());
-  perform pg_temp.mkdrop(pg_temp.pt(6.31, 4.30), 'spawn', null, 80, now() - interval '2 hours', now() - interval '1 hour');
+  -- the boxes sit 300 m east of the zone: box_guards.sql refuses a street or welcome box inside one
+  v_d := pg_temp.mkdrop(pg_temp.off(pg_temp.pt(6.31, 4.30), 300, 90), 'spawn');
+  perform pg_temp.mkdrop(pg_temp.off(pg_temp.pt(6.31, 4.30), 300, 90), 'welcome', 1, 60, now(), now() + interval '1 hour', pg_temp.newuser());
+  perform pg_temp.mkdrop(pg_temp.off(pg_temp.pt(6.31, 4.30), 300, 90), 'spawn', null, 80, now() - interval '2 hours', now() - interval '1 hour');
   update public.spawn_rules set active = true where name = 'T rule A';
   s2 := public.spawner_summary();
   perform pg_temp.eq((s2->>'points_total')::integer - (s1->>'points_total')::integer || '', '3', 'points_total');

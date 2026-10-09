@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { Camera, Flag, Gift, MapPin, type LucideIcon } from "lucide-react";
+import { Camera, Flag, Gift, MapPin, Package, type LucideIcon } from "lucide-react";
 import { getSupabase } from "@/lib/supabase/client";
 import { levelFor } from "@/lib/brand";
 import { useQuests, type Quest } from "@/lib/game";
@@ -18,6 +18,7 @@ import { DEMO, DEMO_QUEST_EVENTS, demoQuests } from "./demo";
 const PERIOD: Record<string, string> = { once: "ONCE", daily: "DAILY", weekly: "WEEKLY", monthly: "MONTHLY" };
 
 const ALWAYS: Array<{ icon: LucideIcon; title: string; line: string; drop?: boolean }> = [
+  { icon: Package, title: "Open today's box", line: "One a day, on this tab. A little XP, and it keeps your streak.", drop: true },
   { icon: MapPin, title: "Check in at an event", line: "Get to the venue, tap CHECK IN. Being there is the whole job." },
   { icon: Camera, title: "Post a photo after you check in", line: "Put the night on the event page. We look at it first." },
   { icon: Flag, title: "Finish a quest", line: "Quests sit on the night they belong to. Do the thing, take the XP." },

@@ -249,7 +249,7 @@ export default function CrewPage() {
       {crew.length === 0 ? (
         !crewLoading && (
           <p className="hint mb-6">
-            No crew yet. Search a name above and add the people you actually go out with.
+            Nobody on your list yet. Search a name above and add the people you actually go out with.
           </p>
         )
       ) : (

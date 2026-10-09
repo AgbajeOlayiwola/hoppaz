@@ -53,11 +53,16 @@ const buzz = (ms: number) => {
  * server (open), whichever box you pick, and the others are never opened.
  * The mascot keeps the secret before the reveal and wins after it.
  *
- * Built for partner drops and collectibles now; the daily box reuses it.
+ * Built for partner drops and collectibles now; the daily box reuses it, with
+ * its own words for the top bar, the last frame and the share line (it is not a
+ * drop, and nothing lands on the shelf).
  */
 export default function Reveal({
   label,
   where,
+  kicker,
+  doneLine,
+  shareLine,
   open,
   onClose,
 }: {
@@ -65,6 +70,12 @@ export default function Reveal({
   label: string;
   /** Where it was found: the venue or the partner. Goes in the share line. */
   where?: string | null;
+  /** The top bar label. Default "DROP · <label>". */
+  kicker?: string;
+  /** What the last frame says under "In the bag." Default says it is on the shelf. */
+  doneLine?: string;
+  /** The share text, given what was pulled. Default "I pulled <what> at <where> on Hoppaz." */
+  shareLine?: (what: string) => string;
   /** Claims the drop. Called once, the moment a box is picked. */
   open: () => Promise<RevealOutcome>;
   /** claimed: the drop was opened (even if the Hopper closed before seeing it all). */
@@ -132,7 +143,9 @@ export default function Reveal({
     );
   };
 
-  const close = () => onClose(claimed);
+  // Closed between picking a box and the answer coming back: the claim is already on its way, so it counts as opened
+  // (the map must not reopen the box's sheet for a box that is being claimed). A refusal that has come back does not.
+  const close = () => onClose(claimed || (started.current && !error));
 
   const done = async () => {
     const r = summary.current?.getBoundingClientRect();
@@ -142,7 +155,7 @@ export default function Reveal({
 
   const share = async () => {
     const what = items.find((x) => x.kind !== "xp")?.title ?? label;
-    const text = `I pulled ${what}${where ? ` at ${where}` : ""} on Hoppaz.`;
+    const text = shareLine ? shareLine(what) : `I pulled ${what}${where ? ` at ${where}` : ""} on Hoppaz.`;
     const url = window.location.origin;
     try {
       if (navigator.share) {
@@ -193,7 +206,7 @@ export default function Reveal({
             ? `${index + 1} of ${items.length}. Flick it away for the next.`
             : "Flick it away when you're done looking."
           : phase === "done"
-            ? "It's on your shelf. The bus keeps count."
+            ? (doneLine ?? "It's on your shelf. The bus keeps count.")
             : phase === "failed"
               ? error
               : "";
@@ -203,14 +216,14 @@ export default function Reveal({
   const cardMove = gone ?? drag;
 
   return createPortal(
-    <div role="dialog" aria-modal="true" aria-label={`Drop: ${label}`} className="hz-night hz-reveal fixed inset-0 z-[60] flex flex-col bg-ink text-cream">
+    <div role="dialog" aria-modal="true" aria-label={kicker ?? `Drop: ${label}`} className="hz-night hz-reveal fixed inset-0 z-[60] flex flex-col bg-ink text-cream">
       <div aria-hidden className="hz-grain pointer-events-none absolute inset-0" />
 
       {/* -------------------------------------------------------- top bar -- */}
       <div className="pad-top relative flex flex-none items-center justify-between gap-3 px-4">
         <p className="seclabel flex min-w-0 items-center gap-2 pt-1">
           <i aria-hidden className="h-2 w-2 flex-none rounded-full bg-violet" />
-          <span className="truncate">DROP · {label}</span>
+          <span className="truncate">{kicker ?? `DROP · ${label}`}</span>
         </p>
         <button type="button" onClick={close} aria-label="Close" className="-mr-2 grid h-11 w-11 flex-none place-items-center text-dim hover:text-cream">
           <X size={20} />

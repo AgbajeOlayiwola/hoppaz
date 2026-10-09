@@ -18,9 +18,9 @@ export function shelfBadges(extra: { key: string; name: string; description: str
 }
 
 /**
- * The badge shelf: each badge is a small ticket stub with a stamp on it, its
- * name and the date you earned it. A badge you do not have yet is a dashed
- * outline with how to earn it. Tap any stub for the details.
+ * The badge shelf: each badge is a round rubber stamp with its name under it.
+ * One you have is a solid disc; one you do not have yet is a dashed ring. Tap
+ * any stamp for the date you earned it, or how to.
  */
 export default function BadgeShelf({
   badges,
@@ -42,34 +42,22 @@ export default function BadgeShelf({
 
   return (
     <section aria-label="Badges" className="mt-7">
-      <p className="seclabel mb-2.5">
+      <p className="seclabel mb-3">
         BADGES · {got.length} OF {badges.length}
       </p>
-      <ul className="-mx-4 flex gap-2.5 overflow-x-auto px-4 pb-1 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+      <ul className="grid grid-cols-4 gap-y-4">
         {ordered.map((b) => {
           const has = !!earned[b.key];
           return (
-            <li key={b.key} className="flex w-[116px] flex-none">
+            <li key={b.key} className="flex justify-center">
               <button
                 type="button"
                 onClick={() => setOpen(b)}
                 aria-label={has ? `${b.name}, earned ${shortDate(earned[b.key])}` : `${b.name}, not earned yet. ${b.how}`}
-                className={clsx("stub flex w-full flex-col text-center", !has && "border-dashed bg-transparent")}
-                style={{ ["--notch" as string]: "6px", ["--notch-y" as string]: "68px" } as React.CSSProperties}
+                className="flex min-h-[44px] w-full flex-col items-center gap-2 rounded-hz px-0.5 text-center"
               >
-                <span className="grid h-[68px] flex-none place-items-center">
-                  <StampMark icon={b.icon} size={44} earned={has} stamp={has && fresh.has(b.key)} />
-                </span>
-                <span className="flex flex-1 flex-col items-center border-t border-dashed border-line px-2 pb-3 pt-2.5">
-                  <span className="font-display text-[12.5px] font-black leading-tight">{b.name}</span>
-                  {has ? (
-                    <span className="mt-1.5 font-mono text-[10px] font-medium tracking-[0.06em] text-dim">
-                      {shortDate(earned[b.key])}
-                    </span>
-                  ) : (
-                    <span className="mt-1.5 line-clamp-3 font-body text-[12px] leading-snug text-dim">{b.how}</span>
-                  )}
-                </span>
+                <StampMark icon={b.icon} size={58} earned={has} stamp={has && fresh.has(b.key)} />
+                <span className={clsx("line-clamp-2 font-display text-[11.5px] font-black leading-[1.15]", !has && "text-dim")}>{b.name}</span>
               </button>
             </li>
           );
