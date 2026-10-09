@@ -6,20 +6,23 @@ import { useGeoPermission } from "@/lib/useLivePosition";
 import { useSessionStore } from "@/lib/useSession";
 import { usePlayMode } from "@/lib/usePlayMode";
 import { runIntroAction } from "@/lib/intro/actions";
+import { accountReady, makeCtx } from "@/lib/intro/active";
 import { useIntroBridges } from "@/lib/intro/bridges";
 import { readEnv, type IntroEnv } from "@/lib/intro/env";
+import { useInstallPrompt, usePromptWindow } from "@/lib/intro/install";
 import { EXTRA, type Line } from "@/lib/intro/lines";
 import { currentStep, type IntroCtx } from "@/lib/intro/machine";
 import {
   bindIntro,
   introAdvance,
   introDismissNudge,
+  introMarkReturning,
   introPauseTour,
   introSettle,
   introSkip,
   useIntro,
 } from "@/lib/intro/store";
-import { stepDef, type StepId } from "@/lib/intro/steps";
+import { INTRO_QUIET, stepDef, type StepId } from "@/lib/intro/steps";
 import { resolveView } from "@/lib/intro/view";
 import IntroCard, { type CardProps } from "./IntroCard";
 import { useSpotlight } from "./useSpotlight";
@@ -34,10 +37,6 @@ import s from "./intro.module.css";
  * `inPlay` and `bridges` let it stand in for the real app.
  */
 
-/** Where a tour card is never right: public posters and staff tools. */
-const QUIET = [/^\/report\//, /^\/admin/, /^\/dev\/intro/];
-/** After "Add it" the install sheet takes a moment to rise; the card stays out of its way. */
-const SHEET_WAIT_MS = 2800;
 /** The party moments get a bigger Paz. */
 const BIG: StepId[] = ["welcome", "outside", "box2", "me"];
 
@@ -60,6 +59,10 @@ export default function IntroHost({
   const inPlay = inPlayProp ?? playActive;
   const userId = useSessionStore((x) => x.userId);
   const profile = useSessionStore((x) => x.profile);
+  const email = useSessionStore((x) => x.email);
+  const sessionState = useSessionStore((x) => x.state);
+  const canPrompt = useInstallPrompt((x) => !!x.prompt);
+  const promptWindow = usePromptWindow();
   const save = useIntro((x) => x.save);
   const mapReady = useIntro((x) => x.mapReady);
   const nudge = useIntro((x) => x.nudge);
@@ -68,8 +71,6 @@ export default function IntroHost({
 
   const [env, setEnv] = useState<IntroEnv | null>(null);
   const [asked, setAsked] = useState<"locate" | null>(null);
-  const [holdUntil, setHoldUntil] = useState(0);
-  const [now, setNow] = useState(0);
 
   useEffect(() => {
     setEnv(readEnv());
@@ -90,11 +91,23 @@ export default function IntroHost({
 
   const standalone = envProp?.standalone ?? env?.standalone ?? false;
   const ios = envProp?.ios ?? env?.ios ?? false;
+  const iosBrowser = envProp?.iosBrowser ?? envProp?.ios ?? env?.iosBrowser ?? false;
+  const android = envProp?.android ?? env?.android ?? false;
   const pushGranted = envProp?.pushGranted ?? env?.pushGranted ?? false;
+  const hasAccount = !!email;
+  // With no database (the local demo) or offline there is no account to make, so the tour asks for none.
+  const accountOk = accountReady(email, sessionState);
   const ctx: IntroCtx | null = useMemo(
-    () => (env ? { path, inPlay, standalone, ios, pushGranted } : null),
-    [env, path, inPlay, standalone, ios, pushGranted]
+    () => (env ? makeCtx(path, inPlay, { standalone, ios, iosBrowser, android, pushGranted }, accountOk, canPrompt, promptWindow) : null),
+    // The Android install step waits a moment for the browser's prompt, so the context is worked out again when the wait ends.
+    [env, path, inPlay, standalone, ios, iosBrowser, android, pushGranted, accountOk, canPrompt, promptWindow]
   );
+
+  // An account with XP on a device with no save (the installed iPhone app after a log-in): their boxes are long open.
+  const returning = hasAccount && (profile?.xp ?? 0) > 0;
+  useEffect(() => {
+    if (returning) introMarkReturning();
+  }, [returning, save.status]);
 
   // Steps that are already true are marked seen; a tour with nothing left is done.
   useEffect(() => {
@@ -119,15 +132,6 @@ export default function IntroHost({
     if (save.loc !== "unknown") setAsked(null);
   }, [save.loc]);
 
-  // A short clock so "hold" and "quiet" windows end without anything else re-rendering.
-  useEffect(() => {
-    if (!holdUntil) return;
-    setNow(Date.now());
-    const t = setTimeout(() => setNow(Date.now()), Math.max(0, holdUntil - Date.now()) + 20);
-    return () => clearTimeout(t);
-  }, [holdUntil]);
-  const holding = holdUntil > now;
-
   const targets = view?.targets ?? [];
   const rootRef = useRef<HTMLDivElement>(null);
   const ringRef = useRef<HTMLDivElement>(null);
@@ -138,19 +142,23 @@ export default function IntroHost({
 
   const routeOk = !def?.route || def.route.test(path);
   const waitingForMap = stepId === "welcome" && !mapReady;
+  // Android: the browser's install prompt has not arrived yet; the step holds for it a moment, then moves on.
+  const waitingForPrompt = stepId === "install" && ctx?.install === "wait";
   const waitingForTarget = !!view?.needsTarget && !geo.found;
-  const quiet = scope === "app" && QUIET.some((re) => re.test(path));
-  const hidden = !active || quiet || geo.blocked || opening || holding || (!!view && (!routeOk || waitingForMap || waitingForTarget));
+  const quiet = scope === "app" && INTRO_QUIET.some((re) => re.test(path));
+  const hidden = !active || quiet || geo.blocked || opening || (!!view && (!routeOk || waitingForMap || waitingForPrompt || waitingForTarget));
 
   const onCta = useCallback(() => {
     if (!view?.cta) return;
     if (view.cta.kind === "advance") return introAdvance(view.id);
     const action = view.cta.action;
-    void runIntroAction(action);
-    if (action === "install") {
-      // The install sheet rises a moment after the tap. A real install step is done once it has been offered.
-      setHoldUntil(Date.now() + SHEET_WAIT_MS);
-      if (view.variant !== "needInstall") introAdvance(view.id);
+    const id = view.id;
+    const done = runIntroAction(action, id);
+    // Android: the browser's own prompt answers (yes or no), then the tour carries on in the same session.
+    if (action === "install") void done.then(() => introAdvance(id));
+    // iPhone: they did the two taps (said so), so the stop card comes next. Late, from the alerts card, the event does it all.
+    else if (action === "added") {
+      if (id === "install") introAdvance(id);
     } else if (action === "locate") setAsked("locate");
   }, [view]);
 
@@ -175,9 +183,10 @@ export default function IntroHost({
       line: locating ? EXTRA.locateWaiting : view.line,
       count: view.count,
       cta: view.cta ? { label: locating ? "Waiting" : view.cta.label, onClick: onCta, busy: locating } : undefined,
-      yourMove: !view.cta,
+      yourMove: view.yourMove,
+      picture: view.picture,
       skip: view.skip ? { label: view.skip, onClick: () => introSkip(view.id) } : undefined,
-      end: view.id === "welcome" || view.id === "me" ? undefined : introPauseTour,
+      end: view.id === "welcome" || view.id === "me" || view.id === "open_app" ? undefined : introPauseTour,
     };
   } else if (showNudge) {
     card = {

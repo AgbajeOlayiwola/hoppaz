@@ -1,6 +1,7 @@
 "use client";
 
 import Mascot, { type MascotState } from "@/components/Mascot";
+import InstallPicture from "./InstallPicture";
 import s from "./intro.module.css";
 
 /**
@@ -30,9 +31,11 @@ export type CardProps = {
   big?: boolean;
   /** A small Paz that only peeks over the card, and no "Your move" row: the screen behind needs the room. */
   compact?: boolean;
+  /** A picture under the words (the iPhone install cards). */
+  picture?: "taps" | "home";
 };
 
-export default function IntroCard({ mascot, title, line, cta, count, skip, end, yourMove, stepKey, big, compact }: CardProps) {
+export default function IntroCard({ mascot, title, line, cta, count, skip, end, yourMove, stepKey, big, compact, picture }: CardProps) {
   const pct = count ? Math.round((count.n / count.total) * 100) : 100;
   return (
     <div className={s.stack} key={stepKey} data-compact={!!compact}>
@@ -52,6 +55,7 @@ export default function IntroCard({ mascot, title, line, cta, count, skip, end, 
         </div>
         <h2 className={s.title}>{title}</h2>
         <p className={s.line}>{line}</p>
+        {picture && <InstallPicture kind={picture} />}
 
         {(cta || (yourMove && !compact)) && (
           <div className={s.act}>

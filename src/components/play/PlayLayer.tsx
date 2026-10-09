@@ -4,7 +4,7 @@ import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore
 import type { GeoJSONSource, Map as MLMap } from "maplibre-gl";
 import clsx from "clsx";
 import { requireAccount } from "@/lib/accountGate";
-import { introEvent, registerIntroAction } from "@/lib/intro";
+import { introActive, introEvent, registerIntroAction, useIntroActive } from "@/lib/intro";
 import { introSetOpening } from "@/lib/intro/store";
 import { deviceTier, playTuning } from "@/lib/deviceTier";
 import type { PlayBox } from "@/lib/playTypes";
@@ -130,6 +130,7 @@ export default function PlayLayer({
 }) {
   const playing = usePlayMode((s) => s.active);
   const say = useToast((s) => s.say);
+  const touring = useIntroActive();
   const { userId, hasAccount, profile, refresh } = useSession();
   const tuning = useMemo(() => playTuning(), []);
   usePlayBackButton();
@@ -688,7 +689,12 @@ export default function PlayLayer({
         if (left === 0) {
           if (markFirst("welcome")) emitPlayEvent({ type: "welcome-done" });
           // The third welcome box is open: keep it by making an account, in place (same user id is upgraded).
-          if (!hasAccount) setTimeout(() => requireAccount("keep your Golden Danfo"), 700);
+          // During Paz's tour this is her own "keep your Golden Danfo" card, so the sheet does not also open by itself.
+          if (!hasAccount) {
+            setTimeout(() => {
+              if (!introActive()) requireAccount("keep your Golden Danfo");
+            }, 700);
+          }
         }
       }
     },
@@ -851,7 +857,8 @@ export default function PlayLayer({
     }
     // A guest has no small boxes by design (the server says 0 left); they have welcome boxes, then the sign-up sheet.
     if ((DEMO ? demo.length : tick.answered) && boxes.length === 0) {
-      if (!hasAccount) return { tone: "info", text: "Make an account to keep playing." };
+      // Paz's tour has its own sign-up card; the tray does not ask a second time.
+      if (!hasAccount) return { tone: "info", text: touring ? "No boxes right now. New ones rise nearby." : "Make an account to keep playing." };
       return info.smallLeft === 0
         ? { tone: "info", text: "Tomorrow's box is sealed." }
         : { tone: "info", text: "No boxes right now. New ones rise nearby." };

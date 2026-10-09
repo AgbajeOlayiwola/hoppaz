@@ -251,6 +251,26 @@ export function introAsksLocation(): boolean {
   return !!key && (save.status === "idle" || save.status === "running") && save.mode === "first" && save.loc === "unknown" && !save.seen.includes("locate");
 }
 
+/**
+ * True while the first-run tour has not started or is still going (not ended, not finished, not a replay).
+ * The map's first-run location sheet stays shut for all of it: Paz asks, once, in her own step.
+ */
+export function introPending(): boolean {
+  const { key, save } = get();
+  return !!key && (save.status === "idle" || save.status === "running") && save.mode === "first";
+}
+
+/**
+ * A Hopper with an account and XP, on a device with no tour save yet (the installed iPhone app after they log in:
+ * the home screen app has its own storage). Their welcome boxes are long open, so the tour runs as a replay:
+ * the box steps get a plain button instead of waiting for boxes that are not there.
+ */
+export function introMarkReturning(): void {
+  const s = get().save;
+  if (s.mode !== "first" || s.status === "done" || s.facts.boxes > 0 || s.facts.welcome) return;
+  commit({ ...s, mode: "replay" });
+}
+
 /** For the Replay row: true when the Hopper has been through (or ended) the tour. */
 export function introHasRun(): boolean {
   const s = get().save;

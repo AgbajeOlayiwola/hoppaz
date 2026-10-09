@@ -1,6 +1,7 @@
 "use client";
 
 import { create } from "zustand";
+import { introActive, introNeedAccount } from "./intro/active";
 import { getSupabase } from "./supabase/client";
 import { useSessionStore } from "./useSession";
 
@@ -10,6 +11,11 @@ import { useSessionStore } from "./useSession";
  * account. A gated action calls requireAccount(): with an account it is a
  * no-op; without one it opens the sign-up sheet (SignupSheet, mounted once)
  * and remembers what you were doing, so it goes through the moment you're in.
+ *
+ * Paz's first-run tour has one sign-up moment of its own (her "keep your Golden
+ * Danfo" card). While she is with the Hopper nothing else opens the sheet on its
+ * own: the action waits (a short line says so) and Ola's behaviour is back when
+ * the tour ends or is skipped.
  */
 
 /**
@@ -46,6 +52,10 @@ export const useAccountGate = create<GateState>((set) => ({
 export function requireAccount(reason: string, then?: () => void): boolean {
   if (!getSupabase()) return true;
   if (useSessionStore.getState().email) return true;
+  if (introActive()) {
+    introNeedAccount();
+    return false;
+  }
   useAccountGate.getState().show(reason, then);
   return false;
 }

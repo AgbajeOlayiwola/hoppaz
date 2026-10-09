@@ -33,6 +33,11 @@ export const LINES: Record<StepId, Line> = {
     cta: "Add it",
     skip: "Later",
   },
+  open_app: {
+    title: "Now open Hoppaz",
+    line: "Tap my icon on your home screen. I'll meet you there, oya!",
+    skip: "Carry on in the browser",
+  },
   locate: {
     title: "Let's find you",
     line: "Turn on your location and watch the map fly to you.",
@@ -71,6 +76,12 @@ export const LINES: Record<StepId, Line> = {
     line: "Too far to walk? Send your avatar, oya!",
     cta: "Send it",
     skip: "Skip",
+  },
+  keep: {
+    title: "Keep your Golden Danfo",
+    line: "Make an account so it stays yours, even on your home screen. Got one already? Log in.",
+    cta: "Sign up or log in",
+    skip: "Later",
   },
   spawns: {
     title: "Boxes drop all day",
@@ -141,13 +152,54 @@ export const EXTRA = {
     line: "Tap the arrow to leave Play first.",
     skip: "Skip",
   } satisfies Line,
-  /** iPhone, not on the home screen yet: alerts only work from there. */
-  alertsNeedInstall: {
+  /** iPhone in Safari, no account yet: sign up first, so the account and the boxes come along to the installed app. */
+  alertsNeedSignup: {
     title: "One thing first",
-    line: "On iPhone, add me to your home screen first. Then alerts work.",
-    cta: "Show me how",
+    line: "Alerts live in the home screen app. Sign up first, so your boxes come with you.",
+    cta: "Sign up or log in",
     skip: "Later",
   } satisfies Line,
+  /** iPhone in Safari with an account, not on the home screen yet: alerts only work from there. */
+  alertsNeedInstall: {
+    title: "Add me first",
+    line: "Alerts work from the home screen. Two taps. Log in once there and all your boxes are waiting.",
+    cta: "Done, I added it",
+    skip: "Later",
+  } satisfies Line,
+  /** iPhone inside another app's browser (Instagram, TikTok and the like): there is no home screen to add to from there. */
+  alertsNeedSafari: {
+    title: "Open me in Safari",
+    line: "Alerts need the home screen app. Open this page in Safari, then add me. Oya!",
+    cta: "Got it",
+    skip: "Later",
+  } satisfies Line,
+  /** The first card in the installed app, for a Hopper who just came over from the browser. */
+  arrived: {
+    title: "You made it!",
+    line: "Hoppaz on your home screen, nice! Turn on your location and watch the map fly to you.",
+    cta: "Find me",
+    skip: "Not now",
+  } satisfies Line,
+  /** The iPhone install step: the two taps, with a picture. */
+  installIos: {
+    title: "Keep me close",
+    line: "Two taps and I live on your home screen. I'll wait!",
+    cta: "Done, I added it",
+    skip: "Later",
+  } satisfies Line,
+  /** The iPhone stop card for a Hopper with an account. */
+  openAppMember: {
+    title: "Now open Hoppaz",
+    line: "Tap my icon on your home screen and log in once. Your boxes and XP are all there!",
+    skip: "Carry on in the browser",
+  } satisfies Line,
+  /** A gated thing was tried while Paz is touring (a toast: the sign-up sheet stays shut). */
+  signupLater: "Sign up when our tour is done and that's yours!",
+  /** The same, while Paz's own sign-up card is up. */
+  signupOnCard: "Sign up on my card, or tap Later.",
+  /** The picture on the iPhone cards, as words for a screen reader. */
+  tapsLabel: "Tap Share in Safari, then Add to Home Screen",
+  homeLabel: "The Hoppaz icon on your home screen",
   /** The locate button was tapped and the browser is asking. */
   locateWaiting: "Tap Allow on the pop-up. I'll wait.",
   /** Location was refused in the browser's own settings, so a tap cannot ask again. */

@@ -7,6 +7,9 @@ import Mascot from "@/components/Mascot";
 import { FIRST_GOING_EVENT } from "@/lib/useGoing";
 import { FIRST_CHECKIN_EVENT } from "@/lib/useCheckin";
 import { SIGNED_IN_EVENT } from "@/components/app/SignupForm";
+import { introActive } from "@/lib/intro/active";
+import { dropInstallPrompt, fireInstallPrompt, holdInstallPrompt, useInstallPrompt, type InstallPromptEvent } from "@/lib/intro/install";
+import { ASK_INSTALL_EVENT } from "@/lib/push";
 
 /**
  * "Keep Hoppaz on your home screen." A sheet, never a screen, and it never
@@ -23,6 +26,10 @@ import { SIGNED_IN_EVENT } from "@/components/app/SignupForm";
  * button. iPhone has no such API, so it shows Share, then Add to Home Screen.
  * Anywhere that can do neither (desktop, in-app browsers) it stays quiet and
  * keeps its chances for later.
+ *
+ * It stays quiet while Paz's first-run tour is with the Hopper (the tour does
+ * its own install step, in her card), and keeps its chances for after. Only a
+ * Hopper's own tap on an install button (ASK_INSTALL_EVENT) opens it then.
  *
  * If another sheet is open when its moment comes (the event card the Hopper just
  * tapped "I'm going" on), it waits for that sheet to close: it never covers the
@@ -46,11 +53,6 @@ const otherDialogOpen = () => !!document.querySelector(`[role="dialog"]:not([ari
 
 type Stage = 0 | 1 | 2; // how many times it has been shown
 type Saved = { stage: Stage; done?: boolean };
-
-type InstallPromptEvent = Event & {
-  prompt: () => Promise<void>;
-  userChoice: Promise<{ outcome: "accepted" | "dismissed" }>;
-};
 
 function isStandalone() {
   try {
@@ -78,7 +80,6 @@ export default function InstallSheet() {
   const [open, setOpen] = useState(false);
   const [mode, setMode] = useState<"android" | "ios" | "bookmark">("ios");
   const [bottom, setBottom] = useState(0);
-  const deferred = useRef<InstallPromptEvent | null>(null);
   const memory = useRef<Saved>({ stage: 0 }); // when storage is blocked, this phone-session is all we have
   const box = useRef<HTMLDivElement>(null);
 
@@ -110,24 +111,26 @@ export default function InstallSheet() {
 
     const onPrompt = (e: Event) => {
       e.preventDefault(); // keep the browser's own bar away; we ask at the right moment
-      deferred.current = e as InstallPromptEvent;
+      holdInstallPrompt(e as InstallPromptEvent); // shared with Paz's Android install step
     };
     const onInstalled = () => {
-      deferred.current = null;
+      dropInstallPrompt();
       save({ stage: 2, done: true });
       setOpen(false);
     };
-    const attempt = (moment: "signup" | "going" | "checkin") => {
+    const attempt = (moment: "signup" | "going" | "checkin", asked = false) => {
       const s = read();
       if (s.done || isStandalone()) return;
+      // Paz is touring: she does the install step herself. The chance is kept for after the tour.
+      if (!asked && introActive()) return;
       if (moment === "going" && s.stage >= 1) return;
       if (moment === "checkin" && s.stage >= 2) return;
       if (QUIET_PATHS.some((re) => re.test(pathRef.current))) return;
       // Right after sign-up, anywhere that can't install still gets told how to bookmark.
-      const next = deferred.current ? "android" : isIosBrowser() ? "ios" : moment === "signup" ? "bookmark" : null;
+      const next = useInstallPrompt.getState().prompt ? "android" : isIosBrowser() ? "ios" : moment === "signup" ? "bookmark" : null;
       if (!next) return; // nothing to offer here, keep the chance
       const show = () => {
-        if (isStandalone() || QUIET_PATHS.some((re) => re.test(pathRef.current))) return;
+        if (isStandalone() || QUIET_PATHS.some((re) => re.test(pathRef.current)) || (!asked && introActive())) return;
         const nav = document.querySelector('nav[aria-label="Main"]');
         setBottom(nav ? Math.round(nav.getBoundingClientRect().height) : 0);
         setMode(next);
@@ -147,12 +150,14 @@ export default function InstallSheet() {
       }, DELAY_MS);
     };
     const onSignedIn = () => attempt("signup");
+    const onAsk = () => attempt("signup", true);
     const onGoing = () => attempt("going");
     const onCheckin = () => attempt("checkin");
 
     window.addEventListener("beforeinstallprompt", onPrompt);
     window.addEventListener("appinstalled", onInstalled);
     window.addEventListener(SIGNED_IN_EVENT, onSignedIn);
+    window.addEventListener(ASK_INSTALL_EVENT, onAsk);
     window.addEventListener(FIRST_GOING_EVENT, onGoing);
     window.addEventListener(FIRST_CHECKIN_EVENT, onCheckin);
     return () => {
@@ -160,6 +165,7 @@ export default function InstallSheet() {
       window.removeEventListener("beforeinstallprompt", onPrompt);
       window.removeEventListener("appinstalled", onInstalled);
       window.removeEventListener(SIGNED_IN_EVENT, onSignedIn);
+      window.removeEventListener(ASK_INSTALL_EVENT, onAsk);
       window.removeEventListener(FIRST_GOING_EVENT, onGoing);
       window.removeEventListener(FIRST_CHECKIN_EVENT, onCheckin);
     };
@@ -178,16 +184,8 @@ export default function InstallSheet() {
   }, [open, close]);
 
   const install = async () => {
-    const p = deferred.current;
-    deferred.current = null; // the browser only lets a saved prompt fire once
-    if (!p) return close();
-    try {
-      await p.prompt();
-      const choice = await p.userChoice;
-      if (choice.outcome === "accepted") save({ stage: 2, done: true });
-    } catch {
-      /* the browser refused; treat as not now */
-    }
+    // The browser only lets a saved prompt fire once (it is shared with Paz's install step).
+    if ((await fireInstallPrompt()) === "accepted") save({ stage: 2, done: true });
     close();
   };
 

@@ -11,6 +11,7 @@ import type { MascotState } from "@/components/Mascot";
 export type StepId =
   | "welcome"
   | "install"
+  | "open_app"
   | "locate"
   | "no_location"
   | "outside"
@@ -18,6 +19,7 @@ export type StepId =
   | "box1"
   | "box2"
   | "box_far"
+  | "keep"
   | "spawns"
   | "alerts"
   | "leave_play"
@@ -49,7 +51,7 @@ export type IntroTarget = (typeof INTRO_TARGETS)[number];
 export const targetSelector = (t: IntroTarget) => `[data-intro~="${t}"]`;
 
 /** What a button on the card can do. The handlers are registered in actions.ts. */
-export type IntroActionName = "install" | "locate" | "alerts" | "send_avatar";
+export type IntroActionName = "install" | "added" | "signup" | "locate" | "alerts" | "send_avatar";
 
 export type StepDef = {
   id: StepId;
@@ -72,13 +74,19 @@ export type StepDef = {
   compact?: boolean;
   /** The screen keeps room for the card: it sets --intro-reserve (px) on the page root while the step shows (Today uses it). */
   reserve?: boolean;
+  /** A stop card: the tour waits here (no "Your move" row). Only its Skip carries on. */
+  stop?: boolean;
 };
+
+/** Where a tour card is never right: public posters and staff tools. */
+export const INTRO_QUIET: ReadonlyArray<RegExp> = [/^\/report\//, /^\/admin/, /^\/dev\/intro/];
 
 const MAP = /^\/$/;
 
 export const STEPS: ReadonlyArray<StepDef> = [
   { id: "welcome", part: "start", mascot: "wave", targets: [], cta: { kind: "advance" }, route: MAP },
   { id: "install", part: "start", mascot: "oya", targets: ["install"], cta: { kind: "action", action: "install" }, route: MAP },
+  { id: "open_app", part: "start", mascot: "welcome", targets: [], route: MAP, stop: true },
   { id: "locate", part: "start", mascot: "point", targets: ["locate"], cta: { kind: "action", action: "locate" }, route: MAP },
   { id: "no_location", part: "start", mascot: "oops", targets: [], cta: { kind: "advance" }, route: MAP },
   { id: "outside", part: "start", mascot: "welcome", targets: [], cta: { kind: "advance" }, route: MAP },
@@ -86,6 +94,7 @@ export const STEPS: ReadonlyArray<StepDef> = [
   { id: "box1", part: "boxes", mascot: "welcome", targets: ["box"], route: MAP, needsPlay: true },
   { id: "box2", part: "boxes", mascot: "celebrate", targets: ["box"], route: MAP, needsPlay: true },
   { id: "box_far", part: "boxes", mascot: "oya", targets: ["far-box"], cta: { kind: "action", action: "send_avatar" }, route: MAP, needsPlay: true },
+  { id: "keep", part: "boxes", mascot: "celebrate", targets: [], cta: { kind: "action", action: "signup" }, route: MAP },
   { id: "spawns", part: "boxes", mascot: "secret", targets: [], cta: { kind: "advance" }, route: MAP, needsPlay: true },
   { id: "alerts", part: "boxes", mascot: "oya", targets: ["alerts"], cta: { kind: "action", action: "alerts" }, route: MAP },
   { id: "leave_play", part: "boxes", mascot: "point", targets: ["play-exit"], route: MAP },
@@ -118,7 +127,8 @@ export type IntroEventName =
   | "play_exited"
   | "box_opened" //         one box was opened and its reveal finished
   | "welcome_done" //       all three welcome boxes are open
-  | "install_done" //       Hoppaz was added to the home screen
+  | "install_done" //       Hoppaz was added to the home screen (the browser said so)
+  | "install_added" //      iPhone: the Hopper says they did the two taps (nothing tells us, so we take their word)
   | "alerts_on"
   | "alerts_denied"
   | "deck_viewed" //        the Today deck is on screen

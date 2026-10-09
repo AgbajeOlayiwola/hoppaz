@@ -28,16 +28,18 @@ Which step shows is derived, never stored: the first step that applies to this H
 | # | id | Paz says (short) | Needs | Done when |
 |---|---|---|---|---|
 | 1 | `welcome` | Oya, welcome! Every dot is something to do | the map is up (`map_ready`) | button |
-| 2 | `install` | Keep me close: home screen | target `install` | button (opens the install sheet), or already installed |
-| 3 | `locate` | Let's find you | target `locate` | `location_granted` or `location_denied` |
+| 2 | `install` | Keep me close: home screen (iPhone Safari: two taps with a picture; Android: the browser's own prompt, held for up to 3 s after the page loads in case it is late; desktop, the installed app and iPhone in-app browsers: skipped) | none | button, or not possible here, or installed |
+| 2b | `open_app` | Now open Hoppaz from your home screen (iPhone Safari only, after "Done, I added it"). The tour stops here. | none | its Skip, "Carry on in the browser" (in the installed app it never shows) |
+| 3 | `locate` | Let's find you (the first card in the installed app says "You made it!" instead) | target `locate` | `location_granted` or `location_denied` |
 | 3b | `no_location` | No wahala. Boxes need your location | only if refused | button |
 | 3c | `outside` | Ah, you're far! | only if outside Lagos | button |
 | 4 | `face` | Tap your face | target `avatar` | Play entered |
 | 5 | `box1` | Free boxes! Tap the first | Play, target `box` | 1 box opened |
 | 6 | `box2` | Lucky you! Next box | Play, target `box` | 2 boxes opened |
 | 7 | `box_far` | That one's far. Send your avatar | Play, target `far-box` | `welcome_done` |
+| 7b | `keep` | Keep your Golden Danfo: the tour's ONE sign-up moment (Sign up or log in, or Later) | no account yet | an account exists (or none to be had: no database, offline), or Later |
 | 8 | `spawns` | Boxes drop all day and stay open a while (no number: the spawn rules set the life, staff tune it), wave, vibe, link up | Play | button |
-| 9 | `alerts` | Want a ping? (iPhone not installed: add me first) | target `alerts` | alerts on or refused, or already granted |
+| 9 | `alerts` | Want a ping? (iPhone Safari: no account yet, sign up first; then the two taps; alerts are asked in the installed app. iPhone in-app browser such as Instagram: "Open me in Safari", then Got it) | target `alerts` | alerts on or refused, or already granted, or the Hopper said they added it |
 | 10 | `leave_play` | Back to the street | target `play-exit` | Play closed |
 | 11 | `deck_go` | Tap Today | target `today-tab` | the deck is on screen |
 | 12 | `deck` | Slide and tap (compact Paz, Today keeps room for the card) | route `/discover`, target `deck` | an event opened |
@@ -58,7 +60,8 @@ Rules baked in:
 - The layer ignores taps. Only the card takes them, so the thing Paz points at stays tappable.
 - The card is `role="region"`, not a dialog, so InstallSheet (which waits for dialogs to close) is not blocked by it.
 - Progress is saved per user in `localStorage` key `hz-intro-v1:app:<userId>` (the anonymous user's save moves to their own id). Every read and write is in try/catch; a private window keeps progress for the visit only.
-- iPhone caveat: the installed home-screen app has its own storage, separate from Safari, so a Hopper who installs mid-tour starts a fresh save in the installed app. That is why the install step is skippable and alerts re-offers it later.
+- iPhone caveat: the installed home-screen app has its own storage (localStorage, the Supabase session, this save), separate from Safari. So the install step comes first, right after Paz says hello: the Hopper installs before anything is earned, Safari stops at "Now open Hoppaz from your home screen", and the installed app starts a fresh tour at `locate` (the hello and install are skipped there, `welcome` is satisfied by standalone on a first run). Android Chrome shares storage, so after the browser's install prompt the tour carries on in the same session. If the Hopper skipped installing, the `alerts` step on iPhone asks them to sign up first (so the account and the boxes come along), then shows the same two taps and the stop card. A member who logs in once in the installed app (account plus XP, nothing in the save yet) runs the tour as a replay: box steps get a plain button.
+- The stop card: `open_app` never counts as Paz being with the Hopper, so Ola's gates are normal there. Its Skip ("Carry on in the browser") carries on with everything except alerts (alerts are for the installed app).
 
 ## Events
 
@@ -80,6 +83,7 @@ introEvent("box_opened");
 | `box_opened` | a box reveal finished | bridged from `onOpenEvent` (`open-done` with an ok result) |
 | `welcome_done` | all three welcome boxes open | bridged from `onPlayEvent` |
 | `install_done` | the browser's `appinstalled` | bridged |
+| `install_added` | iPhone: the Hopper tapped "Done, I added it" (nothing can tell us) | the card's button |
 | `alerts_on`, `alerts_denied` | the alerts button | the default action fires them; fire them yourself if Me's alerts control is used |
 | `deck_viewed` | Today deck mounted | yes (D) |
 | `event_opened` | event card or sheet opened | yes (E) |
@@ -193,9 +197,7 @@ Play must not show the tour over the open moment: nothing to do, the host alread
 
 ### 5. Install (`src/components/app/InstallSheet.tsx`, `src/lib/push.ts`)
 
-Nothing is required: the default `install` action calls `askToInstall()` (already in push.ts), which opens the sheet through the existing sign-in moment, and the host stays out of the way for 2.8 s while the sheet rises. Optional, to point at an install row on Me: `data-intro="install"` on that row.
-
-Later, when InstallSheet gets its own "alerts" moment (the one-line change push.ts already notes), `askToInstall` follows and the tour needs no change.
+The tour does its own install step in Paz's card (see "One calm tour"): the two taps with a picture on iPhone, the browser's prompt on Android. InstallSheet stays quiet while the tour is with the Hopper, and a Hopper's own tap on an install button (`askToInstall()`, which fires `ASK_INSTALL_EVENT`) still opens it. Optional, to point at an install row on Me: `data-intro="install"` on that row.
 
 ### 6. Alerts (`src/lib/push.ts`, Me alerts control)
 
@@ -269,10 +271,24 @@ Everything in the wiring list above is done, with these notes:
 - `location_needed` fires in `PlayLayer.tsx` where Play says "Finding you" or "Turn on location to open boxes".
 - `me_viewed` and `crew_viewed` fire from the outer page components, so an anonymous Hopper behind the sign-up wall still moves on.
 - `data-intro="alerts"` is on the SPAWN ALERTS block and `data-intro="install"` on its ADD TO HOME SCREEN button (Settings on Me, folded away by default, so the ring only shows when it is open).
-- The first-run location sheet (the map opens "Set your location" after the title sequence when there is no fix) stays shut while the tour is still going to ask: `introAsksLocation()` (first-run tour, status idle or running, location unknown, `locate` not seen). A new Hopper meets Paz first and is asked once, by her. The sheet is marked seen as before, and a Hopper with no tour running (done, ended, replay) gets it as it always did. The crosshair on the map still opens it by hand.
+- The first-run location sheet (the map opens "Set your location" after the title sequence when there is no fix) stays shut for the whole first-run tour: `introPending()` (first-run tour not started or still going). A new Hopper meets Paz first and is asked once, by her. The sheet is marked seen as before, and a Hopper with no tour running (done, ended, replay) gets it as it always did. The crosshair on the map still opens it by hand.
 - Alerts: the default action fires `alerts_denied` (and the "No wahala" toast) only when the Hopper said no, closed the question, or the device cannot do alerts. A transient failure (`no-session`, `server`) keeps the step and toasts "Could not switch alerts on. Try again in a moment."
 - Placement (`useSpotlight.ts`): the card's own height and Paz's headroom are measured (not guessed), the arrow counts as part of the target, and when the card would reach a small target on both sides it rides up over the HUD so it ends above the arrow. A target as big as the screen (the deck) keeps the normal dock.
 - `compact` and `reserve` on a step (`steps.ts`): `compact` shows a small Paz that only peeks 54 px over the card and drops the "Your move" row; `reserve` also sets `--intro-reserve` (the card's height plus the peek, in px) and `data-intro-reserve` on the root element while the step shows. Today uses the variable as bottom padding, so the deck stops above the card and the first event stays readable. Used by `deck` (both) and `chat` (compact only).
+
+## One calm tour: the tour flag
+
+Jae's iPhone test: the sign-in kept popping up between the demo steps. Before the fix these opened on their own during the tour: the install sheet (Paz's Add it, and again after any sign-up), the sign-up sheet after the third welcome box, the sign-up sheet on any gated tap, the Crew and Me account walls under Paz's card, and the first-run location sheet (when the permission was already allowed). Now:
+
+- `introActive()` (and `useIntroActive()` for render), exported from `src/lib/intro` (file `active.ts`): true only while Paz is really with the Hopper on this screen: the tour is running, a step is current, its route matches the page, and it is not the stop card. A Hopper who ended the tour, finished it, skipped it, or wandered to a page the step does not expect gets Ola's behaviour.
+- `requireAccount` (accountGate.ts): while the flag is true the sheet stays shut, the action waits (returns false) and a toast says "Sign up when our tour is done and that's yours!" (on the `keep` card: "Sign up on my card, or tap Later."). Demo mode (no database) is unchanged, and the tour asks for no account there either: `accountReady()` in `active.ts` counts a Hopper as having one when there is an email, no database, or the session is offline (the same rule `RequireAccount` uses), so `keep` is satisfied and the iPhone alerts card skips "sign up first".
+- The one sign-up moment is the `keep` step after the welcome boxes: Paz's card, "Sign up or log in" opens the normal sheet (only on the Hopper's tap), "Later" skips. PlayLayer's own 700 ms pop for the third box is skipped while the tour is on (Ola's pop is back when the tour is not).
+- `RequireAccount preview` (Crew, Me): while the flag is true the page itself shows, look only (taps on controls give the same toast), instead of the wall. `useIntroActive()` knows its answer on the first client render (not only after mount), so the wall does not flash when the Hopper taps over to Crew or Me. While the tour runs, Play's tray does not say "Make an account to keep playing" either: Paz's `keep` card is the only sign-up ask.
+- InstallSheet: quiet while the flag is true (keeps its chances for later). An install button the Hopper taps (`ASK_INSTALL_EVENT`, `askToInstall()` in push.ts) still opens it. The browser's install prompt is parked in `src/lib/intro/install.ts`, shared by the sheet and Paz's Android step.
+- The map's first-run location sheet stays shut for the whole first-run tour (`introPending()`), and Paz asks once. A permission that was already allowed is not a position, so `locate` is not satisfied until a position comes in (the "Find me" tap flies the map).
+- iPhone in-app browsers (Instagram, Facebook, TikTok, Snapchat, Line, Twitter, the Google app) cannot add to the home screen, so `install` is skipped there (`iosBrowser` is false, install kind `none`) and the `alerts` step shows "Open me in Safari" with a Got it button instead of the two taps. A Hopper who taps "Done, I added it" always satisfies `alerts`, whatever the browser, so no card can stay stuck.
+- Android: `install` holds (kind `wait`, card hidden) for up to 3 s after the page loads for the browser's install prompt, then moves on without it (`promptWindowOpen()` in `install.ts`). On a normal phone the hello card has used that time up already.
+- The card starts hidden until the spotlight has looked once (`useSpotlight`), so it does not flash for a frame over the title sequence.
 
 ## Starter quests
 

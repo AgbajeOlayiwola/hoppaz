@@ -1,10 +1,12 @@
 "use client";
 
+import { useAccountGate } from "@/lib/accountGate";
 import { askToInstall, enablePush } from "@/lib/push";
 import { useToast } from "@/lib/store";
+import { fireInstallPrompt } from "./install";
 import { EXTRA } from "./lines";
 import { introEvent, introWantLocate } from "./store";
-import type { IntroActionName } from "./steps";
+import type { IntroActionName, StepId } from "./steps";
 
 /**
  * What the orange button does on the steps that ask for something.
@@ -16,7 +18,7 @@ import type { IntroActionName } from "./steps";
  * Handlers are called from the Hopper's tap, which is what the browser needs
  * for the location, notification and install questions.
  */
-type Handler = () => void | Promise<void>;
+type Handler = (step?: StepId) => void | Promise<void>;
 const handlers: Partial<Record<IntroActionName, Handler>> = {};
 
 /** Replace an action. Returns the undo. */
@@ -30,8 +32,17 @@ export function registerIntroAction(name: IntroActionName, fn: Handler): () => v
 export const ACTION_EVENT = "hz:intro-action";
 
 const defaults: Record<IntroActionName, Handler> = {
-  // Opens Ola's InstallSheet (Share steps on iPhone, the real prompt on Android).
-  install: () => askToInstall(),
+  // Android: the browser's own install prompt, right from the tap. (iPhone has its own card, see "added".)
+  install: async () => {
+    const outcome = await fireInstallPrompt();
+    if (outcome === "accepted") introEvent("install_done");
+  },
+
+  // iPhone: nothing tells us the two taps were done, so we take the Hopper's word.
+  added: () => introEvent("install_added"),
+
+  // The one sign-up moment, and the alerts rule: Paz asked, the Hopper tapped, so the sheet opens (it never opens on its own during the tour).
+  signup: (step) => useAccountGate.getState().show(step === "alerts" ? "keep your boxes and get alerts" : "keep your Golden Danfo"),
 
   // The host turns the position watch on; the permission question appears and
   // the bridge turns the answer into location_granted or location_denied.
@@ -62,9 +73,9 @@ const defaults: Record<IntroActionName, Handler> = {
   },
 };
 
-export async function runIntroAction(name: IntroActionName): Promise<void> {
+export async function runIntroAction(name: IntroActionName, step?: StepId): Promise<void> {
   try {
-    await (handlers[name] ?? defaults[name])();
+    await (handlers[name] ?? defaults[name])(step);
   } catch (err) {
     console.warn("[hoppaz] intro action", name, err);
   }

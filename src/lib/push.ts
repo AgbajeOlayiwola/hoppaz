@@ -1,5 +1,4 @@
 import { getSupabase } from "./supabase/client";
-import { SIGNED_IN_EVENT } from "@/components/app/SignupForm";
 
 /**
  * Spawn alerts by web push, the browser half (guide: docs/PUSH.md).
@@ -216,15 +215,16 @@ export async function setAlertLevel(level: AlertLevel): Promise<boolean> {
   return !error && data === true;
 }
 
+/** The Hopper tapped an install button: InstallSheet opens (it shows the Share steps on iPhone and stays quiet in the installed app). */
+export const ASK_INSTALL_EVENT = "hoppaz:ask-install";
+
 /**
- * iPhone only: opens the home-screen install sheet (components/app/InstallSheet).
- * That sheet has one trigger for "ask now" that is not tied to a win, the
- * sign-in moment, so this uses it: it shows the Share steps on iPhone and
- * stays quiet in the installed app. When InstallSheet gets its own "alerts"
- * moment, change this one line.
+ * Opens the home-screen install sheet (components/app/InstallSheet) because the
+ * Hopper asked: it is the one moment that opens even while Paz's tour is
+ * running (every other moment waits until the tour is done).
  */
 export function askToInstall(): void {
-  window.dispatchEvent(new Event(SIGNED_IN_EVENT));
+  window.dispatchEvent(new Event(ASK_INSTALL_EVENT));
 }
 
 /** Development only (the route is a 404 in production): sends a test alert to this Hopper's own browsers. */

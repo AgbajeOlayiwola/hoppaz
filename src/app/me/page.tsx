@@ -460,7 +460,7 @@ export default function MePage() {
     introEvent("me_viewed");
   }, []);
   return (
-    <RequireAccount title="Make it yours." caption="Your nights, XP, badges and your Hopper live here.">
+    <RequireAccount preview title="Make it yours." caption="Your nights, XP, badges and your Hopper live here.">
       <MePagePage />
     </RequireAccount>
   );

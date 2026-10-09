@@ -77,7 +77,8 @@ export function useSpotlight({
   ringRef: RefObject<HTMLDivElement | null>;
   arrowRef: RefObject<HTMLDivElement | null>;
 }): Geo {
-  const [geo, setGeo] = useState<Geo>({ found: false, zone: "none", blocked: false, pazLeft: true });
+  // Blocked until the first look says otherwise, so the card never flashes for a frame over a sheet that is already up (the title sequence).
+  const [geo, setGeo] = useState<Geo>({ found: false, zone: "none", blocked: true, pazLeft: true });
   const key = targets.join("|");
 
   useEffect(() => {

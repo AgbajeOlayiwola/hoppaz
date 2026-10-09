@@ -376,3 +376,118 @@
     transition: none;
   }
 }
+
+/* ------------------------------------------------- the iPhone install picture -- */
+.pic {
+  margin-top: 10px;
+  border-radius: 12px;
+  border: 1px solid rgb(var(--hairline));
+  background: rgb(var(--ground));
+  padding: 10px 10px 8px;
+}
+.taps {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px;
+}
+.tap {
+  min-width: 0;
+}
+.safariBar,
+.sheetRow {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 4px;
+  height: 40px;
+  padding: 0 8px;
+  border-radius: 10px;
+  background: rgb(var(--card));
+  border: 1px solid rgb(var(--hairline));
+  color: rgb(var(--dim));
+}
+.sheetText {
+  font-family: var(--font-body), sans-serif;
+  font-size: 12.5px;
+  font-weight: 600;
+  line-height: 1.1;
+  color: rgb(var(--text));
+}
+.lit {
+  display: inline-grid;
+  place-items: center;
+  width: 30px;
+  height: 30px;
+  flex: none;
+  border-radius: 9px;
+  background: #ff4d00;
+  color: #0e0b0a;
+  animation: lit 1.4s ease-in-out infinite;
+}
+@keyframes lit {
+  0%,
+  100% {
+    box-shadow: 0 0 0 0 rgb(255 77 0 / 0.55);
+  }
+  50% {
+    box-shadow: 0 0 0 6px rgb(255 77 0 / 0);
+  }
+}
+.picCap {
+  margin-top: 6px;
+  font-family: var(--font-mono), monospace;
+  font-size: 10.5px;
+  font-weight: 500;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: rgb(var(--text) / 0.85);
+  text-align: center;
+}
+.picCap b {
+  display: inline-grid;
+  place-items: center;
+  width: 16px;
+  height: 16px;
+  margin-right: 4px;
+  border-radius: 9999px;
+  background: rgb(var(--text));
+  color: rgb(var(--ground));
+  font-size: 10px;
+}
+.homeRow {
+  display: flex;
+  justify-content: center;
+  gap: 16px;
+}
+.tile {
+  width: 46px;
+  height: 46px;
+  border-radius: 11px;
+  background: rgb(var(--hairline));
+}
+.tileMe {
+  position: relative;
+  width: 46px;
+  height: 46px;
+}
+.tileIcon {
+  position: absolute;
+  inset: 0;
+  border-radius: 11px;
+  background-size: cover;
+  background-position: center;
+}
+.tileRing {
+  position: absolute;
+  inset: -4px;
+  border-radius: 14px;
+  border: 3px solid #ff4d00;
+  animation: lit 1.4s ease-in-out infinite;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .lit,
+  .tileRing {
+    animation: none;
+  }
+}

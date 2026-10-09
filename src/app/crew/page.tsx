@@ -320,7 +320,7 @@ export default function CrewPage() {
     introEvent("crew_viewed");
   }, []);
   return (
-    <RequireAccount title="Crew up." caption="Make an account to start a crew, plan moves together and keep your group chats.">
+    <RequireAccount preview title="Crew up." caption="Make an account to start a crew, plan moves together and keep your group chats.">
       <CrewPagePage />
     </RequireAccount>
   );

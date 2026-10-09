@@ -36,7 +36,7 @@ import { DEMO_DROP_TITLES } from "@/lib/demoData";
 import NextBar from "@/components/map-chrome/NextBar";
 import { NEXT_COUNT, nextEvents } from "@/lib/filters";
 import { usePlayMode } from "@/lib/usePlayMode";
-import { introAsksLocation, introEvent, registerIntroAction } from "@/lib/intro";
+import { introEvent, introPending, registerIntroAction } from "@/lib/intro";
 
 // MapLibre touches window on import, so it stays out of the server bundle.
 const NightMap = dynamic(() => import("@/components/map/NightMap"), {
@@ -237,8 +237,8 @@ export default function MapPage() {
     if (!mounted || !seenTitle) return;
     if (!fix && !seenIntro) {
       const t = setTimeout(() => {
-        // A new Hopper meets Paz first: her "Let's find you" step is the one ask, so the sheet stays shut.
-        if (!introAsksLocation()) setPicking(true);
+        // A new Hopper meets Paz first: her "Let's find you" step is the one ask, so the sheet stays shut for the whole tour.
+        if (!introPending()) setPicking(true);
         markIntroSeen();
       }, 600);
       return () => clearTimeout(t);

@@ -18,6 +18,8 @@ export type Facts = {
   boxes: number;
   welcome: boolean;
   installed: boolean;
+  /** iPhone: the Hopper said they added Hoppaz to the home screen (the browser cannot tell us). */
+  added: boolean;
   alerts: null | "on" | "denied";
   deck: boolean;
   event: boolean;
@@ -31,6 +33,7 @@ export const emptyFacts = (): Facts => ({
   boxes: 0,
   welcome: false,
   installed: false,
+  added: false,
   alerts: null,
   deck: false,
   event: false,
@@ -85,9 +88,19 @@ export type IntroCtx = {
   standalone: boolean;
   ios: boolean;
   pushGranted: boolean;
+  /** Has an account (email). Left out means yes, so the dev page shows no sign-up. */
+  hasAccount?: boolean;
+  /** How this device can add Hoppaz to the home screen: iPhone Safari (two taps), Android Chrome (the browser's own prompt), or not at all (desktop, already installed, an iPhone in-app browser). Left out: worked out from ios and standalone. */
+  install?: InstallKind;
 };
 
-const BOX_PART: StepId[] = ["face", "box1", "box2", "box_far", "spawns", "alerts", "leave_play"];
+/** "wait": an Android browser whose install prompt has not arrived yet (it comes a moment after load): the step holds for it, briefly. */
+export type InstallKind = "ios" | "android" | "wait" | "none";
+
+export const installKind = (ctx: Pick<IntroCtx, "ios" | "standalone" | "install">): InstallKind =>
+  ctx.install ?? (ctx.ios && !ctx.standalone ? "ios" : "none");
+
+const BOX_PART: StepId[] = ["face", "box1", "box2", "box_far", "keep", "spawns", "alerts", "leave_play"];
 
 /** Does this step belong in this Hopper's tour at all? */
 export function applicable(id: StepId, save: IntroSave): boolean {
@@ -96,6 +109,8 @@ export function applicable(id: StepId, save: IntroSave): boolean {
     case "install":
     case "locate":
       return !away;
+    case "open_app":
+      return save.facts.added;
     case "no_location":
       return save.loc === "denied" && !away;
     case "outside":
@@ -110,10 +125,19 @@ export function applicable(id: StepId, save: IntroSave): boolean {
 export function satisfied(id: StepId, save: IntroSave, ctx: IntroCtx): boolean {
   const f = save.facts;
   switch (id) {
+    // The installed app starts a fresh tour on the step after install: the Hopper met Paz in the browser (first run only).
+    case "welcome":
+      return ctx.standalone && save.mode === "first";
     case "install":
-      return ctx.standalone || f.installed;
+      return installKind(ctx) === "none" || f.installed || f.added;
+    // iPhone: the Hopper said they added it, so the tour waits in Safari for them to open the app (its Skip carries on).
+    case "open_app":
+      return ctx.standalone || installKind(ctx) !== "ios";
+    // A permission that was already allowed is not a position: Paz still asks once, so the map flies to them.
     case "locate":
-      return save.loc !== "unknown";
+      return save.loc === "denied" || (save.loc === "granted" && save.lagos !== null);
+    case "keep":
+      return ctx.hasAccount ?? true;
     case "face":
       return ctx.inPlay || f.play;
     case "box1":
@@ -123,7 +147,8 @@ export function satisfied(id: StepId, save: IntroSave, ctx: IntroCtx): boolean {
     case "box_far":
       return f.welcome;
     case "alerts":
-      return ctx.pushGranted || f.alerts !== null;
+      // Said they added it on iPhone: alerts are asked in the installed app, where they work.
+      return ctx.pushGranted || f.alerts !== null || f.added;
     case "leave_play":
       return !ctx.inPlay;
     case "deck_go":
@@ -152,9 +177,15 @@ export function currentStep(save: IntroSave, ctx: IntroCtx): StepId | null {
   return null;
 }
 
-/** "3 of 14", for the little counter on the card. Total counts the steps that apply to this Hopper. */
-export function progress(save: IntroSave, id: StepId): { n: number; total: number } {
-  const list = STEP_IDS.filter((s) => applicable(s, save) && s !== "leave_play");
+/**
+ * "3 of 14", for the little counter on the card. Total counts the steps that apply to this Hopper
+ * (not the ones this device has no part in: install on a desktop or in the installed app, hello in the installed app).
+ */
+export function progress(save: IntroSave, id: StepId, ctx?: IntroCtx): { n: number; total: number } {
+  const off: StepId[] = ["leave_play", "open_app", "keep"];
+  if (ctx && satisfied("install", save, ctx)) off.push("install");
+  if (ctx && satisfied("welcome", save, ctx)) off.push("welcome");
+  const list = STEP_IDS.filter((s) => applicable(s, save) && !off.includes(s));
   const at = list.indexOf(id);
   const n = at >= 0 ? at + 1 : Math.min(list.length, list.filter((s) => save.seen.includes(s)).length + 1);
   return { n, total: list.length };
@@ -204,6 +235,8 @@ export function applyEvent(save: IntroSave, name: IntroEventName, p: IntroEventP
       return { ...save, facts: { ...f, welcome: true, boxes: 3 } };
     case "install_done":
       return { ...save, facts: { ...f, installed: true } };
+    case "install_added":
+      return { ...save, facts: { ...f, added: true } };
     case "alerts_on":
       return { ...save, facts: { ...f, alerts: "on" } };
     case "alerts_denied":

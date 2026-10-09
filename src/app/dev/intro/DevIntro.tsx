@@ -22,6 +22,7 @@ const EVENTS: IntroEventName[] = [
   "box_opened",
   "welcome_done",
   "install_done",
+  "install_added",
   "alerts_on",
   "alerts_denied",
   "deck_viewed",
@@ -35,6 +36,7 @@ const EVENTS: IntroEventName[] = [
 const SCREEN_FOR: Record<StepId, Screen> = {
   welcome: "map",
   install: "map",
+  open_app: "map",
   locate: "map",
   no_location: "map",
   outside: "map",
@@ -42,6 +44,7 @@ const SCREEN_FOR: Record<StepId, Screen> = {
   box1: "play",
   box2: "play",
   box_far: "play",
+  keep: "play",
   spawns: "play",
   alerts: "play",
   leave_play: "play",
