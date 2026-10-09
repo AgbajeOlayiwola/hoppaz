@@ -37,12 +37,14 @@ export function useEventCollectibles(eventId: string, userId: string | null) {
   return { drops, claimed, busy, collect, reload };
 }
 
+export type CollectionEntry = { drop_id: string; collected_at: string; event_title: string; collectible: Collectible };
+
 /** The complete collection, including the event where each item was found. */
 export async function loadCollection(userId: string | null) {
   const sb = getSupabase();
-  if (!sb || !userId) return [] as { drop_id: string; collected_at: string; event_title: string; collectible: Collectible }[];
+  if (!sb || !userId) return [] as CollectionEntry[];
   const { data } = await sb.from("collections").select("drop_id,collected_at,drop:collectible_drops!inner(event:events!inner(title),collectible:collectibles!inner(id,key,name,description,emoji,art_url))").eq("user_id", userId).order("collected_at", { ascending: false });
-  return ((data ?? []) as unknown as { drop_id: string; collected_at: string; drop: { event: { title: string }; collectible: Collectible } }[]).map((r) => ({ drop_id: r.drop_id, collected_at: r.collected_at, event_title: r.drop.event.title, collectible: r.drop.collectible }));
+  return ((data ?? []) as unknown as { drop_id: string; collected_at: string; drop: { event: { title: string }; collectible: Collectible } }[]).map((r): CollectionEntry => ({ drop_id: r.drop_id, collected_at: r.collected_at, event_title: r.drop.event.title, collectible: r.drop.collectible }));
 }
 
 /** Event IDs with at least one configured collectible, for map discovery markers. */

@@ -1,28 +1,43 @@
+/* eslint-disable @next/next/no-img-element -- small static brand files, no layout shift (fixed height) */
+
 /**
- * The wordmark. Poppins Black, letters alternating tilt (odd -4deg, even +4deg),
- * one flat baseline, even spacing, no overlaps. Bunny ears live on the asset
- * version; this is the type-only lockup for in-app chrome.
+ * The real Hoppaz wordmark, ears on. Files live in public/brand/.
+ * Brand pairs: cream on orange or night, ink (black) on cream, orange on black.
+ * tone "auto" follows the theme: cream on the night ground, ink on the day ground.
+ * size is the cap height of the letters in px; the ears rise above it.
  */
-export default function Wordmark({ size = 17 }: { size?: number }) {
+export default function Wordmark({
+  size = 17,
+  tone = "auto",
+  className,
+}: {
+  size?: number;
+  tone?: "auto" | "cream" | "orange" | "ink";
+  className?: string;
+}) {
+  // The file is 720 x 226; the letters take the lower ~58% of its height.
+  const height = Math.round(size / 0.58);
+  const img = (file: string, extra = "") => (
+    <img
+      src={`/brand/wordmark-${file}.png`}
+      alt=""
+      aria-hidden
+      draggable={false}
+      height={height}
+      style={{ height, width: "auto" }}
+      className={`block select-none ${extra}`}
+    />
+  );
   return (
-    <span
-      className="inline-flex items-end bg-orange px-2.5 pt-1.5 pb-1 rounded-sm shadow-chunk select-none"
-      aria-label="Hoppaz"
-    >
-      {"HOPPAZ".split("").map((c, i) => (
-        <span
-          key={i}
-          aria-hidden
-          className="inline-block font-display font-black leading-none text-cream"
-          style={{
-            fontSize: size,
-            transformOrigin: "50% 60%",
-            transform: `rotate(${i % 2 === 0 ? -4 : 4}deg)`,
-          }}
-        >
-          {c}
-        </span>
-      ))}
+    <span role="img" aria-label="Hoppaz" className={`inline-flex ${className ?? ""}`}>
+      {tone === "auto" ? (
+        <>
+          {img("cream", "night-only")}
+          {img("ink", "day-only")}
+        </>
+      ) : (
+        img(tone)
+      )}
     </span>
   );
 }

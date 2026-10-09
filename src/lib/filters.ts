@@ -78,3 +78,89 @@ export function describeFilter(f: DateFilter, types: string[], now = Date.now())
   if (types.length) parts.push(types.length > 2 ? `${types.length} TYPES` : types.join(", ").toUpperCase());
   return parts.join(" · ");
 }
+
+/* ---------------------------------------------------------- the day rail -- */
+/*
+ * The design system's night rail, named "day" in the UI because Hoppaz lists
+ * day and night events. A day still runs 6am to 6am Lagos time (nightOf), so
+ * a 1am party belongs to the day it started the evening of.
+ */
+
+export const todayKey = (now = Date.now()) => nightOf(now);
+
+export const TODAY = (now = Date.now()): DateFilter => ({ kind: "night", date: nightOf(now) });
+
+export type RailDay = { date: string; weekday: string; day: number; month: string; isToday: boolean };
+
+/** The next n days from today, for the rail. */
+export function railDays(n = 14, now = Date.now()): RailDay[] {
+  const today = nightOf(now);
+  return Array.from({ length: n }, (_, i) => {
+    const date = nightOf(now + i * 24 * HOUR);
+    const d = new Date(`${date}T12:00:00Z`);
+    return {
+      date,
+      weekday: date === today ? "TODAY" : d.toLocaleDateString("en-NG", { weekday: "short", timeZone: "UTC" }).toUpperCase(),
+      day: d.getUTCDate(),
+      month: d.toLocaleDateString("en-NG", { month: "short", timeZone: "UTC" }).toUpperCase(),
+      isToday: date === today,
+    };
+  });
+}
+
+/** How many events fall on each day key. */
+export function countByDay(events: Array<{ starts_at: string }>) {
+  const out: Record<string, number> = {};
+  for (const e of events) {
+    const k = nightOf(Date.parse(e.starts_at));
+    out[k] = (out[k] ?? 0) + 1;
+  }
+  return out;
+}
+
+/**
+ * How a card prints its day: "TODAY · 10PM", "SAT 18 OCT · 10PM", or the day
+ * it belongs to for after-midnight starts ("FRI NIGHT · 1AM").
+ */
+export function dayLabel(startsAt: string, now = Date.now()) {
+  const ms = Date.parse(startsAt);
+  const key = nightOf(ms);
+  const lagos = new Date(ms + HOUR);
+  const h = lagos.getUTCHours();
+  const m = lagos.getUTCMinutes();
+  const time = `${h % 12 || 12}${m ? `:${String(m).padStart(2, "0")}` : ""}${h < 12 ? "AM" : "PM"}`;
+  if (ms + 6 * HOUR < now) return "ENDED";
+  const d = new Date(`${key}T12:00:00Z`);
+  const afterMidnight = h < 6;
+  const day =
+    key === nightOf(now)
+      ? afterMidnight ? "TONIGHT" : "TODAY"
+      : afterMidnight
+        ? `${d.toLocaleDateString("en-NG", { weekday: "short", timeZone: "UTC" }).toUpperCase()} NIGHT`
+        : d.toLocaleDateString("en-NG", { weekday: "short", day: "numeric", month: "short", timeZone: "UTC" }).toUpperCase().replace(",", "");
+  return `${day} · ${time}`;
+}
+
+/** How many events the map opens on: enough to look alive, few enough to read. */
+export const NEXT_COUNT = 20;
+
+/**
+ * The next `n` events from now (anything still on counts: it started under six
+ * hours ago), soonest first, with the first and last night they cover. The map
+ * opens on these instead of one possibly quiet day.
+ */
+export function nextEvents(events: EventRow[], n = NEXT_COUNT, now = Date.now()) {
+  const list = events
+    .filter((e) => Date.parse(e.starts_at) > now - 6 * HOUR)
+    .sort((a, b) => Date.parse(a.starts_at) - Date.parse(b.starts_at))
+    .slice(0, n);
+  const from = list[0] ? nightOf(Date.parse(list[0].starts_at)) : null;
+  const to = list.length ? nightOf(Date.parse(list[list.length - 1].starts_at)) : null;
+  return { list, from, to };
+}
+
+/** "FRI 9": a night key as the rail prints it. */
+export function nightTag(key: string) {
+  const d = new Date(`${key}T12:00:00Z`);
+  return `${d.toLocaleDateString("en-NG", { weekday: "short", timeZone: "UTC" }).toUpperCase()} ${d.getUTCDate()}`;
+}

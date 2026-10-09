@@ -113,3 +113,37 @@ export function dayLagos(iso: string) {
     timeZone: "Africa/Lagos",
   });
 }
+
+/**
+ * A PostGIS point as the app receives it, read into { lat, lng }. Supabase's REST
+ * API sends a geography column as hex EWKB ("0101000020E6100000..."), not GeoJSON,
+ * unless the query casts it; other paths can hand over GeoJSON or WKT text. All
+ * three are read here. Returns null for anything that is not a point.
+ */
+export function pointFromGeog(value: unknown): { lat: number; lng: number } | null {
+  const ok = (lat: number, lng: number) =>
+    Number.isFinite(lat) && Number.isFinite(lng) && Math.abs(lat) <= 90 && Math.abs(lng) <= 180 ? { lat, lng } : null;
+
+  if (value && typeof value === "object" && "coordinates" in value) {
+    const c = (value as { coordinates?: unknown }).coordinates;
+    return Array.isArray(c) && c.length >= 2 ? ok(Number(c[1]), Number(c[0])) : null;
+  }
+  if (typeof value !== "string") return null;
+
+  const wkt = value.match(/POINT\s*\(\s*(-?[\d.]+)\s+(-?[\d.]+)\s*\)/i);
+  if (wkt) return ok(Number(wkt[2]), Number(wkt[1]));
+
+  // (E)WKB: byte order, geometry type (with the SRID flag when present), [SRID], x, y.
+  if (/^[0-9a-f]+$/i.test(value) && value.length % 2 === 0 && value.length >= 42) {
+    const bytes = new Uint8Array(value.length / 2);
+    for (let i = 0; i < bytes.length; i++) bytes[i] = parseInt(value.slice(i * 2, i * 2 + 2), 16);
+    const view = new DataView(bytes.buffer);
+    const le = bytes[0] === 1;
+    const type = view.getUint32(1, le);
+    if ((type & 0xff) !== 1) return null; // not a point
+    const at = type & 0x20000000 ? 9 : 5;
+    if (bytes.length < at + 16) return null;
+    return ok(view.getFloat64(at + 8, le), view.getFloat64(at, le));
+  }
+  return null;
+}

@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import Mascot from "./Mascot";
 import Wordmark from "./Wordmark";
 
 /**
@@ -13,15 +14,25 @@ import Wordmark from "./Wordmark";
  * Pure SVG + CSS keyframes, no animation library. Each element's delay is
  * worked out from where it sits in the scene and the camera's easing, so
  * things grow exactly as they come into frame on any screen shape.
+ *
+ * About 4.5 seconds in all (START + PAN + a short hold on the lockup), a tap
+ * anywhere skips it, and it ends on the wordmark with the mascot welcoming
+ * you in. Motion is stamps, not springs: hard ease-out, no overshoot. The
+ * timings below are handed to the CSS in globals.css (the "title sequence"
+ * block) as custom properties, whose fallbacks match, so the two stay in step.
+ * Reduced-motion users skip it entirely.
  */
 
-const W = 4000; // front scene width, scene units
+const W = 3860; // front scene width, scene units: the pan ends with the last tower and its sign in frame
 const BW = 3000; // back (parallax) layer width
 const H = 900;
 const GROUND = 720;
-const START = 0.5; // s before the camera moves
-const PAN = 9; // s of camera travel
-const END = START + PAN + 2.2;
+const START = 0.3; // s before the camera moves
+const PAN = 3.4; // s of camera travel
+const HOLD = 0.8; // s the finished lockup stays up before it fades
+const END = START + PAN + HOLD; // 4.5 s
+/** When the lockup lands: the wordmark first, then the tagline, then the mascot. */
+const T_MARK = START + PAN - 0.55;
 
 const C = {
   ink: "#0E0B0A",
@@ -31,7 +42,6 @@ const C = {
   orange: "#FF4D00",
   ember: "#B83600",
   cream: "#F5EBDD",
-  violet: "#5B2EFF",
 };
 
 const FALLBACK_SIGNS = ["SOUNDGARDEN", "LAUGHTER CAVE", "SHRINE FRIDAY", "ELEMENT", "SAILORS DECK", "JARA SUNDOWN", "FREEDOM PARK", "HARD ROCK"];
@@ -81,9 +91,13 @@ export default function TitleSequence({ signs, onDone }: { signs: string[]; onDo
   // The parent re-renders as events load; a ref keeps that from restarting the clock.
   const done = useRef(onDone);
   done.current = onDone;
+  // The timer, a tap and a key can all land together: only the first counts.
+  const gone = useRef(false);
   const finish = useCallback(() => {
+    if (gone.current) return;
+    gone.current = true;
     setLeaving(true);
-    setTimeout(() => done.current(), 380);
+    setTimeout(() => done.current(), 320);
   }, []);
 
   // Geometry of this screen: how much scene fits, and so where the camera goes.
@@ -99,7 +113,7 @@ export default function TitleSequence({ signs, onDone }: { signs: string[]; onDo
   const at = useCallback(
     (x: number, extra = 0) => {
       let t: number;
-      if (x < geo.visible - 60) t = 0.15 + (x / geo.visible) * 0.5; // already in the first frame
+      if (x < geo.visible - 60) t = 0.1 + (x / geo.visible) * 0.25; // already in the first frame
       else {
         const p = Math.min(1, Math.max(0, (x + 60 - geo.visible) / (geo.travel || 1)));
         t = START + (PAN * Math.acos(1 - 2 * p)) / Math.PI;
@@ -126,9 +140,9 @@ export default function TitleSequence({ signs, onDone }: { signs: string[]; onDo
   }, [finish]);
 
   const names = useMemo(() => {
-    const clean = Array.from(new Set(signs.map((s) => s.toUpperCase().trim()).filter(Boolean)));
-    const list = clean.length >= 4 ? clean : [...clean, ...FALLBACK_SIGNS];
-    return list.map((s) => (s.length > 15 ? `${s.slice(0, 14)}…` : s));
+    // A billboard shows a whole name or none: a name too long for the board is skipped, never cut short.
+    const clean = Array.from(new Set(signs.map((s) => s.toUpperCase().trim()).filter((s) => s && s.length <= 15)));
+    return clean.length >= 4 ? clean : [...clean, ...FALLBACK_SIGNS.filter((s) => !clean.includes(s))];
   }, [signs]);
 
   const scenePx = (units: number) => units * geo.scale;
@@ -184,8 +198,8 @@ export default function TitleSequence({ signs, onDone }: { signs: string[]; onDo
     const roof = GROUND - slot.b.h;
     const first = names[i % names.length];
     const second = names[(i + SIGN_SLOTS.length) % names.length];
-    const d = at(cx, 0.35);
-    const d2 = at(cx, 1.5);
+    const d = at(cx, 0.15);
+    const d2 = at(cx, 0.85);
     if (!slot.flip || second === first) {
       return (
         <g key={i} className="ts-pop" style={v(d)}>
@@ -239,10 +253,18 @@ export default function TitleSequence({ signs, onDone }: { signs: string[]; onDo
 
   return (
     <div
-      className={`fixed inset-0 z-[60] overflow-hidden bg-ink transition-opacity duration-300 ${leaving ? "opacity-0" : "opacity-100"}`}
+      className={`hz-night fixed inset-0 z-[60] overflow-hidden bg-ink transition-opacity duration-300 ${leaving ? "opacity-0" : "opacity-100"}`}
       role="dialog"
-      aria-label="Hoppaz intro"
-      style={{ "--pan": `${-scenePx(geo.travel)}px`, "--pan-back": `${-scenePx(geo.backTravel)}px` } as React.CSSProperties}
+      aria-label="Hoppaz intro. Tap to skip."
+      onClick={finish}
+      style={
+        {
+          "--pan": `${-scenePx(geo.travel)}px`,
+          "--pan-back": `${-scenePx(geo.backTravel)}px`,
+          "--ts-start": `${START}s`,
+          "--ts-pan": `${PAN}s`,
+        } as React.CSSProperties
+      }
     >
       {/* ------------------------------------------- back layer: parallax -- */}
       <svg
@@ -252,10 +274,10 @@ export default function TitleSequence({ signs, onDone }: { signs: string[]; onDo
         aria-hidden
       >
         {stars.map(([x, y, s], k) => (
-          <circle key={k} cx={x} cy={y} r={s} fill={C.cream} opacity={0.5} className={k % 5 === 0 ? "ts-twinkle" : undefined} />
+          <circle key={k} cx={x} cy={y} r={s} fill={C.cream} opacity={0.5} />
         ))}
-        {/* The one violet shape: the moon over the mainland */}
-        <circle cx={geo.visible * 0.62} cy={230} r={110} fill={C.violet} />
+        {/* The moon over the mainland: a quiet cream disc (violet is kept for drops) */}
+        <circle cx={geo.visible * 0.62} cy={230} r={84} fill={C.cream} opacity={0.88} />
         {far.map(([x, w, h], k) => (
           <rect key={k} x={x} y={GROUND - h} width={w} height={h} fill={C.ink2} />
         ))}
@@ -299,7 +321,7 @@ export default function TitleSequence({ signs, onDone }: { signs: string[]; onDo
             <rect key={k} x={913 + k * 40} y={deck3M - 22} width={3} height={22} fill={C.line} />
           ))}
         </g>
-        <g className="ts-bus" style={v(at(1000, 0.2))}>
+        <g className="ts-bus" style={v(at(1000, 0.1))}>
           <g transform={`translate(900 ${deck3M - 62})`}>
             <rect x={0} y={0} width={150} height={56} rx={12} fill={C.orange} />
             <rect x={0} y={42} width={150} height={8} fill={C.ember} />
@@ -338,7 +360,7 @@ export default function TitleSequence({ signs, onDone }: { signs: string[]; onDo
               opacity={0.55}
               pathLength={1}
               className="ts-draw"
-              style={v(at(pylonX, 0.3 + Math.abs(x - pylonX) / 900))}
+              style={v(at(pylonX, 0.1 + Math.abs(x - pylonX) / 2400))}
             />
           );
         })}
@@ -347,7 +369,7 @@ export default function TitleSequence({ signs, onDone }: { signs: string[]; onDo
         {EKO.map((b, k) => building(b, 300 + k))}
 
         {/* The blimp */}
-        <g className="ts-pop" style={v(at(3200, -0.6))}>
+        <g className="ts-pop" style={v(at(3200, -0.3))}>
           <g className="ts-blimp">
             <ellipse cx={3620} cy={140} rx={150} ry={52} fill={C.cream} />
             <path d="M3470 140 L3436 102 L3436 178 Z" fill={C.ember} />
@@ -362,28 +384,32 @@ export default function TitleSequence({ signs, onDone }: { signs: string[]; onDo
       </svg>
 
       {/* ----------------------------------------------- the title card -- */}
-      <div
-        className="pointer-events-none absolute inset-x-0 bottom-[8%] flex flex-col items-center gap-3"
-        style={{ animation: `ts-stamp .5s cubic-bezier(.34,1.7,.64,1) ${START + PAN - 0.6}s both` }}
-      >
-        <Wordmark size={46} />
+      {/* Wordmark, the line, then the mascot welcoming you in. Each stamps down, none bounce. */}
+      <div className="pointer-events-none absolute inset-x-0 bottom-[3%] flex flex-col items-center">
+        <div style={{ animation: `ts-stamp .18s cubic-bezier(.2,.9,.3,1) ${T_MARK}s both` }}>
+          <Wordmark size={46} tone="cream" />
+        </div>
         <p
-          className="rounded-sm bg-ink/80 px-2 py-1 font-mono text-[11px] font-bold tracking-[0.18em] text-cream"
-          style={{ animation: `pop .3s ease ${START + PAN}s both` }}
+          className="mt-3 rounded-sm bg-ink/80 px-2 py-1 font-mono text-[11px] font-medium tracking-[0.18em] text-cream"
+          style={{ animation: `fade .16s ease ${T_MARK + 0.2}s both` }}
         >
           COME ALONE. LEAVE WITH FRIENDS.
         </p>
+        <div className="-mb-1 mt-1" style={{ animation: `ts-stamp .18s cubic-bezier(.2,.9,.3,1) ${T_MARK + 0.3}s both` }}>
+          <Mascot state="welcome" size={150} />
+        </div>
       </div>
 
       {/* --------------------------------------------- tiny UI corners --- */}
-      <p className="pad-top absolute left-4 top-0 font-mono text-[9px] font-bold tracking-[0.14em] text-dim">
+      <p className="pad-top absolute left-4 top-0 font-mono text-[10px] font-medium tracking-[0.14em] text-dim">
         N 6.5244 / E 3.3792
       </p>
       <button
+        type="button"
         onClick={finish}
-        className="pad-top absolute right-0 top-0 px-4 pb-3 font-mono text-[10px] font-bold tracking-[0.18em] text-cream"
+        className="pad-top absolute right-0 top-0 min-h-[44px] px-4 pb-3 font-mono text-[10px] font-medium tracking-[0.18em] text-cream"
       >
-        SKIP
+        TAP TO SKIP
       </button>
     </div>
   );

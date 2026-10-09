@@ -1,16 +1,15 @@
 "use client";
 
 import { Suspense, useState } from "react";
-import Link from "next/link";
 import { useSearchParams } from "next/navigation";
-import { ArrowLeft } from "lucide-react";
-import clsx from "clsx";
+import PageHeader from "@/components/app/PageHeader";
+import LoadingStub from "@/components/app/LoadingStub";
 import { useSession } from "@/lib/useSession";
 import { createAccount, GENDERS, logIn, logOut, type Gender } from "@/lib/account";
 
 export default function AccountPage() {
   return (
-    <Suspense fallback={<div className="grid h-full place-items-center"><span className="hint">LOADING…</span></div>}>
+    <Suspense fallback={<div className="h-full px-4 pt-16"><LoadingStub label="Loading" lines={2} /></div>}>
       <Account />
     </Suspense>
   );
@@ -50,22 +49,18 @@ function Account() {
 
   return (
     <div className="h-full overflow-y-auto px-4 pb-8">
-      <header className="pad-top flex items-center gap-3 pb-4">
-        <Link href={next} aria-label="Back" className="grid h-9 w-9 place-items-center rounded border border-line">
-          <ArrowLeft size={16} />
-        </Link>
-        <div>
-          <h1 className="font-display text-2xl font-black leading-none">{signedIn ? "Your account" : mode === "create" ? "Make an account" : "Log in"}</h1>
-          <p className="seclabel mt-1.5">{signedIn ? "Signed in" : "Wave, add people and chat privately"}</p>
-        </div>
-      </header>
+      <PageHeader
+        backTo={next}
+        title={signedIn ? "Your account" : mode === "create" ? "Make an account" : "Log in"}
+        caption={signedIn ? "Signed in" : "Wave, add people and chat privately"}
+      />
 
       {state === "loading" ? (
-        <p className="hint">LOADING…</p>
+        <LoadingStub label="Loading your account" lines={2} />
       ) : signedIn ? (
         <div className="card">
           <p className="label">Signed in as</p>
-          <p className="font-display text-base font-black">{profile?.display_name ?? "Hopper"}</p>
+          <p className="font-display text-[22px] font-black leading-tight">{profile?.display_name ?? "Hopper"}</p>
           <p className="hint">{signedIn}{profile?.handle ? ` · @${profile.handle}` : ""}</p>
           <button
             className="btn btn-ghost mt-4 w-full"
@@ -81,10 +76,10 @@ function Account() {
       ) : (
         <>
           <div className="mb-4 grid grid-cols-2 gap-2">
-            <button type="button" className={clsx("btn", mode !== "create" && "btn-ghost")} onClick={() => { setMode("create"); setError(null); }}>
+            <button type="button" aria-pressed={mode === "create"} className="chip min-h-[44px]" onClick={() => { setMode("create"); setError(null); }}>
               NEW HERE
             </button>
-            <button type="button" className={clsx("btn", mode !== "login" && "btn-ghost")} onClick={() => { setMode("login"); setError(null); }}>
+            <button type="button" aria-pressed={mode === "login"} className="chip min-h-[44px]" onClick={() => { setMode("login"); setError(null); }}>
               LOG IN
             </button>
           </div>
@@ -124,7 +119,7 @@ function Account() {
                       role="radio"
                       aria-checked={gender === k}
                       onClick={() => setGender(k)}
-                      className={clsx("tag px-3 py-2 text-[10px]", gender === k && "tag-o")}
+                      className="chip min-h-[44px] px-4"
                     >
                       {label}
                     </button>
@@ -133,7 +128,7 @@ function Account() {
               </div>
             )}
 
-            {error && <p role="alert" className="font-mono text-[11px] font-bold text-orange">{error}</p>}
+            {error && <p role="alert" className="font-body text-[13px] font-semibold text-fireant">{error}</p>}
 
             <button type="submit" className="btn mt-1 w-full" disabled={busy}>
               {busy ? "ONE SEC…" : mode === "create" ? "MAKE MY ACCOUNT" : "LOG IN"}

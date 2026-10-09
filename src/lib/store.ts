@@ -3,7 +3,7 @@
 import { create } from "zustand";
 import { persist } from "zustand/middleware";
 import type { Look } from "./avatar";
-import { ANY_DATE, type DateFilter } from "./filters";
+import { TODAY, type DateFilter } from "./filters";
 
 type Fix = { lat: number; lng: number; source: "gps" | "area"; area: string | null };
 
@@ -45,7 +45,8 @@ export const useHoppaz = create<HoppazState>()(
       markIntroSeen: () => set({ seenIntro: true }),
       setSeenTitle: (seenTitle) => set({ seenTitle }),
       setLook: (look) => set({ look }),
-      dateFilter: ANY_DATE,
+      // Every screen always has one day selected; it opens on today.
+      dateFilter: TODAY(),
       types: [],
       setDateFilter: (dateFilter) => set({ dateFilter }),
       setTypes: (types) => set({ types }),
@@ -61,15 +62,27 @@ export const useHoppaz = create<HoppazState>()(
   )
 );
 
+/**
+ * Toast tones. One plain card with a coloured dot in front:
+ *   "orange" (the default name, kept for old call sites) = neutral notice
+ *   "ok" = done (Keke green), "error" = failed (Fire Ant red)
+ *   "violet" = drops and rewards only.
+ */
+export type ToastTone = "orange" | "violet" | "ok" | "error";
+
 type ToastState = {
-  toast: { text: string; tone: "orange" | "violet" } | null;
-  say: (text: string, tone?: "orange" | "violet") => void;
+  toast: { text: string; tone: ToastTone; id: number } | null;
+  say: (text: string, tone?: ToastTone) => void;
 };
+
+let toastTimer: ReturnType<typeof setTimeout> | null = null;
 
 export const useToast = create<ToastState>((set) => ({
   toast: null,
   say: (text, tone = "orange") => {
-    set({ toast: { text, tone } });
-    setTimeout(() => set({ toast: null }), 2600);
+    // One toast at a time, and each one gets its full time on screen.
+    if (toastTimer) clearTimeout(toastTimer);
+    set({ toast: { text, tone, id: Date.now() } });
+    toastTimer = setTimeout(() => set({ toast: null }), 3200);
   },
 }));

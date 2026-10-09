@@ -8,6 +8,7 @@ import { useToast } from "@/lib/store";
 import { AREAS } from "@/lib/geo";
 import { VIBES } from "@/lib/brand";
 import { parseFlyerCaption } from "@/lib/parseCaption";
+import PageHeader from "@/components/app/PageHeader";
 
 export default function DropPage() {
   const router = useRouter();
@@ -27,7 +28,7 @@ export default function DropPage() {
 
   const readCaption = () => {
     if (!caption.trim()) {
-      say("PASTE A CAPTION FIRST");
+      say("Paste a caption first.");
       return;
     }
     const got = parseFlyerCaption(caption);
@@ -60,18 +61,18 @@ export default function DropPage() {
       setVibe(got.vibe);
       hits++;
     }
-    say(hits ? `PULLED ${hits} FIELDS OUT OF THE CAPTION` : "COULD NOT READ THAT ONE, FILL IT IN");
+    say(hits ? `Pulled ${hits} fields out of the caption.` : "Couldn't read that one. Fill it in.", hits ? "ok" : "error");
   };
 
   const submit = async () => {
     if (!title.trim() || !venue.trim()) {
-      say("NEEDS A NAME AND A VENUE");
+      say("It needs a name and a venue.", "error");
       return;
     }
     const a = AREAS.find((x) => x.name === area)!;
     const sb = getSupabase();
     if (!sb || !userId) {
-      say("NOT CONNECTED · CANNOT SAVE THIS YET");
+      say("Can't save this right now. Try again in a bit.", "error");
       return;
     }
     setSaving(true);
@@ -92,21 +93,19 @@ export default function DropPage() {
     setSaving(false);
     if (error) {
       console.warn("[hoppaz] drop failed:", error.message);
-      say("COULD NOT SAVE THAT, TRY AGAIN");
+      say("Couldn't save that. Try again.", "error");
       return;
     }
-    say("DROPPED · WAITING ON AN ADMIN", "violet");
+    say("Sent. It goes on the map once we've checked it.", "ok");
     router.push("/");
   };
 
   return (
     <div className="h-full overflow-y-auto px-4 pb-8">
-      <header className="pad-top pb-3">
-        <h1 className="font-display text-2xl font-black leading-none">Drop a flyer</h1>
-        <p className="seclabel mt-1.5">Paste the caption or fill it in</p>
-      </header>
+      {/* The tab bar hides on this page, so the chevron is the way out (back where you came from, or the map). */}
+      <PageHeader title="Post a flyer" caption="Paste the caption or fill it in" back="/" className="pb-3" />
 
-      <p className="mb-4 border-l-2 border-violet pl-3 font-mono text-[11px] leading-relaxed text-[#A89588]">
+      <p className="mb-4 border-l-2 border-line pl-3 font-mono text-[11px] leading-relaxed text-dim">
         Paste the caption from an Instagram flyer and this pulls out the venue, date, time and
         price. The link is kept so Hoppers can go back to the post.
       </p>

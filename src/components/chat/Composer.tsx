@@ -1,20 +1,25 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
+import clsx from "clsx";
 import { ImagePlus, X } from "lucide-react";
 
 /**
  * The message box for rooms and DMs: text, an optional picture, send.
  * onSend returns an error line (shown by the caller) or null when sent.
+ * `safeArea` pads for the phone's home bar: leave it on where no tab bar sits
+ * underneath (a private chat), turn it off where one does (the tab bar pads itself).
  */
 export default function Composer({
   placeholder,
   maxLength,
   onSend,
+  safeArea = true,
 }: {
   placeholder: string;
   maxLength: number;
   onSend: (body: string, image: File | null) => Promise<string | null>;
+  safeArea?: boolean;
 }) {
   const [body, setBody] = useState("");
   const [image, setImage] = useState<File | null>(null);
@@ -43,18 +48,18 @@ export default function Composer({
   };
 
   return (
-    <form onSubmit={submit} className="pad-bottom flex flex-none flex-col gap-2 border-t border-line pt-2.5">
+    <form onSubmit={submit} className={clsx("flex flex-none flex-col gap-2 border-t border-line pt-2.5", safeArea ? "pad-bottom" : "pb-3")}>
       {preview && (
         <div className="relative w-fit">
           {/* eslint-disable-next-line @next/next/no-img-element -- local preview blob */}
-          <img src={preview} alt="Picture to send" className="h-20 rounded border border-line object-cover" />
+          <img src={preview} alt="Picture to send" className="h-20 rounded-hz border border-line object-cover" />
           <button
             type="button"
             onClick={() => setImage(null)}
             aria-label="Remove picture"
-            className="absolute -right-2 -top-2 grid h-6 w-6 place-items-center rounded-full border border-line bg-ink-2"
+            className="absolute -right-3 -top-3 grid h-8 w-8 place-items-center rounded-full border border-line bg-ink-2 text-cream"
           >
-            <X size={12} />
+            <X size={14} />
           </button>
         </div>
       )}
@@ -63,9 +68,9 @@ export default function Composer({
           type="button"
           onClick={() => file.current?.click()}
           aria-label="Add a picture"
-          className="btn btn-ghost flex-none px-3 py-2.5"
+          className="btn btn-ghost w-11 flex-none px-0"
         >
-          <ImagePlus size={15} />
+          <ImagePlus size={17} />
         </button>
         <input
           ref={file}
@@ -77,9 +82,9 @@ export default function Composer({
             e.target.value = "";
           }}
         />
-        <input value={body} onChange={(e) => setBody(e.target.value)} placeholder={placeholder} maxLength={maxLength} autoComplete="off" aria-label="Message" />
-        <button type="submit" className="btn flex-none px-3.5 py-2.5 text-[11px]" disabled={sending || (!body.trim() && !image)}>
-          {sending ? "…" : "SEND"}
+        <input value={body} onChange={(e) => setBody(e.target.value)} placeholder={placeholder} maxLength={maxLength} autoComplete="off" aria-label="Message" className="min-h-[44px]" />
+        <button type="submit" className="btn flex-none px-4" disabled={sending || (!body.trim() && !image)}>
+          {sending ? "..." : "SEND"}
         </button>
       </div>
     </form>
