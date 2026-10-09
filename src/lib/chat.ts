@@ -57,6 +57,7 @@ export function chatError(message: string | undefined) {
   if (message.includes("bad_image")) return "THAT PICTURE DID NOT SEND";
   if (message.includes("not_at_event")) return "CHECK IN AT THE EVENT TO JOIN ITS ROOM";
   if (message.includes("not_in_group")) return "JOIN THE GROUP CHAT FIRST";
+  if (message.includes("not_in_move")) return "SAY I'M IN TO JOIN THIS CHAT";
   if (message.includes("room_closed")) return "THIS ROOM HAS CLOSED";
   return "DID NOT SEND";
 }
@@ -246,17 +247,21 @@ export async function reportThing(kind: "room" | "dm" | "person", ref: string, r
   return !!data;
 }
 
-export type PeopleOf = { kind: "event" | "group"; eventId: string };
+/** Whose people a chat shows: an event room, an event's group chat, or a crew move's chat. */
+export type PeopleOf = { kind: "event" | "group" | "move"; id: string };
 
-/** Who you can see in a room: everyone checked in at the event, or everyone in the group chat. */
+/** Who you can see in a room: everyone checked in at the event, in the group chat, or in on the move. */
 export function usePeople(room: PeopleOf | null, userId: string | null) {
   const [people, setPeople] = useState<Person[]>([]);
-  const ref = room?.eventId ?? null;
+  const ref = room?.id ?? null;
   const kind = room?.kind ?? null;
   const load = useCallback(async () => {
     const sb = getSupabase();
     if (!sb || !userId || !ref || ref.startsWith("demo-")) return setPeople([]);
-    const { data } = await sb.rpc(kind === "group" ? "group_members" : "whos_here", { p_event: ref });
+    const { data } =
+      kind === "move"
+        ? await sb.rpc("move_members", { p_move: ref })
+        : await sb.rpc(kind === "group" ? "group_members" : "whos_here", { p_event: ref });
     setPeople((data ?? []) as Person[]);
   }, [kind, ref, userId]);
   useEffect(() => {
@@ -397,6 +402,7 @@ export type EventGroup = {
 };
 
 export const groupChannel = (eventId: string) => `group:${eventId}`;
+export const moveChannel = (moveId: string) => `move:${moveId}`;
 
 /** Group chat invites (from saying you're going) and the group chats you're in. */
 export function useEventGroups(userId: string | null) {

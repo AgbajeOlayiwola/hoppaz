@@ -34,9 +34,10 @@ import type { EventRow } from "@/lib/types";
 const NO_TYPES: string[] = [];
 
 /**
- * TODAY (the /discover route). One day at a time, picked on the same rail the
- * Map uses: a title, one line in the conductor's voice, then the day's events
- * as ticket stubs, most Hoppers going first. Swiping is an optional mode.
+ * DISCOVER (the /discover route). One day at a time, picked on the same rail
+ * the Map uses. It opens on the swipe deck, Bumble style: right is WE OUTSIDE,
+ * left is nah. Once you've been through the day, or if you'd rather scan, the
+ * list of ticket stubs is one tap away.
  */
 export default function TodayPage() {
   const { fix, radiusKm, dateFilter, setDateFilter, types, setTypes, look: savedLook } = useHoppaz();
@@ -48,7 +49,7 @@ export default function TodayPage() {
   const say = useToast((s) => s.say);
 
   const [selected, setSelected] = useState<string | null>(null);
-  const [swipe, setSwipe] = useState(false);
+  const [swipe, setSwipe] = useState(true);
   /** The stub that was just tapped to "going", so only that one plays the stamp. */
   const [stamped, setStamped] = useState<string | null>(null);
   /** Your own taps, added to the loaded going counts until a fresh load brings the real ones. */
@@ -166,7 +167,10 @@ export default function TodayPage() {
       say(err, "error");
       return err;
     }
-    if (decision === "in") setDelta((d) => ({ ...d, [e.id]: (d[e.id] ?? 0) + 1 }));
+    if (decision === "in") {
+      setDelta((d) => ({ ...d, [e.id]: (d[e.id] ?? 0) + 1 }));
+      say("We outside. Its group chat invite is in Crew.", "ok");
+    }
     return null;
   };
 
@@ -224,7 +228,7 @@ export default function TodayPage() {
                 onClick={() => setSwipe((v) => !v)}
                 className="-mb-2.5 flex-none px-1 py-3 font-body text-[13px] text-dim underline underline-offset-4"
               >
-                {swiping ? "Back to the list" : "Can't decide? Swipe"}
+                {swiping ? "See the list" : "Swipe"}
               </button>
             )}
           </div>

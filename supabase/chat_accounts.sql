@@ -119,7 +119,7 @@ drop policy if exists event_group_members_read_own on public.event_group_members
 create policy event_group_members_read_own on public.event_group_members for select using (user_id = auth.uid());
 -- no write policies: join_group() and leave_group() below
 
--- Channels: '<event id>', 'group:<event id>', 'hop-<hop id>'.
+-- Channels: '<event id>', 'group:<event id>', 'move:<crew move id>', 'hop-<hop id>'.
 -- Anything else (the old 'base' room) is read-only history.
 create or replace function public.in_room(p_user uuid, p_channel text)
 returns boolean language plpgsql stable security definer set search_path = public as $$
@@ -130,6 +130,10 @@ begin
                     where user_id = p_user and event_id::text = substr(p_channel, 7) and status = 'joined');
   elsif exists (select 1 from events where id::text = p_channel) then
     return exists (select 1 from checkins where user_id = p_user and event_id::text = p_channel);
+  elsif p_channel like 'move:%' then
+    -- A crew move's chat: everyone in the crew who said I'M IN.
+    return exists (select 1 from crew_move_rsvps
+                    where user_id = p_user and move_id::text = substr(p_channel, 6) and status = 'going');
   elsif p_channel like 'hop-%' then
     return exists (select 1 from hop_riders where user_id = p_user and hop_id::text = substr(p_channel, 5));
   end if;
@@ -150,7 +154,7 @@ create or replace function public.message_visible(p_channel text, p_key uuid, p_
 returns boolean language sql stable security definer set search_path = public as $$
   select (case
             when p_channel like 'area:%' then false
-            when p_channel like 'group:%' then in_room(auth.uid(), p_channel)
+            when p_channel like 'group:%' or p_channel like 'move:%' then in_room(auth.uid(), p_channel)
             when exists (select 1 from events e where e.id::text = p_channel)
               then room_closes_at(p_channel) > now() and in_room(auth.uid(), p_channel)
             else true
@@ -190,6 +194,7 @@ begin
   if n >= 8 then raise exception 'slow_down'; end if;
   if not in_room(me, new.channel) then
     raise exception '%', case when new.channel like 'group:%' then 'not_in_group'
+                              when new.channel like 'move:%' then 'not_in_move'
                               else 'not_at_event' end;
   end if;
   if room_closes_at(new.channel) < now() then raise exception 'room_closed'; end if;
@@ -518,3 +523,26 @@ begin
 end $$;
 revoke all on function public.purge_expired_rooms() from public, anon, authenticated;
 grant execute on function public.purge_expired_rooms() to service_role;
+
+-- -------------------------------------------------------- crew move chats -----
+-- Saying I'M IN to a crew move puts you in its chat with everyone else who's
+-- in (in_room above); MAYBE or CAN'T GO takes you out. Like event group chats,
+-- these stay. Messages live in messages, channel 'move:<move id>'.
+create or replace function public.move_members(p_move uuid)
+returns table (key uuid, handle text, name text, look jsonb, waved boolean, in_crew boolean)
+language plpgsql security definer set search_path = public as $$
+declare me uuid := auth.uid();
+begin
+  if not in_room(me, 'move:' || p_move::text) then return; end if;
+  return query
+    select ri.id, p.handle, coalesce(p.display_name, p.handle), p.avatar,
+           exists (select 1 from waves w where w.from_user = me and w.to_user = r.user_id),
+           exists (select 1 from crew k where k.user_id = me and k.friend_id = r.user_id)
+      from crew_move_rsvps r
+      join profiles p on p.id = r.user_id
+      cross join lateral identity_for(r.user_id, 'move:' || p_move::text, false) ri
+     where r.move_id = p_move and r.status = 'going' and r.user_id <> me
+       and not is_blocked(me, r.user_id)
+     order by r.updated_at
+     limit 200;
+end $$;

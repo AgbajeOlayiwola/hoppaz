@@ -27,7 +27,7 @@ import { useSession } from "@/lib/useSession";
 import { useEvents, useHop } from "@/lib/useEvents";
 import { useCheckin } from "@/lib/useCheckin";
 import { useGameDashboard } from "@/lib/game";
-import { haversineKm } from "@/lib/geo";
+import { haversineKm, hasVenue } from "@/lib/geo";
 import type { HopStop } from "@/lib/types";
 import { busPosition } from "@/lib/busPosition";
 import { useCollectibleEventIds } from "@/lib/useCollectibles";
@@ -102,8 +102,9 @@ export default function MapPage() {
   const today = dayKey === todayStr;
   const dayFilter: DateFilter = useMemo(() => ({ kind: "night", date: dayKey }), [dayKey]);
 
-  // Rail counts: everything loaded, narrowed by type only (not by distance).
-  const typed = useMemo(() => allEvents.filter((e) => matchesType(e, shownTypes)), [allEvents, shownTypes]);
+  // Rail counts: everything loaded that has a real place, narrowed by type only (not by distance).
+  // Leads with no venue yet stay off the map; Today still lists them.
+  const typed = useMemo(() => allEvents.filter((e) => hasVenue(e) && matchesType(e, shownTypes)), [allEvents, shownTypes]);
   const counts = useMemo(() => countByDay(typed), [typed]);
   // NEXT 20: the next events from now, whatever night they fall on, so the map never opens empty.
   const next = useMemo(() => nextEvents(typed, NEXT_COUNT, now), [typed, now]);

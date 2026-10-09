@@ -1,9 +1,46 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import clsx from "clsx";
 import { ChevronDown, FileText, Lock, Play, Settings, ShieldCheck, Trash2, UserRound } from "lucide-react";
 import { RowButton, RowLink, RowValue } from "./Rows";
+import { setThemePref, themePref, type ThemePref } from "@/lib/theme";
+
+const LOOKS: ReadonlyArray<[ThemePref, string]> = [
+  ["night", "Dark"],
+  ["day", "Light"],
+  ["clock", "Lagos clock"],
+];
+
+/** Dark by default; light, or light by day and dark after sunset, if you'd rather. */
+function Appearance() {
+  const [pref, setPref] = useState<ThemePref>("night");
+  // The choice lives in this browser, so read it after mount.
+  useEffect(() => setPref(themePref()), []);
+  return (
+    <div className="px-4 py-3.5">
+      <span className="seclabel block">APPEARANCE</span>
+      <div role="radiogroup" aria-label="Appearance" className="mt-2 grid grid-cols-3 gap-1.5">
+        {LOOKS.map(([k, label]) => (
+          <button
+            key={k}
+            type="button"
+            role="radio"
+            aria-checked={pref === k}
+            onClick={() => {
+              setThemePref(k);
+              setPref(k);
+            }}
+            className={clsx("chip px-2", pref === k && "border-orange bg-orange text-brand-ink")}
+          >
+            {label}
+          </button>
+        ))}
+      </div>
+      {pref === "clock" && <p className="hint mt-2">Light from 6:30am, dark after 6:45pm, Lagos time.</p>}
+    </div>
+  );
+}
 
 /**
  * Settings, folded away at the bottom of Me. Name, home area, account, replay
@@ -91,6 +128,7 @@ export default function SettingsGroup({
               />
             )}
             <RowValue label="HOME AREA" value={area} action="CHANGE" onAction={onChangeArea} />
+            <Appearance />
             {accountReady &&
               (hasAccount ? (
                 <RowLink href="/account" icon={UserRound} title="Account" hint={email ?? undefined} />

@@ -1,8 +1,10 @@
 "use client";
 
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
+import Link from "next/link";
+import { useRouter } from "next/navigation";
 import clsx from "clsx";
-import { Copy, MapPin } from "lucide-react";
+import { Copy, MapPin, MessageSquare } from "lucide-react";
 import { useToast } from "@/lib/store";
 import { dayLabel } from "@/lib/filters";
 import { clockShort } from "@/lib/geo";
@@ -12,7 +14,7 @@ import type { CrewGroup, CrewMove } from "@/lib/game";
 export type Rsvp = "going" | "maybe" | "cant_go";
 
 const RSVPS: Array<{ status: Rsvp; label: string; said: string }> = [
-  { status: "going", label: "I'M IN", said: "You're in." },
+  { status: "going", label: "I'M IN", said: "You're in. Here's the chat." },
   { status: "maybe", label: "MAYBE", said: "Marked as maybe." },
   { status: "cant_go", label: "CAN'T GO", said: "Marked as can't go." },
 ];
@@ -20,6 +22,7 @@ const RSVPS: Array<{ status: Rsvp; label: string; said: string }> = [
 /**
  * One crew: its name, its invite code printed like a ticket serial, the form to
  * plan a move, and every planned move as a ticket stub with its RSVP chips.
+ * I'M IN puts you in the move's chat with everyone else who's in, and opens it.
  */
 export default function CrewPanel({
   group,
@@ -37,13 +40,15 @@ export default function CrewPanel({
   onRsvp: (moveId: string, status: Rsvp) => Promise<boolean>;
 }) {
   const say = useToast((s) => s.say);
-  // The page does not read RSVPs back, so remember what you chose here for as long as the page is open.
+  const router = useRouter();
+  // Your saved answer comes with the move; this holds a tap until the reload brings it back.
   const [chosen, setChosen] = useState<Record<string, Rsvp>>({});
 
   const answer = async (move: CrewMove, status: Rsvp, said: string) => {
     const ok = await onRsvp(move.id, status);
     if (ok) setChosen((c) => ({ ...c, [move.id]: status }));
     say(ok ? said : "Couldn't save that. Try again.", ok ? "ok" : "error");
+    if (ok && status === "going") router.push(`/crew/move/${move.id}`);
   };
 
   return (
@@ -96,7 +101,7 @@ export default function CrewPanel({
       )}
 
       {(group.crew_moves ?? []).map((move) => (
-        <MoveStub key={move.id} move={move} chosen={chosen[move.id]} onAnswer={(status, said) => void answer(move, status, said)} />
+        <MoveStub key={move.id} move={move} chosen={chosen[move.id] ?? move.mine ?? undefined} onAnswer={(status, said) => void answer(move, status, said)} />
       ))}
     </div>
   );
@@ -202,6 +207,11 @@ function MoveStub({
       </p>
       {move.note && <p className="hint mt-1.5">{move.note}</p>}
       <div ref={tear} className="mt-3 border-t border-dashed border-line" />
+      {chosen === "going" && (
+        <Link href={`/crew/move/${move.id}`} className="btn mt-3 w-full">
+          <MessageSquare size={15} aria-hidden /> OPEN THE CHAT{move.going ? ` · ${move.going} IN` : ""}
+        </Link>
+      )}
       <div className="flex gap-2 py-3" role="group" aria-label={`Are you in for ${move.title}?`}>
         {RSVPS.map(({ status, label, said }) => (
           <button
