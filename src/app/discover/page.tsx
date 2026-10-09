@@ -1,12 +1,16 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { X } from "lucide-react";
+import { Share2, X } from "lucide-react";
 import DayRail from "@/components/DayRail";
 import EventCard from "@/components/EventCard";
 import { SIDE_PANEL, sidePanelWidth } from "@/components/event/side";
 import Deck from "@/components/today/Deck";
 import DeckCard, { GhostDeck } from "@/components/today/DeckCard";
+import DeckGlow, { type GlowApi } from "@/components/today/DeckGlow";
+import SoundToggle from "@/components/today/SoundToggle";
+import StorySheet from "@/components/today/StorySheet";
+import { snapTick } from "@/components/today/tick";
 import Marquee from "@/components/today/Marquee";
 import { EmptyDay, FilteredOut, LoadFailed } from "@/components/today/Empty";
 import YourDays from "@/components/today/YourDays";
@@ -32,7 +36,9 @@ import {
   todayKey,
   type DateFilter,
 } from "@/lib/filters";
+import { demoFlyer } from "@/components/event/demo";
 import { eventTitle, haversineKm } from "@/lib/geo";
+import { sfx } from "@/lib/sound/sfx";
 import { useHoppaz, useToast } from "@/lib/store";
 import { isNeedAccount } from "@/lib/accountGate";
 import { useCheckin } from "@/lib/useCheckin";
@@ -48,8 +54,12 @@ const NO_TYPES: string[] = [];
 
 /**
  * TODAY (the /discover route): the night as a deck of big flyer cards you
- * slide through, one centred and the neighbours peeking. Pick the night on the
- * same rail the Map uses (or NEXT, the next twenty). Tap the centred card and
+ * slide through, one centred and the neighbours peeking, tilted back in 3D.
+ * The screen behind takes the colours of the flyer in the middle and blends as
+ * you slide, with a soft agogo tick on each snap (the speaker button in the
+ * header is its mute). SHARE TO STORY makes a 9:16 picture of the middle card;
+ * ?demo=1 slides the deck by itself, for filming. Pick the night on the same
+ * rail the Map uses (or NEXT, the next twenty). Tap the centred card and
  * it opens into the breakdown: the event card as a sheet on a phone, docked on
  * the right on a wide screen. A slow strip of tags underneath scrolls what is
  * coming up and jumps the deck to whichever one you tap.
@@ -154,6 +164,52 @@ export default function TodayPage() {
     (i: number) => setCursor({ key: deckKey, id: deckEvents[i]?.id ?? null }),
     [deckKey, deckEvents]
   );
+
+  // Where the deck is, for the glow behind it; and the agogo tick each time it lands on a new card.
+  const glow = useRef<GlowApi | null>(null);
+  const indexRef = useRef(index);
+  useEffect(() => {
+    indexRef.current = index;
+  });
+  const flyers = useMemo(() => deckEvents.map((e) => demoFlyer(e)), [deckEvents]);
+  const onPos = useCallback((pos: number) => glow.current?.set(pos), []);
+  const slideTo = useCallback(
+    (i: number) => {
+      snapTick(i >= indexRef.current ? 1 : -1);
+      setIndex(i);
+    },
+    [setIndex]
+  );
+  // Sound belongs to this screen while it is on: the tick works after the first touch, and follows the mute switch
+  // (the speaker button in the header, the same one Play has).
+  useEffect(() => {
+    sfx.acquire();
+    return () => sfx.release();
+  }, []);
+
+  // Share to story: the card in the middle, as a 9:16 picture.
+  const [story, setStory] = useState<EventRow | null>(null);
+  const closeStory = useCallback(() => setStory(null), []);
+
+  // ?demo=1 slides the deck by itself every 2.5 seconds, for filming ads. A touch or a key hands it back to you for a while.
+  const [filming, setFilming] = useState(false);
+  useEffect(() => {
+    setFilming(new URLSearchParams(window.location.search).get("demo") === "1");
+  }, []);
+  const touched = useRef(0);
+  const touch = useCallback(() => {
+    touched.current = Date.now();
+  }, []);
+  const deckCount = deckEvents.length;
+  useEffect(() => {
+    if (!filming || open || story || deckCount < 2) return;
+    const id = setInterval(() => {
+      if (Date.now() - touched.current < 6000) return;
+      const i = indexRef.current;
+      slideTo(i >= deckCount - 1 ? 0 : i + 1);
+    }, 2500);
+    return () => clearInterval(id);
+  }, [filming, open, story, deckCount, slideTo]);
 
   const pickDay = useCallback(
     (f: DateFilter) => {
@@ -288,8 +344,13 @@ export default function TodayPage() {
       ref={root}
       className="relative flex h-full flex-col overflow-hidden"
       style={{ ["--hz-side-top" as string]: `${sideTop}px` }}
+      data-demo={filming ? "1" : undefined}
+      onPointerDownCapture={touch}
+      onKeyDownCapture={touch}
     >
-      <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain">
+      {/* The screen takes the middle card's colours. Behind everything, and it never takes a tap. */}
+      {!loading && !noLiveEvents && !empty && <DeckGlow urls={flyers} index={index} api={glow} />}
+      <div className="relative z-[1] min-h-0 flex-1 overflow-y-auto overscroll-contain">
         {/* Paz's tour sets --intro-reserve while its card is up on this screen, so the deck stops above the card. */}
         <div className="flex min-h-full flex-col pb-[var(--intro-reserve,0px)]">
           {/* -------------------------------------------------------- header -- */}
@@ -297,6 +358,7 @@ export default function TodayPage() {
             <div className="flex items-baseline gap-2.5">
               <h1 className="truncate font-display text-[34px] font-black leading-none tracking-[-0.01em]">{title}</h1>
               {mode === "day" && !isToday && mounted && <span className="seclabel flex-none">{dateTag(dayKey)}</span>}
+              {!loading && !noLiveEvents && !empty && <SoundToggle className="-mr-2 ml-auto self-center" />}
             </div>
             <p className="mt-2.5 min-h-[22px] font-body text-[15px] font-medium leading-snug text-cream">{line}</p>
           </header>
@@ -379,7 +441,19 @@ export default function TodayPage() {
                 <Deck
                   count={deckEvents.length}
                   index={index}
-                  onIndex={setIndex}
+                  onIndex={slideTo}
+                  onPos={onPos}
+                  lead={
+                    <button
+                      type="button"
+                      onClick={() => setStory(deckEvents[index] ?? null)}
+                      aria-label="Share to story"
+                      className="inline-flex h-[38px] flex-none items-center gap-[7px] rounded-full border border-line bg-ink-2/70 pl-[11px] pr-[14px] font-mono text-[9.5px] font-medium uppercase tracking-[0.12em] text-cream transition-transform active:scale-[0.94]"
+                    >
+                      <Share2 size={15} strokeWidth={2.2} className="text-orange" aria-hidden />
+                      Share to story
+                    </button>
+                  }
                   onOpen={() => {
                     setOpen(true);
                     introEvent("event_opened");
@@ -397,6 +471,7 @@ export default function TodayPage() {
                         quests={questsByEvent.get(e.id)?.length ?? 0}
                         near={s.near}
                         active={s.active}
+                        narrow={s.narrow}
                         busy={!!going.busy[e.id]}
                         onGoing={onGoing}
                       />
@@ -424,6 +499,8 @@ export default function TodayPage() {
         </div>
       </div>
 
+      <StorySheet event={story} going={story ? goingOf(story) : 0} box={story ? dropSet.has(story.id) : false} onClose={closeStory} />
+
       {/* ------------------------------------------------------ the breakdown -- */}
       {event && !wide && (
         <button
@@ -447,8 +524,8 @@ export default function TodayPage() {
           onClose={() => setOpen(false)}
           isHopStop={isHopStop}
           placement={wide ? "side" : "sheet"}
-          onPrev={wide && index > 0 ? () => setIndex(index - 1) : undefined}
-          onNext={wide && index < deckEvents.length - 1 ? () => setIndex(index + 1) : undefined}
+          onPrev={wide && index > 0 ? () => slideTo(index - 1) : undefined}
+          onNext={wide && index < deckEvents.length - 1 ? () => slideTo(index + 1) : undefined}
         />
       )}
     </div>

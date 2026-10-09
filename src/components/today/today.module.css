@@ -1,0 +1,516 @@
+/*
+ * The Today deck: the flyer is the whole card, a ticket strip sits across the
+ * bottom, and the screen behind glows with the colours of the flyer in the middle.
+ *
+ * A card is a printed ticket, so its strip keeps the same cream and ink in both
+ * themes (like a real stub); only the glow behind the deck changes with the theme.
+ *
+ * Everything that moves moves by transform or opacity only. The deck writes those
+ * straight to the nodes marked data-art, data-sheen, data-ttl, data-dim and data-top.
+ * The always-running details (the live dot's pulse, the BOX HERE glint, the arrow's
+ * nudge) only run on the card in the middle, so a deck of twenty has one of each
+ * moving, and every one of them is a transform or an opacity too.
+ */
+
+/* ------------------------------------------------------------- the glow -- */
+.glows {
+  position: absolute;
+  inset: 0;
+  z-index: 0;
+  pointer-events: none;
+  overflow: hidden;
+  opacity: 0.95;
+}
+:global([data-theme="day"]) .glows {
+  opacity: 0.6;
+}
+.glow {
+  position: absolute;
+  inset: 0;
+  opacity: 0;
+  will-change: opacity;
+}
+/* A layer is only mounted once its colours are known, and eases in the first time it is. */
+.glowIn {
+  position: absolute;
+  inset: 0;
+  animation: glowIn 0.6s ease both;
+}
+@keyframes glowIn {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+/* The ground fades back in at the top and bottom, so the title and the strip under the deck stay readable. */
+.scrim {
+  position: absolute;
+  inset: 0;
+  z-index: 0;
+  pointer-events: none;
+  background: linear-gradient(180deg, rgb(var(--ground)) 0, transparent 20%, transparent 66%, rgb(var(--ground)) 96%);
+  opacity: 0.8;
+}
+
+/* ------------------------------------------------------------ the card -- */
+.under {
+  position: absolute;
+  left: 14px;
+  right: 14px;
+  bottom: -4px;
+  height: 30px;
+  border-radius: 50%;
+  background: #000;
+  opacity: 0.5;
+  filter: blur(14px);
+  pointer-events: none;
+}
+.face {
+  --notch: 9px;
+  --notch-y: calc(100% - 100px);
+  position: absolute;
+  inset: 0;
+  overflow: hidden;
+  border-radius: 22px;
+  background: #17120f;
+  color: #0e0b0a;
+  box-shadow: 0 0 0 1px rgba(255, 255, 255, 0.07);
+  -webkit-mask:
+    radial-gradient(circle var(--notch) at left var(--notch-y), #0000 98%, #000) left / 51% 100% no-repeat,
+    radial-gradient(circle var(--notch) at right var(--notch-y), #0000 98%, #000) right / 51% 100% no-repeat;
+  mask:
+    radial-gradient(circle var(--notch) at left var(--notch-y), #0000 98%, #000) left / 51% 100% no-repeat,
+    radial-gradient(circle var(--notch) at right var(--notch-y), #0000 98%, #000) right / 51% 100% no-repeat;
+}
+/* The picture is a little bigger than the card, so it can slide against it as the deck moves. */
+.art {
+  position: absolute;
+  inset: -24px;
+  will-change: transform;
+}
+.img {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  opacity: 0;
+  transition: opacity 0.35s ease;
+  user-select: none;
+  -webkit-user-drag: none;
+}
+.imgOn {
+  opacity: 1;
+}
+.sheen {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  /* A plain translucent glint: a blend mode would make every card composite its picture a second time on every frame. */
+  background: linear-gradient(105deg, transparent 38%, rgba(255, 255, 255, 0.13) 48%, rgba(255, 255, 255, 0.04) 54%, transparent 62%);
+  will-change: transform;
+}
+.shade {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  background: linear-gradient(180deg, rgba(14, 11, 10, 0.5), transparent 24%, transparent 62%, rgba(14, 11, 10, 0.32));
+}
+.dim {
+  position: absolute;
+  inset: 0;
+  background: #0e0b0a;
+  opacity: 0;
+  pointer-events: none;
+}
+.edge {
+  position: absolute;
+  inset: 0;
+  border-radius: 22px;
+  pointer-events: none;
+  box-shadow:
+    inset 0 0 0 1px rgba(255, 255, 255, 0.12),
+    inset 0 1px 0 rgba(255, 255, 255, 0.28);
+}
+
+/* A card with no flyer: the title, set big, on the brand's colours. Never a made-up picture. */
+.block {
+  position: absolute;
+  inset: 0;
+  overflow: hidden;
+  background:
+    radial-gradient(90% 55% at 100% 0%, rgba(255, 77, 0, 0.55), transparent 70%),
+    radial-gradient(80% 50% at 0% 100%, rgba(91, 46, 255, 0.5), transparent 72%),
+    linear-gradient(165deg, #2b1509, #0e0b0a 70%);
+}
+.blockMark {
+  position: absolute;
+  right: -8%;
+  bottom: 6%;
+  width: 62%;
+  height: auto;
+  opacity: 0.16;
+  pointer-events: none;
+}
+/*
+ * The title's size is set from the card's width and then fitted to the room it has (see Block in DeckCard.tsx), and its
+ * margins follow the card too, so a small card keeps the look. Its box ends above the strip (100px) and, when the night has
+ * a badge or a vibe chip, above those as well; words are never broken.
+ */
+.blockTitle {
+  position: absolute;
+  left: 6.4%;
+  right: 5%;
+  top: 52px;
+  overflow: hidden;
+  font-family: var(--font-poppins);
+  font-weight: 900;
+  line-height: 0.95;
+  letter-spacing: -0.01em;
+  text-transform: uppercase;
+  color: #f5ebdd;
+  text-shadow: 0 2px 0 rgba(0, 0, 0, 0.22), 0 6px 18px rgba(0, 0, 0, 0.3);
+  will-change: transform;
+}
+.blockTitleTall {
+  bottom: 142px;
+}
+.blockTitleFull {
+  bottom: 112px;
+}
+.vibe {
+  position: absolute;
+  left: 18px;
+  bottom: 118px;
+  padding: 5px 8px;
+  border-radius: 4px;
+  background: rgba(245, 235, 221, 0.14);
+  font: 500 9.5px/1 var(--font-mono);
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  color: #f5ebdd;
+}
+
+/* ------------------------------------------------- pills over the flyer -- */
+/*
+ * The top row: the countdown on the left, WE OUTSIDE on the right. One flex row, so they cannot lie on top of each other:
+ * the countdown has min-width 0 and gives way (its words are clipped with an ellipsis) while the button keeps its size.
+ * It sits outside the masked face, so the deck dims it itself (data-top).
+ */
+.ctop {
+  position: absolute;
+  left: 12px;
+  right: 12px;
+  top: 12px;
+  z-index: 20;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 6px;
+  pointer-events: none;
+}
+.cd {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  height: 24px;
+  padding: 0 10px 0 8px;
+  border-radius: 12px;
+  background: rgba(14, 11, 10, 0.78);
+  color: #f5ebdd;
+  font: 500 9px/1 var(--font-mono);
+  letter-spacing: 0.1em;
+  white-space: nowrap;
+  min-width: 0;
+}
+.cdT {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+/* The live dot's pulse is a ring that grows and fades (transform and opacity), not a growing shadow that repaints. */
+.dot {
+  position: relative;
+  flex: none;
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: #ff4d00;
+}
+.dot::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  border-radius: 50%;
+  background: rgba(255, 77, 0, 0.7);
+  opacity: 0;
+}
+.front .dot::after {
+  animation: pulse 1.6s infinite;
+}
+.dotOff {
+  background: #9c9087;
+}
+.dotOff::after {
+  display: none;
+}
+@keyframes pulse {
+  0% {
+    opacity: 0.7;
+    transform: scale(1);
+  }
+  70%,
+  100% {
+    opacity: 0;
+    transform: scale(3.2);
+  }
+}
+/* WE OUTSIDE: the one orange verb on the middle card, over the flyer's corner. */
+.out {
+  pointer-events: auto;
+  display: inline-flex;
+  flex: none;
+  align-items: center;
+  gap: 5px;
+  height: 28px;
+  padding: 0 11px;
+  border-radius: 14px;
+  background: #ff4d00;
+  color: #0e0b0a;
+  box-shadow: 0 3px 0 #b83600;
+  font: 900 10px/1 var(--font-poppins);
+  letter-spacing: 0.06em;
+  white-space: nowrap;
+  transition: transform 0.1s;
+}
+.out:active {
+  transform: translateY(2px);
+  box-shadow: none;
+}
+.out:disabled {
+  opacity: 0.6;
+}
+.outOn {
+  background: #f5ebdd;
+  box-shadow: 0 3px 0 rgba(14, 11, 10, 0.45);
+}
+/* On a small card the button is a little smaller so the countdown keeps more of the row. */
+.outSm {
+  height: 26px;
+  padding: 0 9px;
+  gap: 4px;
+  border-radius: 13px;
+  font-size: 9px;
+}
+.cbot {
+  position: absolute;
+  left: 12px;
+  right: 12px;
+  bottom: 112px;
+  display: flex;
+  justify-content: flex-end;
+  align-items: flex-end;
+  pointer-events: none;
+}
+.boxb {
+  position: relative;
+  overflow: hidden;
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  height: 24px;
+  padding: 0 10px 0 8px;
+  border-radius: 12px;
+  background: #5b2eff;
+  color: #fff;
+  font: 500 8.5px/1 var(--font-mono);
+  letter-spacing: 0.14em;
+  white-space: nowrap;
+  box-shadow:
+    0 0 0 1px rgba(255, 255, 255, 0.28),
+    0 4px 18px rgba(91, 46, 255, 0.7);
+}
+.boxb::after {
+  content: "";
+  position: absolute;
+  top: -4px;
+  bottom: -4px;
+  left: -30px;
+  width: 22px;
+  background: linear-gradient(100deg, transparent, rgba(255, 255, 255, 0.75), transparent);
+  transform: skewX(-18deg) translateX(0);
+}
+.front .boxb::after {
+  animation: glint 3.2s ease-in-out infinite;
+}
+@keyframes glint {
+  0%,
+  55% {
+    transform: skewX(-18deg) translateX(0);
+  }
+  100% {
+    transform: skewX(-18deg) translateX(190px);
+  }
+}
+
+/* ----------------------------------------------------- the ticket strip -- */
+.strip {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  height: 100px;
+  background: #fbf3e6;
+  color: #0e0b0a;
+}
+.strip::before {
+  content: "";
+  position: absolute;
+  left: 14px;
+  right: 14px;
+  top: -0.5px;
+  height: 1.5px;
+  background: repeating-linear-gradient(90deg, rgba(14, 11, 10, 0.36) 0 5px, transparent 5px 10px);
+}
+.rowA {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 11px 14px 0;
+}
+.rowL {
+  display: flex;
+  align-items: baseline;
+  gap: 7px;
+  min-width: 0;
+}
+.tm {
+  font: 900 23px/1 var(--font-poppins);
+  letter-spacing: -0.02em;
+  white-space: nowrap;
+}
+.dy {
+  font: 500 9px/1 var(--font-mono);
+  letter-spacing: 0.14em;
+  color: #6b5f55;
+  white-space: nowrap;
+}
+.pr {
+  font: 900 16px/1 var(--font-poppins);
+  letter-spacing: -0.01em;
+  white-space: nowrap;
+}
+.prSmall {
+  font: 500 9px/1 var(--font-mono);
+  letter-spacing: 0.1em;
+  color: #3b322c;
+}
+.rowB {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 8px 14px 0;
+  font: 500 9px/1 var(--font-mono);
+  letter-spacing: 0.1em;
+  color: #3b322c;
+  white-space: nowrap;
+}
+.area {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  min-width: 0;
+}
+.area svg {
+  flex: none;
+  width: 11px;
+  height: 11px;
+  color: #ff4d00;
+}
+.area span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.going b {
+  font-weight: 500;
+}
+.tap {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  height: 30px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 7px;
+  padding-bottom: 3px;
+  background: #ff4d00;
+  box-shadow: inset 0 -3px 0 #b83600;
+  font: 900 10.5px/1 var(--font-poppins);
+  letter-spacing: 0.1em;
+  color: #0e0b0a;
+}
+.tap svg {
+  width: 12px;
+  height: 12px;
+}
+.front .tap svg {
+  animation: nudge 1.3s ease-in-out infinite;
+}
+@keyframes nudge {
+  0%,
+  100% {
+    transform: translateX(0);
+  }
+  50% {
+    transform: translateX(4px);
+  }
+}
+
+/* -------------------------------------------------- share to story sheet -- */
+.stage {
+  position: relative;
+  width: 244px;
+  height: 434px;
+  flex: none;
+  overflow: hidden;
+  border-radius: 20px;
+  background: #17120f;
+  box-shadow:
+    0 18px 40px -10px rgba(0, 0, 0, 0.55),
+    0 0 0 1px rgba(255, 255, 255, 0.1);
+}
+.stage img {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  display: block;
+}
+.stageLd {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  font: 500 9px/1 var(--font-mono);
+  letter-spacing: 0.16em;
+  color: #f5ebdd;
+  text-align: center;
+  padding: 0 24px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .front .dot::after,
+  .front .boxb::after,
+  .front .tap svg {
+    animation: none;
+  }
+  .glowIn {
+    animation: none;
+  }
+}

@@ -12,9 +12,12 @@
  * Rules:
  *  - The AudioContext is created and resumed only inside a real user gesture
  *    (pointerdown, touchend, click, keydown), and only while Play is active, so
- *    nothing plays or takes the phone's audio session outside Play.
- *  - Play is active while the shell has called setPlaying(true), or while an
- *    open stage holds a lease (acquire/release).
+ *    nothing plays or takes the phone's audio session outside Play and the
+ *    screens that hold a lease (below).
+ *  - Play is active while the shell has called setPlaying(true), or while a
+ *    screen holds a lease (acquire/release): an open stage, and the Today deck
+ *    (its agogo tick on each card). Today has its own sound button, which is this
+ *    same mute (setMuted), so it can always be silenced there.
  *  - setMuted(boolean) is persisted in localStorage key "hz-sound" ("off" or
  *    "on"). Default is on.
  */

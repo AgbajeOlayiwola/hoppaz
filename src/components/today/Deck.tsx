@@ -6,13 +6,17 @@ import { useViewport } from "./useViewport";
 
 /**
  * The card deck: big cards in a row, one centred, the neighbours peeking on
- * both sides (smaller, turned a little, dimmed).
+ * both sides and tilted back in 3D (turned towards the middle, pushed away,
+ * smaller, dimmed), so the row reads as a fan of tickets.
  *
  * It is built for 60 fps. One number, `pos` (which card is in the middle, as a
  * fraction), drives everything. Each frame writes only transform and opacity
  * straight onto the card elements, so React never re-renders while a finger is
  * down or a card is settling. A drag follows the finger, lets go with the
  * finger's speed, and a spring carries it to the nearest card.
+ *
+ * The same number is handed to `onPos` every frame, so the screen behind the
+ * deck can cross-fade to each event's colours as the cards slide.
  *
  * Touch swipes (pan-y, so the page still scrolls up and down), mouse drags,
  * trackpad swipes, the arrow keys and the two orange circle buttons all end up
@@ -22,8 +26,8 @@ import { useViewport } from "./useViewport";
 /** Spring for the settle: a touch under critically damped, so it lands softly. */
 const STIFFNESS = 190;
 const DAMPING = 2 * Math.sqrt(STIFFNESS) * 0.9;
-/** Cards past this many places from the middle are not drawn. */
-const DRAWN = 3.4;
+/** Cards past this many places from the middle are not drawn (they have faded out by two places). */
+const DRAWN = 2.2;
 const MAX_CARD = 380;
 /** Where a drag turns into a swipe (px), so a tap with a shaky thumb is still a tap. */
 const SLOP = 6;
@@ -31,7 +35,11 @@ const SLOP = 6;
 const clamp = (n: number, lo: number, hi: number) => Math.min(hi, Math.max(lo, n));
 const reduced = () => typeof window !== "undefined" && window.matchMedia("(prefers-reduced-motion: reduce)").matches;
 
-export type SlideState = { active: boolean; near: boolean };
+/** `narrow`: the cards are small (under NARROW px wide), so a card should use its short wording. */
+export type SlideState = { active: boolean; near: boolean; narrow: boolean };
+
+/** Below this card width (px) the card's text has to shorten: Paz's tour, or a short phone, squeezes the deck to this. */
+const NARROW = 244;
 
 export default function Deck({
   count,
@@ -41,6 +49,8 @@ export default function Deck({
   slide,
   label,
   keys = true,
+  onPos,
+  lead,
 }: {
   count: number;
   /** The card in the middle. Change it from outside and the deck slides there. */
@@ -53,29 +63,38 @@ export default function Deck({
   label: (i: number) => string;
   /** Arrow keys move the deck. Off while something sits on top of it. */
   keys?: boolean;
+  /** Called every frame with where the deck is (a card index, as a fraction). Must not set React state. */
+  onPos?: (pos: number) => void;
+  /** A control for the left of the row under the deck (Share to story). */
+  lead?: ReactNode;
 }) {
   const { wide } = useViewport();
   const stage = useRef<HTMLDivElement>(null);
   const els = useRef<Array<HTMLDivElement | null>>([]);
-  const dims = useRef<Array<HTMLElement | null>>([]);
-  const geo = useRef({ cw: 280, step: 210 });
+  const parts = useRef<
+    Array<{ dim: HTMLElement | null; top: HTMLElement | null; art: HTMLElement | null; sheen: HTMLElement | null; ttl: HTMLElement | null }>
+  >([]);
+  const geo = useRef({ cw: 280, step: 204 });
   const [box, setBox] = useState({ cw: 0 });
 
   // Motion state lives in a ref: it changes sixty times a second and nothing should re-render for it.
   const s = useRef({ pos: index, vel: 0, target: index, raf: 0, last: 0 });
   const reported = useRef(index);
   const onIndexRef = useRef(onIndex);
+  const onPosRef = useRef(onPos);
   const countRef = useRef(count);
   const blockClick = useRef(false);
 
   useEffect(() => {
     onIndexRef.current = onIndex;
+    onPosRef.current = onPos;
     countRef.current = count;
   });
 
   /* --------------------------------------------------------------- draw -- */
   const apply = useCallback((pos: number) => {
-    const { step } = geo.current;
+    const { cw, step } = geo.current;
+    const k = cw / 260;
     const list = els.current;
     for (let i = 0; i < list.length; i++) {
       const el = list[i];
@@ -83,21 +102,38 @@ export default function Deck({
       const u = i - pos;
       const a = Math.abs(u);
       if (a > DRAWN) {
-        if (el.style.visibility !== "hidden") el.style.visibility = "hidden";
+        if (el.style.visibility !== "hidden") {
+          el.style.visibility = "hidden";
+          el.style.willChange = "auto";
+        }
         continue;
       }
-      if (el.style.visibility === "hidden") el.style.visibility = "";
+      if (el.style.visibility === "hidden") {
+        el.style.visibility = "";
+        el.style.willChange = "transform, opacity";
+      }
       const side = u < 0 ? -1 : 1;
-      // Neighbours sit a step away; the ones behind them bunch up so they never run off the screen.
-      const x = side * (a <= 1 ? a : 1 + (a - 1) * 0.55) * step;
-      const scale = 1 - 0.12 * Math.min(a, 1) - 0.05 * clamp(a - 1, 0, 1.4);
-      const turn = clamp(u, -2, 2) * 4;
-      const drop = Math.min(a, 1.5) * 10;
-      el.style.transform = `translate3d(${x.toFixed(2)}px,${drop.toFixed(2)}px,0) rotate(${turn.toFixed(2)}deg) scale(${scale.toFixed(4)})`;
-      el.style.zIndex = String(100 - Math.round(a * 10));
-      const dim = dims.current[i];
-      if (dim) dim.style.opacity = clamp(a * 0.46, 0, 0.82).toFixed(3);
+      // A neighbour sits one step away, turned to face the middle; the one behind it tucks in close and recedes.
+      const x = side * (step * Math.min(a, 1) + step * 0.24 * Math.max(0, Math.min(a, 2) - 1));
+      const z = -Math.min(a, 2) * 100 * k;
+      const ry = clamp(-u * 44, -58, 58);
+      const sc = 1 - 0.07 * Math.min(a, 2);
+      const op = a <= 1.6 ? 1 : Math.max(0, 1 - (a - 1.6) * 2.2);
+      el.style.transform = `translate3d(${x.toFixed(1)}px,0,${z.toFixed(1)}px) rotateY(${ry.toFixed(2)}deg) scale(${sc.toFixed(4)})`;
+      el.style.opacity = op.toFixed(3);
+      el.style.zIndex = String(100 - Math.round(a * 20));
+      const p = parts.current[i];
+      if (p) {
+        // The flyer, the title and a glint slide at different speeds inside the card: that is the depth.
+        if (p.art) p.art.style.transform = `translate3d(${(-u * 20 * k).toFixed(1)}px,0,0) scale(1.04)`;
+        if (p.ttl) p.ttl.style.transform = `translate3d(${(-u * 40 * k).toFixed(1)}px,0,0)`;
+        if (p.sheen) p.sheen.style.transform = `translate3d(${(-u * 190 * k).toFixed(1)}px,0,0)`;
+        if (p.dim) p.dim.style.opacity = (Math.min(a, 1) * 0.5).toFixed(3);
+        // The top row (countdown, WE OUTSIDE) lies outside the dimmed face, so it fades with it.
+        if (p.top) p.top.style.opacity = (1 - Math.min(a, 1) * 0.5).toFixed(3);
+      }
     }
+    onPosRef.current?.(pos);
   }, []);
 
   /** Tell the page which card is in the middle, once per change. */
@@ -176,7 +212,7 @@ export default function Deck({
       const w = el.clientWidth;
       const h = el.clientHeight;
       const cw = Math.round(Math.max(200, Math.min(w * 0.72, h * 0.64, MAX_CARD)));
-      geo.current = { cw, step: cw * 0.76 };
+      geo.current = { cw, step: cw * 0.73 };
       el.style.setProperty("--cw", `${cw}px`);
       setBox((b) => (b.cw === cw ? b : { cw }));
       apply(s.current.pos);
@@ -187,10 +223,16 @@ export default function Deck({
     return () => ro.disconnect();
   }, [apply]);
 
-  // After every render: find the dimming layers of any new cards and draw them where they belong.
+  // After every render: find the moving layers of any new cards and draw them where they belong.
   useLayoutEffect(() => {
     els.current.length = count;
-    dims.current = els.current.map((el) => el?.querySelector<HTMLElement>("[data-dim]") ?? null);
+    parts.current = els.current.map((el) => ({
+      dim: el?.querySelector<HTMLElement>("[data-dim]") ?? null,
+      top: el?.querySelector<HTMLElement>("[data-top]") ?? null,
+      art: el?.querySelector<HTMLElement>("[data-art]") ?? null,
+      sheen: el?.querySelector<HTMLElement>("[data-sheen]") ?? null,
+      ttl: el?.querySelector<HTMLElement>("[data-ttl]") ?? null,
+    }));
     apply(s.current.pos);
   });
 
@@ -341,31 +383,34 @@ export default function Deck({
         className="relative min-h-0 flex-1 cursor-grab select-none overflow-x-clip overscroll-x-contain active:cursor-grabbing"
         style={{ touchAction: "pan-y" }}
       >
-        {Array.from({ length: count }, (_, i) => {
-          const active = i === index;
-          return (
-            <div
-              key={i}
-              ref={(el) => {
-                els.current[i] = el;
-              }}
-              role="group"
-              aria-roledescription="slide"
-              aria-label={`${i + 1} of ${count}`}
-              className="absolute bottom-1 top-3"
-              style={{ left: "calc(50% - var(--cw, 280px) / 2)", width: "var(--cw, 280px)", transformOrigin: "50% 100%", willChange: "transform" }}
-            >
-              <button
-                type="button"
-                tabIndex={active ? 0 : -1}
-                aria-label={label(i)}
-                onClick={() => press(i)}
-                className="absolute inset-0 z-10 rounded-[14px] focus-visible:outline focus-visible:outline-2 focus-visible:outline-orange"
-              />
-              {slide(i, { active, near: Math.abs(i - index) <= 2 })}
-            </div>
-          );
-        })}
+        {/* The cards share one vanishing point, a little above the middle, so the row bends away from the eye. */}
+        <div className="absolute inset-0" style={{ perspective: "1000px", perspectiveOrigin: "50% 46%" }}>
+          {Array.from({ length: count }, (_, i) => {
+            const active = i === index;
+            return (
+              <div
+                key={i}
+                ref={(el) => {
+                  els.current[i] = el;
+                }}
+                role="group"
+                aria-roledescription="slide"
+                aria-label={`${i + 1} of ${count}`}
+                className="absolute bottom-1 top-3"
+                style={{ left: "calc(50% - var(--cw, 280px) / 2)", width: "var(--cw, 280px)", transformOrigin: "50% 50%", willChange: "transform, opacity" }}
+              >
+                <button
+                  type="button"
+                  tabIndex={active ? 0 : -1}
+                  aria-label={label(i)}
+                  onClick={() => press(i)}
+                  className="absolute inset-0 z-10 rounded-[22px] focus-visible:outline focus-visible:outline-2 focus-visible:outline-orange"
+                />
+                {slide(i, { active, near: Math.abs(i - index) <= 2, narrow: box.cw > 0 && box.cw < NARROW })}
+              </div>
+            );
+          })}
+        </div>
 
         {/* Room to spare: the buttons sit in the empty ground either side of the cards. */}
         {wide && box.cw > 0 && (
@@ -380,12 +425,16 @@ export default function Deck({
         )}
       </div>
 
-      <div className="flex flex-none items-center justify-center gap-2 pb-1 pt-1.5">
-        {!wide && arrows.prev}
-        <p aria-live="polite" className="min-w-[76px] text-center font-mono text-[13px] font-medium tracking-[0.1em] tabular-nums text-cream">
-          {count ? index + 1 : 0} / {count}
-        </p>
-        {!wide && arrows.next}
+      {/* Kept to about the width of the deck, so on a wide screen the buttons stay with the cards instead of the corners. */}
+      <div className={`mx-auto flex w-full max-w-[460px] flex-none items-center gap-2 px-4 pb-1 pt-1.5 ${lead ? "justify-between" : "justify-center"}`}>
+        {lead}
+        <div className="flex items-center gap-1.5">
+          {!wide && arrows.prev}
+          <p aria-live="polite" className="min-w-[56px] text-center font-mono text-[13px] font-medium tracking-[0.1em] tabular-nums text-cream">
+            {count ? index + 1 : 0} / {count}
+          </p>
+          {!wide && arrows.next}
+        </div>
       </div>
     </div>
   );
