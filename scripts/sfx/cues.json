@@ -1,0 +1,326 @@
+[
+  {
+    "name": "box_burst_common",
+    "moment": "Box opens, Common tier burst. Replaces sfx.talkingDrum(\"common\") (A3, one short stroke).",
+    "lane": "moment",
+    "prompt": "One short, dry stroke on a West African talking drum (gangan), pitched near A3 with a small upward pitch squeeze, crisp stick attack, close-miked. Single hit, no reverb tail, no music, no voices.",
+    "duration_seconds": 0.8,
+    "prompt_influence": 0.55,
+    "variants": 3
+  },
+  {
+    "name": "box_burst_rare",
+    "moment": "Box opens, Rare tier burst. Replaces sfx.talkingDrum(\"rare\") (F#3, a rounder stroke).",
+    "lane": "moment",
+    "prompt": "One stroke on a West African talking drum (gangan), pitched near F-sharp3 with a clear upward pitch squeeze and a rounder, fuller body than a plain hit, close-miked. Single hit, dry, no reverb tail, no music, no voices.",
+    "duration_seconds": 1.0,
+    "prompt_influence": 0.55,
+    "variants": 3
+  },
+  {
+    "name": "box_burst_epic",
+    "moment": "Box opens, Epic tier burst. Replaces sfx.talkingDrum(\"epic\") (E3, wide squeeze).",
+    "lane": "moment",
+    "prompt": "One full, warm stroke on a West African talking drum (gangan), pitched near E3 with a wide upward pitch squeeze that settles back down, plus one bright agogo bell strike on the hit. Triumphant but short, close-miked, dry. No reverb tail, no music bed, no voices.",
+    "duration_seconds": 1.2,
+    "prompt_influence": 0.55,
+    "variants": 3
+  },
+  {
+    "name": "box_burst_legendary",
+    "moment": "Box opens, Legendary tier burst. Replaces sfx.talkingDrum(\"legendary\") (A2, the biggest hit).",
+    "lane": "moment",
+    "prompt": "One huge, deep stroke on a West African talking drum (gangan), pitched near A2 with a slow, dramatic upward pitch squeeze and a long falling release, chest-thump body, plus a short bright agogo bell hit on the strike. Single big hit, close-miked, dry. No reverb tail, no music, no voices.",
+    "duration_seconds": 1.6,
+    "prompt_influence": 0.55,
+    "variants": 3
+  },
+  {
+    "name": "box_legend_phrase",
+    "moment": "Legendary box, the five-stroke drum phrase after the burst. Replaces sfx.talkingDrum(\"legendPhrase\").",
+    "lane": "moment",
+    "prompt": "A short West African talking drum (gangan) phrase of five strokes: one deep low stroke, then three quick mid-pitch strokes, then a high rising stroke with a big pitch squeeze that ends the phrase. Rhythmic and celebratory, close-miked, dry. No reverb tail, no music bed, no voices, no other instruments.",
+    "duration_seconds": 2.0,
+    "prompt_influence": 0.5,
+    "variants": 3
+  },
+  {
+    "name": "box_wrapper_rip",
+    "moment": "Box opens, the wrapper tears. Replaces sfx.rip.",
+    "lane": "moment",
+    "prompt": "One fast tear of a sealed paper-and-foil gift wrapper being ripped open, crisp and dry, close-miked. Single sound, no music, no voices, no reverb.",
+    "duration_seconds": 0.5,
+    "prompt_influence": 0.6,
+    "variants": 3
+  },
+  {
+    "name": "box_shekere_shake",
+    "moment": "Box opens, the shake that builds before the burst. Replaces sfx.shekere(ms). App trims or tail-fades to the shake length.",
+    "lane": "moment",
+    "prompt": "A shekere (beaded gourd shaker) shaken in an energetic, swung rhythm that starts soft and gets faster and louder, close-miked, dry. No other instruments, no music bed, no voices, no reverb tail.",
+    "duration_seconds": 1.5,
+    "prompt_influence": 0.5,
+    "variants": 3
+  },
+  {
+    "name": "box_swish",
+    "moment": "Box opens, the lid sweeps away. Replaces sfx.swish(big).",
+    "lane": "moment",
+    "prompt": "A soft whoosh of air, one quick cloth-like swish of a gift box lid sweeping open, moving from high to low, close-miked and dry. Single sound, no music, no voices, no reverb.",
+    "duration_seconds": 0.5,
+    "prompt_influence": 0.6,
+    "variants": 3
+  },
+  {
+    "name": "hoppaz_three_full",
+    "moment": "The Hoppaz three, full form (D5 F#5 A5 short short long, drum under the last note, shekere shake). Paz first tap, level up, 7-day streak, Hop finale. GAMIFY-NEXT 5.3.",
+    "lane": "moment",
+    "prompt": "Three rising notes struck on an agogo bell (double iron bell): D5, then F-sharp5, then A5, in D major, played short, short, long (about 0.12 s, 0.12 s, 0.42 s), with one low talking drum stroke landing under the last note and a quick shekere shake at the end. Bright, crisp, close-miked, dry. No reverb tail, no music bed, no voices.",
+    "duration_seconds": 1.5,
+    "prompt_influence": 0.8,
+    "variants": 3
+  },
+  {
+    "name": "levelup_crowd_ehn",
+    "moment": "Level up. Replaces sfx.crowdEhn (the big crowd).",
+    "lane": "moment",
+    "prompt": "A crowd of about a dozen people shout one short, joyful \"ehn!\" together, a single rising hype exclaim like a Lagos party crowd cheering, no intelligible words, no clapping, close-miked, dry. No music, no reverb tail.",
+    "duration_seconds": 1.0,
+    "prompt_influence": 0.4,
+    "variants": 3
+  },
+  {
+    "name": "levelup_sparkle",
+    "moment": "Level up, the sparkle after the crowd. Replaces sfx.sparkle (B5 E6 A6).",
+    "lane": "moment",
+    "prompt": "A quick rising sparkle of three high kalimba notes, B5, E6, then A6, in D major pentatonic, each a bright pluck with a short natural ring, about 80 ms apart, close-miked, dry. No reverb tail, no music bed, no voices.",
+    "duration_seconds": 1.0,
+    "prompt_influence": 0.7,
+    "variants": 3
+  },
+  {
+    "name": "play_enter_drum_call",
+    "moment": "You enter Play. Replaces sfx.talkingDrum(\"call\") (four strokes, the last one rising).",
+    "lane": "moment",
+    "prompt": "A West African talking drum (gangan) calling phrase of four strokes: three quick low-to-mid strokes, then a longer, higher stroke with a big upward pitch squeeze, like a call to come outside. Rhythmic and confident, close-miked, dry. No reverb tail, no music, no voices.",
+    "duration_seconds": 1.0,
+    "prompt_influence": 0.5,
+    "variants": 3
+  },
+  {
+    "name": "danfo_horn_sss",
+    "moment": "Hop bus near, boarding, stop. Replaces sfx.danfoHorn (short, short, long). GAMIFY-NEXT 5.2 and section 7.",
+    "lane": "moment",
+    "prompt": "A Lagos danfo yellow bus horn honking short, short, long: two quick honks then one longer honk, nasal and buzzy, slightly out of tune like an old bus, close-miked and dry. No engine, no traffic, no voices, no music, no reverb.",
+    "duration_seconds": 1.2,
+    "prompt_influence": 0.6,
+    "variants": 3
+  },
+  {
+    "name": "hoppaz_three_short",
+    "moment": "The Hoppaz three, short form (F#5 A5 only). Check-in, quest done, link up accepted. GAMIFY-NEXT 5.3.",
+    "lane": "reward",
+    "prompt": "Two rising notes struck on an agogo bell (double iron bell): F-sharp5 then A5, in D major, a short note then a long one (about 0.12 s then 0.42 s), bright and crisp, close-miked, dry. No drum, no reverb tail, no music bed, no voices.",
+    "duration_seconds": 1.0,
+    "prompt_influence": 0.8,
+    "variants": 3
+  },
+  {
+    "name": "checkin_stamp",
+    "moment": "Check-in lands (the 180 ms stamp, now with a sound). Pairs with hoppaz_three_short and the +100 XP count-up.",
+    "lane": "reward",
+    "prompt": "A heavy rubber ink stamp pressed down hard on a paper ticket, one solid thud, followed by a single bright agogo bell ping pitched near D5, confident and satisfying, close-miked and dry. No reverb tail, no music, no voices.",
+    "duration_seconds": 0.8,
+    "prompt_influence": 0.6,
+    "variants": 3
+  },
+  {
+    "name": "we_outside_ehn",
+    "moment": "WE OUTSIDE tapped. A small crowd, shorter and lighter than the level-up ehn.",
+    "lane": "reward",
+    "prompt": "Four or five friends shout one short, upbeat \"ehn!\" together, a quick Lagos street hype exclaim that rises then falls, no intelligible words, close-miked, dry. No music, no echo, no reverb tail.",
+    "duration_seconds": 0.6,
+    "prompt_influence": 0.4,
+    "variants": 3
+  },
+  {
+    "name": "quest_done_coin",
+    "moment": "Quest complete. Replaces the unused sfx.coin (E6 then A6 ticks).",
+    "lane": "reward",
+    "prompt": "Two quick bright agogo bell ticks, a high one then a slightly higher one, around E6 and A6, like a coin clinking into a jar, crisp and dry, close-miked. Single short sound, no reverb tail, no music, no voices.",
+    "duration_seconds": 0.5,
+    "prompt_influence": 0.65,
+    "variants": 3
+  },
+  {
+    "name": "play_exit_drum",
+    "moment": "You leave Play. Replaces sfx.talkingDrum(\"exit\") (two falling strokes). Also the Hotspot leave if wanted.",
+    "lane": "reward",
+    "prompt": "Two soft West African talking drum (gangan) strokes, both sliding down in pitch, a gentle high-to-low falling pair like saying goodbye, quiet, close-miked, dry. No reverb tail, no music, no voices.",
+    "duration_seconds": 0.8,
+    "prompt_influence": 0.55,
+    "variants": 3
+  },
+  {
+    "name": "reward_chime",
+    "moment": "Rewards fan out after the burst. Replaces sfx.chime(i) (E5 A5 B5 E6). App steps pitch with playbackRate for a combo.",
+    "lane": "reward",
+    "prompt": "One warm, bright kalimba chime note pitched near A5, in D major, a soft pluck with a gentle short ring, friendly and rewarding, close-miked, dry. Single note, no reverb tail, no music bed, no voices.",
+    "duration_seconds": 0.8,
+    "prompt_influence": 0.7,
+    "variants": 3
+  },
+  {
+    "name": "reward_fly",
+    "moment": "A reward icon flies to the bar. Replaces sfx.fly (a rising swoosh).",
+    "lane": "reward",
+    "prompt": "A quick light whoosh rising in pitch, a small bright object flying up and away, short and airy, close-miked, dry. Single sound, no music, no voices, no reverb.",
+    "duration_seconds": 0.5,
+    "prompt_influence": 0.6,
+    "variants": 3
+  },
+  {
+    "name": "xp_fill",
+    "moment": "XP lands in the bar. Replaces sfx.fill (a glide up, D to A).",
+    "lane": "reward",
+    "prompt": "A smooth rising glide from A4 up to A5, like a bar filling up, a soft marimba or kalimba-like tone, bright and satisfying, dry. Single sound, no reverb tail, no music, no voices.",
+    "duration_seconds": 0.6,
+    "prompt_influence": 0.6,
+    "variants": 3
+  },
+  {
+    "name": "streak_stamp",
+    "moment": "The streak pip lands. Replaces sfx.stamp (a high-low agogo pair plus a soft low thump). Also badge stamps.",
+    "lane": "reward",
+    "prompt": "A small brass agogo bell tapped twice, a high note then a lower note about a fifth below (around A5 then D5), followed by a soft low thump, like a stamp landing on a card, crisp and dry, close-miked. No reverb tail, no music, no voices.",
+    "duration_seconds": 0.6,
+    "prompt_influence": 0.6,
+    "variants": 3
+  },
+  {
+    "name": "box_appears_rise",
+    "moment": "A new box appears near you. Replaces sfx.rise (a soft rising tone, D up to D).",
+    "lane": "reward",
+    "prompt": "A short, friendly rising whistle chirp, like a Lagos danfo conductor whistling to get your attention, one quick upward blip from about D5 to A5, soft and gentle, close-miked, dry. No reverb tail, no music, no voices.",
+    "duration_seconds": 0.6,
+    "prompt_influence": 0.6,
+    "variants": 3
+  },
+  {
+    "name": "box_in_reach_agogo",
+    "moment": "You come into reach of a box. Replaces sfx.agogo(0) (soft high ping, D6).",
+    "lane": "reward",
+    "prompt": "One soft, high agogo bell ping, a single strike pitched near D6, small and bright, quiet, with a short natural ring, close-miked and dry. No reverb tail, no music, no voices.",
+    "duration_seconds": 0.5,
+    "prompt_influence": 0.65,
+    "variants": 3
+  },
+  {
+    "name": "wave_received",
+    "moment": "Someone waves at you. Chime; the accepted link up uses hoppaz_three_short instead.",
+    "lane": "reward",
+    "prompt": "A friendly two-note clean highlife guitar pluck, E5 then A5, in D major pentatonic, a light \"someone says hi\" notification, warm and bright, short natural decay, close-miked and dry. No reverb tail, no music bed, no voices.",
+    "duration_seconds": 0.8,
+    "prompt_influence": 0.65,
+    "variants": 3
+  },
+  {
+    "name": "hotspot_enter",
+    "moment": "You enter a Hotspot. Two soft agogo notes with a low drum under. Not built yet. GAMIFY-NEXT 5.2.",
+    "lane": "reward",
+    "prompt": "Two soft agogo bell notes, A5 then D6, gentle and welcoming, with one low, soft talking drum stroke around D3 underneath, calm arrival feeling, close-miked and dry. No reverb tail, no music bed, no voices.",
+    "duration_seconds": 1.0,
+    "prompt_influence": 0.65,
+    "variants": 3
+  },
+  {
+    "name": "card_land_click",
+    "moment": "A card lands on the Shelf. Replaces sfx.click (a soft click with a tiny tone).",
+    "lane": "ui",
+    "prompt": "A tiny soft click of a playing card landing on a wooden table, a quick dry tap with a small hollow thock, quiet, close-miked. Single sound, no music, no voices, no reverb.",
+    "duration_seconds": 0.5,
+    "prompt_influence": 0.7,
+    "variants": 3
+  },
+  {
+    "name": "card_flip",
+    "moment": "A card flips over. Replaces sfx.flip (a short rise).",
+    "lane": "ui",
+    "prompt": "One light card flip, a short papery flick with a tiny soft rising pitch at the end, quiet, close-miked, dry. Single sound, no music, no voices, no reverb.",
+    "duration_seconds": 0.5,
+    "prompt_influence": 0.7,
+    "variants": 3
+  },
+  {
+    "name": "count_up_tick",
+    "moment": "A number counts up. Replaces sfx.tick(k). App steps pitch up the scale with playbackRate.",
+    "lane": "ui",
+    "prompt": "One tiny soft tick like a kalimba or marimba tap, short and dry, pitched near B5, quiet, close-miked. Single note, no reverb tail, no music, no voices.",
+    "duration_seconds": 0.5,
+    "prompt_influence": 0.7,
+    "variants": 3
+  },
+  {
+    "name": "box_far_knock",
+    "moment": "You tap a box that is too far. Replaces sfx.knock (a calabash knock).",
+    "lane": "ui",
+    "prompt": "A single soft knock on a calabash gourd, a dry hollow wooden tock with a short low body, quiet, close-miked. Single sound, no reverb tail, no music, no voices.",
+    "duration_seconds": 0.5,
+    "prompt_influence": 0.7,
+    "variants": 3
+  },
+  {
+    "name": "deck_snap",
+    "moment": "The Today deck snaps to the next card. Replaces agogo(3) in today/tick.ts; keep it softer than the coin.",
+    "lane": "ui",
+    "prompt": "A tiny crisp wooden tick with a faint bell edge, like a card deck snapping to the next card, extremely soft and short, close-miked and dry. Single sound, no reverb tail, no music, no voices.",
+    "duration_seconds": 0.5,
+    "prompt_influence": 0.7,
+    "variants": 3
+  },
+  {
+    "name": "box_alert",
+    "moment": "Box alert push arrives while the app is open (hoppaz:push message). Same short, short, long shape as the vibrate pattern.",
+    "lane": "ui",
+    "prompt": "Three soft kalimba plucks on one note, A5: short, short, long (about 0.1 s, 0.1 s, 0.35 s), a polite \"a box is nearby\" ping, gentle and clear, close-miked and dry. No reverb tail, no music bed, no voices.",
+    "duration_seconds": 0.8,
+    "prompt_influence": 0.7,
+    "variants": 3
+  },
+  {
+    "name": "toast_ok",
+    "moment": "Toast, ok. A soft chime. Nothing for Link copied. GAMIFY-NEXT 5.2.",
+    "lane": "ui",
+    "prompt": "One soft, bright kalimba chime note pitched near E5, a gentle confirmation ping, very small and quiet, close-miked and dry. Single note, no reverb tail, no music, no voices.",
+    "duration_seconds": 0.5,
+    "prompt_influence": 0.7,
+    "variants": 3
+  },
+  {
+    "name": "toast_error",
+    "moment": "Toast, error. A low knock, gentle not alarming. GAMIFY-NEXT 5.2.",
+    "lane": "ui",
+    "prompt": "One low, soft knock on a udu clay drum, a muted hollow \"bonk\" around D3 with a short falling pitch, gentle and not alarming, close-miked and dry. Single sound, no reverb tail, no music, no voices.",
+    "duration_seconds": 0.5,
+    "prompt_influence": 0.7,
+    "variants": 3
+  },
+  {
+    "name": "vibe_sticker_pop",
+    "moment": "A vibe sticker is received (Play phase 5, not built). One tiny soft sound per sticker.",
+    "lane": "ui",
+    "prompt": "A tiny soft bubble pop, a light rounded pluck like a small kalimba note with a quick upward blip, cute and quiet, close-miked and dry. Single sound, no reverb tail, no music, no voices.",
+    "duration_seconds": 0.5,
+    "prompt_influence": 0.7,
+    "variants": 3
+  },
+  {
+    "name": "tab_tick",
+    "moment": "Tab switch. A very quiet wood tick; app pitches it per tab (D F# A B E) with playbackRate. Added last, the easiest to overdo. GAMIFY-NEXT 5.2.",
+    "lane": "ui",
+    "prompt": "One very quiet, tiny, dry wooden tick, a soft woodblock tap pitched near D5, barely there, close-miked. Single sound, no reverb tail, no music, no voices.",
+    "duration_seconds": 0.5,
+    "prompt_influence": 0.7,
+    "variants": 3
+  }
+]

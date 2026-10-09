@@ -1,5 +1,6 @@
 /**
- * The Lagos sounds for Play. Pure Web Audio, generated, no files.
+ * The Lagos sounds for Play. Web Audio, generated; a voice can be swapped for a
+ * picked sound file (picks.ts, samples.ts) and the synth is always the fallback.
  *
  * Instruments: shekere (beaded gourd), agogo (double iron bell), talking drum
  * (gangan, with the squeeze bend), danfo horn, the crowd's "ehn!", a calabash
@@ -8,6 +9,11 @@
  * Chain: voices -> master gain -> low-pass -> compressor -> out. At most 6
  * voices at once (lowest priority, then oldest, is dropped first). A voice
  * frees its nodes when its sources end.
+ *
+ * Samples: sfx.x() plays the picked file for that call if one is decoded and
+ * ready, as a voice like any other (same chain, cap, priority, mute); otherwise
+ * it runs the synth voice. The files load once, from the first unlock() after a
+ * real tap or key press, never on page load.
  *
  * Rules:
  *  - The AudioContext is created and resumed only inside a real user gesture
@@ -21,6 +27,9 @@
  *  - setMuted(boolean) is persisted in localStorage key "hz-sound" ("off" or
  *    "on"). Default is on.
  */
+
+import type { PickKey } from "./picks";
+import { samples } from "./samples";
 
 type Ctx = BaseAudioContext;
 
@@ -51,6 +60,7 @@ let MG: GainNode | null = null;
 let NB: AudioBuffer | null = null;
 let VO: Voice[] = [];
 let gestT = 0;
+let tapped = false;
 let shk: ReturnType<typeof setInterval> | undefined;
 let muted = false;
 let playing = false;
@@ -114,6 +124,8 @@ function unlock() {
       NB = k.nb;
     }
     if (AC.state !== "running") wake();
+    // A mount early in the page's life can make the context before any tap (see gestT). The files still wait for a real one.
+    if (tapped) samples.load(AC);
   } catch {
     /* no audio on this device */
   }
@@ -137,11 +149,17 @@ function park() {
   }, 400);
 }
 
+/** A gesture listener: only a real tap or key (not a script's dispatchEvent) lets the sound files load. */
+function onGesture(e: Event) {
+  if (e.isTrusted) tapped = true;
+  unlock();
+}
+
 let installed = false;
 function install() {
   if (installed || typeof document === "undefined") return;
   installed = true;
-  ["pointerdown", "touchend", "click", "keydown"].forEach((n) => document.addEventListener(n, unlock, true));
+  ["pointerdown", "touchend", "click", "keydown"].forEach((n) => document.addEventListener(n, onGesture, true));
 }
 install();
 
@@ -621,6 +639,82 @@ const wrapped = {} as { [K in VoiceName]: (typeof voices)[K] };
 // Voices call each other through `voices`; point those calls at the wrapped set too.
 Object.assign(voices, wrapped);
 
+/* ---------------------------------------------------------------- samples -- */
+/** The notes a stepped voice asks for (Hz), as in chime() and tick() above, so a sample can follow them with playbackRate. */
+const NOTE: Partial<Record<VoiceName, (n: number) => number>> = {
+  chime: (i) => [pen(6), pen(8), pen(9), pen(11)][(((i | 0) % 4) + 4) % 4],
+  tick: (k) => pen(5 + (((k || 0) | 0) % 6)),
+};
+
+/**
+ * Plays a picked sample as a voice: same cap, priority, master chain and mute as
+ * the synth. Returns false when nothing is picked for `key` or the file is not
+ * decoded yet, and the caller plays the synth voice. `hz` steps the pitch of a
+ * stepped voice, `max` cuts the file short (the shekere runs for as long as the box asks).
+ */
+function sample(key: string, hz?: number, max?: number): boolean {
+  if (offline) return false;
+  const s = samples.get(key);
+  if (!s) return false;
+  // Nothing sounds while the page is hidden. Muted or outside Play, ac() is null and the synth would be silent too.
+  if (typeof document !== "undefined" && document.hidden) return true;
+  const a = ac();
+  if (!a) return true;
+  if (s.p === 0) voices.hush();
+  const r = hz && s.base ? Math.min(4, Math.max(0.25, hz / s.base)) : 1;
+  const whole = s.buf.duration / r;
+  const d = max != null && max > 0 ? Math.min(whole, max) : whole;
+  const t = a.currentTime;
+  const x = voice(a, t, d + 0.02, s.p);
+  const o = a.createBufferSource();
+  const g = x.add(a.createGain());
+  o.buffer = s.buf;
+  o.playbackRate.value = r;
+  g.gain.value = s.g;
+  if (d < whole - 0.001) {
+    // cut short: fade out instead of ending on a click
+    g.gain.setValueAtTime(s.g, t + Math.max(0, d - 0.06));
+    g.gain.linearRampToValueAtTime(0.0001, t + d);
+  }
+  o.connect(g);
+  g.connect(x.out);
+  x.src(o, t, t + d + 0.02);
+  return true;
+}
+
+/** The sample for a public voice call, if one is picked and ready. A custom stroke list, tone() and noise() never have one. */
+function picked(k: VoiceName, a: unknown[]): boolean {
+  const n = a[0];
+  if (k === "talkingDrum") return (n == null || typeof n === "string") && sample("talkingDrum:" + (n || "common"));
+  if (k === "agogo") return sample("agogo:" + n);
+  if (k === "shekere") return sample(k, undefined, typeof n === "number" ? n / 1000 : undefined);
+  return sample(k, NOTE[k]?.(n as number));
+}
+
+/** The public voices: the picked sample, else the synth voice above. The synth set stays as it was for voices that call each other. */
+const routed = {} as typeof wrapped;
+(Object.keys(wrapped) as VoiceName[]).forEach((k) => {
+  const f = wrapped[k] as (...a: unknown[]) => unknown;
+  (routed as Record<string, unknown>)[k] = (...args: unknown[]) => {
+    try {
+      if (picked(k, args)) return;
+    } catch (e) {
+      console.warn("sfx." + k + " sample", e instanceof Error ? e.message : e);
+    }
+    return f(...args);
+  };
+});
+
+/** A cue with no synth voice yet (see PICKS): the picked sample, or nothing. */
+export type CueName = Exclude<PickKey, VoiceName | `${string}:${string}`>;
+function cue(name: CueName, hz?: number) {
+  try {
+    sample(name, hz);
+  } catch (e) {
+    console.warn("sfx.cue " + name, e instanceof Error ? e.message : e);
+  }
+}
+
 /* ---------------------------------------------------------------- control -- */
 const control = {
   /** Muted by the player. Persisted. Takes effect at once: master to 0, every live voice stopped. */
@@ -684,7 +778,7 @@ const control = {
   hush: () => voices.hush(),
 };
 
-export const sfx = Object.assign(wrapped, control) as typeof wrapped & typeof control;
+export const sfx = Object.assign(routed, control, { cue }) as typeof routed & typeof control & { cue: typeof cue };
 
 /* ---------------------------------------------------- offline rendering -- */
 /**
