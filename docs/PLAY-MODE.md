@@ -1,6 +1,6 @@
 # Hoppaz Play mode v2.1
 
-Status: final plan for Jae's build, 9 Oct 2026, after the security review. Replaces PLAY-MODE-v2.md where they differ. Jae's rows in docs/DECISIONS.md win over any number here. Phase 1 (the Play shell, the open moment with the Lagos sounds, and push alerts) is built on the ui-refresh branch; later phases are not. Push quiet hours are built as 23:00 to 08:00 Lagos and are one setting (`set_push_config`), pending Jae's word on 21:00 to 07:00.
+Status: final plan for Jae's build, 9 Oct 2026, after the security review. Replaces PLAY-MODE-v2.md where they differ. Jae's rows in docs/DECISIONS.md win over any number here. Phase 1 (the Play shell, the open moment with the Lagos sounds, and push alerts) is built on the ui-refresh branch; later phases are not. Push quiet hours are 23:00 to 07:00 Lagos (Jae, 9 Oct 2026), one setting (`set_push_config`).
 
 Unchanged from v2: the four-thing HUD (its tray shows no Gist count until a Gist system exists), the open sequence and its timings, tier colours (Common cream, Rare violet, Epic pink, Legendary gold), the Lagos sounds, the 7 streak pips and the Golden Box, the 21:00 safety night, overlay mode on the same map, performance rules, the Ola merge plan, and the security fixes found in the code (open profiles, any-email accounts, the 1.5 km check-in, open hop_riders). The old tier-based "first 5/3/2/1" pips are gone: a spot shows one bar of 10 prize pips.
 

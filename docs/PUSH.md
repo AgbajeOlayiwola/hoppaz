@@ -27,7 +27,7 @@ All of these, decided in the database, not in the app:
 - their last `play_fix` is under 6 hours old and within 3 km of the spot (the fix is already rounded to about 110 m; the alert body says "About 1.4 km from you" to that Hopper only, never coordinates);
 - A few: fewer than 3 alerts so far this play-day (the play-day turns over at 06:00 Lagos). All: no cap;
 - not already alerted for this spot or a newer one (`play_fix.alert_cursor`; spots that light in the same instant count as one wave);
-- not in quiet hours, **23:00 to 08:00 Lagos** for now. `docs/PLAY-MODE.md` still says 21:00 to 07:00; change the hours without a deploy with `select set_push_config('quiet_from_hour','21'); select set_push_config('quiet_until_hour','7');`. The same call changes `few_per_day` (3), `radius_m` (3000) and `fix_max_age_hours` (6).
+- not in quiet hours, **23:00 to 07:00 Lagos** (Jae, 9 Oct 2026). Change the hours without a deploy with `select set_push_config('quiet_from_hour','21'); select set_push_config('quiet_until_hour','7');`. The same call changes `few_per_day` (3), `radius_m` (3000) and `fix_max_age_hours` (6).
 
 The picker spends the alert from the same counters (`alerts_today`, `alert_day`, `alert_cursor`) that the in-app alert in `play_tick` will use in Phase 6, so a Hopper never gets the same spot twice or more than their cap across both routes. `alert_prefs` is the setting; Phase 6 can read it instead of adding `profile_private.spot_alerts`.
 
@@ -71,7 +71,7 @@ Until both are set, `notify_spot_alert` does nothing and says why in a notice (n
      on conflict (user_id) do update set lat = 6.428, lng = 3.421, at = now(), alert_cursor = null, alerts_today = 0;
    select notify_spot_alert(gen_random_uuid(), 6.430, 3.425, 'Test spot', now(), now());
    ```
-   It returns the number of Hoppers alerted. It returns 0 between 23:00 and 08:00 Lagos; pass `p_now => '2026-10-15 12:00+01'` and `p_spot_at` to test at another hour.
+   It returns the number of Hoppers alerted. It returns 0 between 23:00 and 07:00 Lagos; pass `p_now => '2026-10-15 12:00+01'` and `p_spot_at` to test at another hour.
 4. The send route alone: `curl -X POST $URL/api/push/send -H "Authorization: Bearer $PUSH_SEND_SECRET" -H 'content-type: application/json' -d '{"user_ids":["<id>"],"title":"Test","body":"Hello","url":"/"}'`.
 
 ## Production (Jae)

@@ -27,7 +27,7 @@
 -- Spots do not exist yet (Phase 4). Call notify_spot_alert from the spawner
 -- when they do; until then see docs/PUSH.md for the manual test path.
 --
--- Quiet hours are 23:00 to 08:00 Lagos (Jae's setting for this build; the older
+-- Quiet hours are 23:00 to 07:00 Lagos (Jae, 9 Oct 2026; the older
 -- spec text says 21:00 to 07:00). Change them with set_push_config, no redeploy:
 --   select set_push_config('quiet_from_hour', '21'); select set_push_config('quiet_until_hour', '7');
 -- ============================================================================
@@ -142,13 +142,13 @@ revoke all on function public.set_alert_level(text) from public, anon;
 grant execute on function public.set_alert_level(text) to authenticated, service_role;
 
 -- ------------------------------------------------------------ the picker ---
--- Quiet hours in Lagos time. From 23 to 8 means 23:00 up to (not including) 08:00.
+-- Quiet hours in Lagos time. From 23 to 7 means 23:00 up to (not including) 07:00.
 create or replace function public.push_in_quiet_hours(p_ts timestamptz default now())
 returns boolean language plpgsql stable security definer set search_path = public as $$
 declare
   h integer := extract(hour from p_ts at time zone 'Africa/Lagos')::integer;
   f integer := coalesce(nullif(push_cfg('quiet_from_hour', '23'), '')::integer, 23);
-  u integer := coalesce(nullif(push_cfg('quiet_until_hour', '8'), '')::integer, 8);
+  u integer := coalesce(nullif(push_cfg('quiet_until_hour', '7'), '')::integer, 7);
 begin
   if f = u then return false; end if;
   if f > u then return h >= f or h < u; end if;

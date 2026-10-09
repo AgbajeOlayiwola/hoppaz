@@ -74,22 +74,24 @@ returns uuid[] language sql as $f$
 $f$;
 
 -- The spot sits in open sea off Lagos. 0.01 degree of latitude is about 1.1 km.
--- ------------------------------------------------- quiet hours (23 to 8) ---
+-- ------------------------------------------------- quiet hours (23 to 7) ---
 do $t$
 begin
   perform pg_temp.eq(public.push_in_quiet_hours(pg_temp.lagos('2026-10-15 22:59'))::text, 'false', '22:59 is awake');
   perform pg_temp.eq(public.push_in_quiet_hours(pg_temp.lagos('2026-10-15 23:00'))::text, 'true',  '23:00 is quiet');
   perform pg_temp.eq(public.push_in_quiet_hours(pg_temp.lagos('2026-10-16 00:30'))::text, 'true',  '00:30 is quiet');
-  perform pg_temp.eq(public.push_in_quiet_hours(pg_temp.lagos('2026-10-16 07:59'))::text, 'true',  '07:59 is quiet');
-  perform pg_temp.eq(public.push_in_quiet_hours(pg_temp.lagos('2026-10-16 08:00'))::text, 'false', '08:00 is awake');
+  perform pg_temp.eq(public.push_in_quiet_hours(pg_temp.lagos('2026-10-16 06:59'))::text, 'true',  '06:59 is quiet');
+  perform pg_temp.eq(public.push_in_quiet_hours(pg_temp.lagos('2026-10-16 07:00'))::text, 'false', '07:00 is awake');
   -- Jae can change the hours without a redeploy
   perform public.set_push_config('quiet_from_hour', '21');
-  perform public.set_push_config('quiet_until_hour', '7');
-  perform pg_temp.eq(public.push_in_quiet_hours(pg_temp.lagos('2026-10-15 21:30'))::text, 'true',  '21:30 is quiet with the old hours');
-  perform pg_temp.eq(public.push_in_quiet_hours(pg_temp.lagos('2026-10-16 07:00'))::text, 'false', '07:00 is awake with the old hours');
+  perform public.set_push_config('quiet_until_hour', '9');
+  perform pg_temp.eq(public.push_in_quiet_hours(pg_temp.lagos('2026-10-15 21:30'))::text, 'true',  '21:30 is quiet with the changed hours');
+  perform pg_temp.eq(public.push_in_quiet_hours(pg_temp.lagos('2026-10-16 08:30'))::text, 'true',  '08:30 is quiet with the changed hours');
+  perform pg_temp.eq(public.push_in_quiet_hours(pg_temp.lagos('2026-10-16 09:00'))::text, 'false', '09:00 is awake with the changed hours');
   perform public.set_push_config('quiet_from_hour', null);
   perform public.set_push_config('quiet_until_hour', null);
   perform pg_temp.eq(public.push_in_quiet_hours(pg_temp.lagos('2026-10-15 23:00'))::text, 'true', 'defaults are back');
+  perform pg_temp.eq(public.push_in_quiet_hours(pg_temp.lagos('2026-10-16 07:30'))::text, 'false', 'the default morning is back');
   raise notice 'ok: quiet hours';
 end $t$;
 
