@@ -32,20 +32,21 @@ export const VIBES = [
 export type Vibe = (typeof VIBES)[number];
 
 /**
- * XP ladder: the big level name on Me.
+ * XP ladder: the big level name on Me and in the Play HUD.
  *
- * The names are PROPOSED and pending Jae's final sign-off (UI-REFRESH-PLAN.md,
- * open item 1): JJC, Regular, Plug, Oga, Agba. Thresholds are unchanged.
+ * Jae's approved rebalance (docs/DECISIONS.md, "XP rebalance"): JJC 0, Regular 500,
+ * Plug 2,000, Oga 6,000, Agba 15,000. Each level also has ranks I, II and III in the
+ * decision; those are not drawn yet, so only the level name and its threshold live here.
  * Hopper and Captain are NOT XP levels. They are the bus status (see
  * statusFor below): join and you are a Hopper, four Hop badges and you are a
  * Captain.
  */
 export const LEVELS: ReadonlyArray<readonly [number, string]> = [
   [0, "JJC"],
-  [100, "REGULAR"],
-  [320, "PLUG"],
-  [700, "OGA"],
-  [1400, "AGBA"],
+  [500, "REGULAR"],
+  [2000, "PLUG"],
+  [6000, "OGA"],
+  [15000, "AGBA"],
 ];
 
 export function levelFor(xp: number) {
