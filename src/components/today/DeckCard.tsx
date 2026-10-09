@@ -19,13 +19,16 @@ const NOTCH = { ["--notch-y" as string]: `calc(100% - ${FOOT}px)` } as React.CSS
 
 /**
  * One night as a big flyer card for the deck: the flyer (or the branded block
- * when there is none), the title, when and where, the price, and under the
- * perforation how many are going plus a small violet mark when the night has a
- * box or quests. It wears its own event's colours, like every stub in the app.
+ * when there is none), the title, when and where, the price (with a small violet
+ * mark when the night has a box or quests), and under the perforation how many
+ * are going plus the WE OUTSIDE button. It wears its own event's colours, like
+ * every stub in the app.
  *
- * It draws no position and no tap target; the deck moves it and covers it with
- * one button. `near` is whether it is within two places of the middle: only
- * those load their flyer, and once loaded it stays loaded.
+ * It draws no position; the deck moves it and covers it with one button to open
+ * the breakdown, and WE OUTSIDE sits above that cover (on the middle card only:
+ * a tap on a neighbour still just brings it to the middle). `near` is whether it
+ * is within two places of the middle: only those load their flyer, and once
+ * loaded it stays loaded.
  */
 function DeckCard({
   event,
@@ -35,6 +38,9 @@ function DeckCard({
   box,
   quests,
   near,
+  active,
+  busy,
+  onGoing,
 }: {
   event: EventRow;
   now: number;
@@ -47,10 +53,18 @@ function DeckCard({
   /** How many quests belong to this night. */
   quests: number;
   near: boolean;
+  /** The card in the middle: the only one whose WE OUTSIDE takes a tap. */
+  active: boolean;
+  /** Saving your going. */
+  busy: boolean;
+  /** WE OUTSIDE: the same toggle as I'M GOING on the event page. */
+  onGoing: (event: EventRow) => void;
 }) {
   const theme = themeForEvent(event.starts_at);
   const lead = isEventLead(event);
   const ended = hasEnded(event, now);
+  /** The night can still be said yes to: WE OUTSIDE has a place in the foot. */
+  const live = !ended && !lead;
   const title = eventTitle(event);
   const when = lead ? "TIME TBC" : dayLabel(event.starts_at, now);
   const where = [event.area?.toUpperCase(), eventPrice(event)].filter(Boolean).join(" · ");
@@ -78,37 +92,26 @@ function DeckCard({
         </div>
 
         <div className="flex-none px-4 pb-3 pt-3">
-          <p className="truncate font-mono text-[11px] font-medium uppercase tracking-[0.04em] text-dim">{when}</p>
+          <div className="flex items-center justify-between gap-2">
+            <p className="min-w-0 truncate font-mono text-[11px] font-medium uppercase tracking-[0.04em] text-dim">{when}</p>
+            {mark && (
+              <span className="pill pill-violet flex-none">
+                <Package size={12} aria-hidden />
+                {mark}
+              </span>
+            )}
+          </div>
           <p className="mt-0.5 truncate font-mono text-[11px] font-medium uppercase tracking-[0.04em] text-dim">{where}</p>
           <h2 className="mt-2 line-clamp-2 min-h-[2.2em] font-display text-[20px] font-black leading-[1.1] tracking-[-0.01em]">{title}</h2>
         </div>
 
         <div
-          className="flex flex-none items-center justify-between gap-2 border-t border-dashed border-line px-4"
+          className={clsx("flex flex-none items-center justify-between gap-2 border-t border-dashed border-line pl-4", live ? "pr-[132px]" : "pr-4")}
           style={{ height: FOOT }}
         >
-          <p className="flex min-w-0 items-center gap-1.5 truncate font-mono text-[11px] font-medium uppercase tracking-[0.06em] text-dim">
-            {ended ? (
-              "ENDED"
-            ) : lead ? (
-              "UNCONFIRMED LEAD"
-            ) : going ? (
-              <>
-                <Check size={13} strokeWidth={2.6} className="flex-none text-cream" aria-hidden />
-                <span className="truncate text-cream">YOU&apos;RE GOING{count > 1 ? ` +${count - 1}` : ""}</span>
-              </>
-            ) : count > 0 ? (
-              `${count} GOING`
-            ) : (
-              "BE THE FIRST"
-            )}
+          <p className="min-w-0 truncate font-mono text-[11px] font-medium uppercase tracking-[0.06em] text-dim">
+            {ended ? "ENDED" : lead ? "UNCONFIRMED LEAD" : count > 0 ? `${count} GOING` : "BE THE FIRST"}
           </p>
-          {mark && (
-            <span className="pill pill-violet flex-none">
-              <Package size={12} aria-hidden />
-              {mark}
-            </span>
-          )}
         </div>
 
         {/* The deck dims the cards that are not in the middle by moving only this layer's opacity. */}
@@ -119,6 +122,29 @@ function DeckCard({
           style={{ willChange: "opacity" }}
         />
       </article>
+      {/*
+        WE OUTSIDE sits over the foot, outside the stub: the stub is masked (its notches), which makes it a layer of its own
+        under the deck's cover button, so nothing inside it could be tapped. The middle card only; a neighbour is just tapped to the middle.
+      */}
+      {live && active && (
+        <button
+          type="button"
+          onClick={() => onGoing(event)}
+          disabled={busy}
+          aria-pressed={going}
+          aria-label={going ? "You're going. Tap to undo." : "We outside. Say you're going."}
+          className={clsx("btn absolute right-4 z-20 min-h-[36px] px-3 py-1.5 text-[12px]", going && "btn-ghost border-keke text-keke")}
+          style={{ bottom: (FOOT - 36) / 2 }}
+        >
+          {going ? (
+            <>
+              <Check size={13} strokeWidth={3} aria-hidden /> YOU&apos;RE IN
+            </>
+          ) : (
+            "WE OUTSIDE"
+          )}
+        </button>
+      )}
     </>
   );
 }

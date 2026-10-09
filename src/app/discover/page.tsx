@@ -33,7 +33,8 @@ import {
   type DateFilter,
 } from "@/lib/filters";
 import { eventTitle, haversineKm } from "@/lib/geo";
-import { useHoppaz } from "@/lib/store";
+import { useHoppaz, useToast } from "@/lib/store";
+import { isNeedAccount } from "@/lib/accountGate";
 import { useCheckin } from "@/lib/useCheckin";
 import { useCollectibleEventIds } from "@/lib/useCollectibles";
 import { useEvents, useHop } from "@/lib/useEvents";
@@ -59,6 +60,7 @@ export default function TodayPage() {
   const hop = useHop();
   const { done, checkedAt, busy, checkIn } = useCheckin(userId, refresh);
   const going = useGoing(userId);
+  const say = useToast((st) => st.say);
   const { width, wide } = useViewport();
 
   /** Which night the deck shows: one chosen day, or the next twenty events whatever night they fall on. */
@@ -199,6 +201,10 @@ export default function TodayPage() {
     goingRef.current = going;
   });
   const openId = event?.id ?? null;
+  const openIdRef = useRef<string | null>(null);
+  useEffect(() => {
+    openIdRef.current = openId;
+  });
   useEffect(() => {
     if (!openId) return;
     const was = goingRef.current.isGoing(openId);
@@ -207,6 +213,39 @@ export default function TodayPage() {
       if (is !== was) setDelta((d) => ({ ...d, [openId]: (d[openId] ?? 0) + (is ? 1 : -1) }));
     };
   }, [openId]);
+
+  /* ------------------------------------------------- WE OUTSIDE on a card -- */
+  const WE_OUTSIDE = "We outside. Its group chat invite is in Crew.";
+  // A guest's tap opens the sign-up sheet and finishes on its own after sign-up (useGoing remembers it);
+  // when the going lands, fold it into the count here and say so.
+  const awaiting = useRef<Set<string>>(new Set());
+  useEffect(() => {
+    awaiting.current.forEach((id) => {
+      if (!going.isGoing(id)) return;
+      awaiting.current.delete(id);
+      if (id !== openIdRef.current) setDelta((d) => ({ ...d, [id]: (d[id] ?? 0) + 1 }));
+      say(WE_OUTSIDE, "ok");
+    });
+  }, [going, say]);
+  const weOutside = async (e: EventRow) => {
+    if (going.busy[e.id]) return;
+    const was = going.isGoing(e.id);
+    const err = await going.toggleGoing(e.id);
+    if (err) {
+      if (isNeedAccount(err)) awaiting.current.add(e.id);
+      else say(err, "error");
+      return;
+    }
+    // The open breakdown folds its own change in when it closes; counting it here too would double it.
+    if (e.id !== openIdRef.current) setDelta((d) => ({ ...d, [e.id]: (d[e.id] ?? 0) + (was ? -1 : 1) }));
+    if (!was) say(WE_OUTSIDE, "ok");
+  };
+  // The deck's cards are memoised: hand them one steady function that always reaches the newest.
+  const weOutsideRef = useRef(weOutside);
+  useEffect(() => {
+    weOutsideRef.current = weOutside;
+  });
+  const onGoing = useCallback((e: EventRow) => void weOutsideRef.current(e), []);
 
   const isHopStop = useMemo(() => {
     if (!event || !hop) return false;
@@ -347,6 +386,9 @@ export default function TodayPage() {
                         box={dropSet.has(e.id)}
                         quests={questsByEvent.get(e.id)?.length ?? 0}
                         near={s.near}
+                        active={s.active}
+                        busy={!!going.busy[e.id]}
+                        onGoing={onGoing}
                       />
                     );
                   }}
