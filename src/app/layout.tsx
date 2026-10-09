@@ -21,10 +21,24 @@ import SignupSheet from "@/components/app/SignupSheet";
 import IntroHost from "@/components/intro/IntroHost";
 import { THEME_BOOT_SCRIPT } from "@/lib/theme";
 
+const DESCRIPTION = "What is happening in Lagos today, on one map. Come alone, leave with friends.";
+
+/** Absolute links in previews: the site's own address when it is set, otherwise Next works it out (Vercel's, or localhost). */
+function siteBase() {
+  try {
+    return process.env.NEXT_PUBLIC_SITE_URL ? new URL(process.env.NEXT_PUBLIC_SITE_URL) : undefined;
+  } catch {
+    return undefined;
+  }
+}
+
 export const metadata: Metadata = {
+  metadataBase: siteBase(),
   title: "Hoppaz",
-  description:
-    "What is happening in Lagos today, on one map. Come alone, leave with friends.",
+  description: DESCRIPTION,
+  // Shared links: a Hoppaz card (src/app/opengraph-image.tsx), not a bare text link. An event page has its own card.
+  openGraph: { type: "website", siteName: "Hoppaz", locale: "en_NG", title: "Hoppaz", description: DESCRIPTION },
+  twitter: { card: "summary_large_image", title: "Hoppaz", description: DESCRIPTION },
   applicationName: "Hoppaz",
   manifest: "/manifest.webmanifest",
   appleWebApp: { capable: true, statusBarStyle: "default", title: "Hoppaz" },

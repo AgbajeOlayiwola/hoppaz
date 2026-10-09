@@ -22,6 +22,60 @@ function withDistance(rows: EventRow[], fix: Fix): EventRow[] {
     .sort((a, b) => b.heat - a.heat);
 }
 
+const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+/**
+ * One live event by its id, wherever it is and whenever it starts, or null.
+ * The list below only reaches 45 km around the Hopper, from a few hours ago; a
+ * shared link must still open for a friend in Abuja, or for a night that began
+ * a while back. Live events are public, so this reads the table directly (the
+ * same row the share preview was built from) and the heat counts beside it.
+ * Development with no database answers from the sample day, like the list does.
+ */
+export async function fetchEventById(id: string, fix: Fix): Promise<EventRow | null> {
+  const sample = () => (DEV ? (withDistance(demoEvents(), fix).find((e) => e.id === id) ?? null) : null);
+  const sb = getSupabase();
+  if (!sb) return sample();
+  if (!UUID.test(id)) return null;
+  const { data, error } = await sb
+    .from("events")
+    .select("id,title,venue_name,area,geog,starts_at,price_naira,vibe,source,ig_url,flyer_url")
+    .eq("id", id)
+    .eq("status", "live")
+    .maybeSingle();
+  if (error) {
+    console.warn("[hoppaz] event lookup failed:", error.message);
+    return sample();
+  }
+  if (!data) return null;
+  const row = data as Record<string, unknown>;
+  const at = pointFromGeog(row.geog);
+  if (!at) return null;
+  // The counts come from the heat view; if it cannot be read, the page just shows no crowd yet.
+  const { data: heat } = await sb.from("event_heat").select("heat,checkins,swipes_in,here_now").eq("event_id", id).maybeSingle();
+  const h = (heat ?? {}) as Record<string, number>;
+  const from = fix ?? LAGOS_CENTER;
+  return {
+    id: String(row.id),
+    title: String(row.title),
+    venue_name: String(row.venue_name),
+    area: (row.area as string | null) ?? null,
+    lat: at.lat,
+    lng: at.lng,
+    starts_at: String(row.starts_at),
+    price_naira: Number(row.price_naira) || 0,
+    vibe: String(row.vibe ?? ""),
+    source: row.source as EventRow["source"],
+    ig_url: (row.ig_url as string | null) ?? null,
+    flyer_url: (row.flyer_url as string | null) ?? null,
+    distance_m: haversineKm(from.lat, from.lng, at.lat, at.lng) * 1000,
+    heat: h.heat ?? 0,
+    checkins: h.checkins ?? 0,
+    swipes_in: h.swipes_in ?? 0,
+    here_now: h.here_now ?? 0,
+  };
+}
+
 /** `paused`: Play has the screen, so the refresh timer and the live-heat reloads wait (they catch up when it is false again). */
 export function useEvents(fix: Fix, radiusKm: number, opts: { paused?: boolean } = {}) {
   const paused = !!opts.paused;

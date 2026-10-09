@@ -14,6 +14,13 @@ accounts, event operators, and real partner approvals.
 - [ ] Configure Vercel Production variables: `NEXT_PUBLIC_SUPABASE_URL`,
   `NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY`, `SUPABASE_SECRET_KEY`,
   `HOPPAZ_ADMIN_TOKEN`, `NEXT_PUBLIC_MAP_STYLE`, and `NEXT_PUBLIC_SUPPORT_EMAIL`.
+- [ ] Set `NEXT_PUBLIC_SITE_URL` to the public https address (no trailing slash) in
+  Production. Vercel supplies its own address, but the home page's link preview is
+  fixed when the site is built, and on any other host it would point at
+  `http://localhost:3000`. After deploying, view the home page source and check that
+  the `og:image` tag is the public address. Event links are not affected (they use
+  the address the page was served from). Then paste an event link and the home link
+  into WhatsApp and X once, to see the preview card.
 - [ ] Keep the service role key and admin token server-only. Use a strong unique
   admin token and share it only with authorized moderators.
 - [ ] Configure a separate Supabase project for Preview deployments, or ensure

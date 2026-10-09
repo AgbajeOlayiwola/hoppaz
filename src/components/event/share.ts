@@ -2,12 +2,17 @@ import { nightOf } from "@/lib/filters";
 import { clockShort, eventPrice, eventTitle, isEventLead } from "@/lib/geo";
 import type { EventRow } from "@/lib/types";
 
-/** "FRI 10 OCT": the night the event belongs to (a 1am start is the night before). */
-export function shareDate(startsAt: string) {
+/** "Fri 10 Oct": the night the event belongs to (a 1am start is the night before). */
+function nightLabel(startsAt: string) {
   const d = new Date(`${nightOf(Date.parse(startsAt))}T12:00:00Z`);
   const weekday = d.toLocaleDateString("en-NG", { weekday: "short", timeZone: "UTC" });
   const month = d.toLocaleDateString("en-NG", { month: "short", timeZone: "UTC" });
-  return `${weekday} ${d.getUTCDate()} ${month}`.toUpperCase();
+  return `${weekday} ${d.getUTCDate()} ${month}`;
+}
+
+/** "FRI 10 OCT" */
+export function shareDate(startsAt: string) {
+  return nightLabel(startsAt).toUpperCase();
 }
 
 /** WhatsApp-ready: "SOUTH SOCIAL · FRI 10 OCT · 11PM · LEKKI PHASE 1 · ₦10,000 · 23 Hoppers going". */
@@ -24,9 +29,32 @@ export function shareText(event: EventRow, going: number) {
   return parts.filter(Boolean).join(" · ");
 }
 
-/** The link that opens this one event on the map. */
+/**
+ * What chat apps show under the link: the event's name and one line of facts,
+ * "Fri 10 Oct, 11PM · Victoria Island · Free. See who is going on Hoppaz."
+ * The event page's metadata uses this, so the preview and the shared text agree.
+ */
+export function sharePreview(event: Pick<EventRow, "title" | "starts_at" | "area" | "price_naira">) {
+  const lead = isEventLead(event);
+  const facts = [
+    lead ? `${nightLabel(event.starts_at)}, time to be confirmed` : `${nightLabel(event.starts_at)}, ${clockShort(event.starts_at)}`,
+    event.area,
+    lead ? null : event.price_naira > 0 ? eventPrice(event) : "Free",
+  ];
+  return {
+    title: `${eventTitle(event)} | Hoppaz`,
+    description: `${facts.filter(Boolean).join(" · ")}. See who is going on Hoppaz.`,
+  };
+}
+
+/**
+ * The link that opens this one event's page in Hoppaz: the flyer, the facts,
+ * who is going, and I'M GOING. Shared links come back to Hoppaz, and chat apps
+ * show the event's card (see src/app/event/[id]/layout.tsx). The older
+ * /?e=<id> map link still works for anyone who has one.
+ */
 export function shareUrl(eventId: string) {
-  return `${window.location.origin}/?e=${encodeURIComponent(eventId)}`;
+  return `${window.location.origin}/event/${encodeURIComponent(eventId)}`;
 }
 
 /**
