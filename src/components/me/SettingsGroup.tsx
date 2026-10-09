@@ -5,6 +5,23 @@ import clsx from "clsx";
 import { ChevronDown, FileText, Lock, Play, Settings, ShieldCheck, Trash2, UserRound } from "lucide-react";
 import { RowButton, RowLink, RowValue } from "./Rows";
 import { setThemePref, themePref, type ThemePref } from "@/lib/theme";
+import {
+  ALERT_LEVELS,
+  RESUBSCRIBE_MESSAGE,
+  askToInstall,
+  disablePush,
+  enablePush,
+  getAlertLevel,
+  pushState,
+  sendTestAlert,
+  setAlertLevel,
+  syncPush,
+  type AlertLevel,
+  type EnableResult,
+  type PushState,
+} from "@/lib/push";
+import { supabaseConfigured } from "@/lib/supabase/client";
+import { useSessionStore } from "@/lib/useSession";
 
 const LOOKS: ReadonlyArray<[ThemePref, string]> = [
   ["night", "Dark"],
@@ -38,6 +55,150 @@ function Appearance() {
         ))}
       </div>
       {pref === "clock" && <p className="hint mt-2">Light from 6:30am, dark after 6:45pm, Lagos time.</p>}
+    </div>
+  );
+}
+
+/** What to tell the Hopper when alerts could not be turned on, and what they can do about it. */
+const WHY: Record<Exclude<EnableResult, { ok: true }>["reason"], string> = {
+  "needs-install": "On iPhone, alerts need Hoppaz on your home screen first.",
+  unsupported: "Alerts need the app open on this device.",
+  "no-key": "Alerts need the app open on this device.",
+  denied: "Notifications are blocked for Hoppaz. Allow them in your browser settings, then pick again.",
+  dismissed: "Alerts need the app open until you allow notifications.",
+  "no-session": "Give it a moment, then try again.",
+  server: "Could not turn alerts on. Try again in a minute.",
+};
+
+/**
+ * Spawn alerts: Off, A few (about 3 a day) or All. The choice is kept in the
+ * database; picking A few or All also asks the browser for permission and
+ * subscribes it (lib/push.ts). On iPhone that first needs Hoppaz on the home
+ * screen, which opens the install sheet. Hidden in demo mode (no database).
+ */
+function SpawnAlerts() {
+  const userId = useSessionStore((s) => s.userId);
+  const [level, setLevel] = useState<AlertLevel | null>(null);
+  const [push, setPush] = useState<PushState | null>(null);
+  const [problem, setProblem] = useState<Exclude<EnableResult, { ok: true }>["reason"] | null>(null);
+  const [busy, setBusy] = useState(false);
+  const [test, setTest] = useState<string | null>(null);
+
+  const refresh = async () => setPush(await pushState());
+
+  useEffect(() => {
+    if (!userId) return;
+    let live = true;
+    (async () => {
+      const [l, p] = await Promise.all([getAlertLevel(), pushState()]);
+      if (!live) return;
+      setLevel(l);
+      setPush(p);
+      await syncPush();
+    })();
+    // The service worker asks for a fresh save when the browser rotates the subscription.
+    const onMessage = (e: MessageEvent) => {
+      if (e.data?.type === RESUBSCRIBE_MESSAGE) syncPush();
+    };
+    navigator.serviceWorker?.addEventListener("message", onMessage);
+    return () => {
+      live = false;
+      navigator.serviceWorker?.removeEventListener("message", onMessage);
+    };
+  }, [userId]);
+
+  if (!supabaseConfigured()) return null;
+
+  const turnOn = async () => {
+    setBusy(true);
+    setProblem(null);
+    const r = await enablePush();
+    if (!r.ok) setProblem(r.reason);
+    await refresh();
+    setBusy(false);
+  };
+
+  const pick = async (next: AlertLevel) => {
+    if (busy || next === level) return;
+    const before = level;
+    setLevel(next);
+    setBusy(true);
+    setTest(null);
+    if (!(await setAlertLevel(next))) {
+      setLevel(before);
+      setBusy(false);
+      return;
+    }
+    if (next === "off") {
+      setProblem(null);
+      await disablePush();
+      await refresh();
+      setBusy(false);
+    } else {
+      setBusy(false);
+      await turnOn();
+    }
+  };
+
+  const on = level !== null && level !== "off";
+  const live = on && !!push?.subscribed;
+  let line: string;
+  if (level === null) line = "";
+  else if (level === "off") line = "No alerts. You still see spots on the map when you look.";
+  else if (live) line = `${level === "few" ? "About 3 a day" : "Every spot near you"}, even with the app closed. Nothing between 11pm and 8am.`;
+  else if (problem) line = WHY[problem];
+  else if (push?.support === "needs-install") line = WHY["needs-install"];
+  else if (push?.permission === "denied") line = WHY.denied;
+  else line = "Alerts need the app open.";
+
+  const canInstall = on && !live && (problem === "needs-install" || push?.support === "needs-install");
+  const canTurnOn = on && !live && !canInstall && push?.support === "ok" && push.permission !== "denied";
+
+  return (
+    <div className="px-4 py-3.5">
+      <span className="seclabel block">SPAWN ALERTS</span>
+      <div role="radiogroup" aria-label="Spawn alerts" className="mt-2 grid grid-cols-3 gap-1.5">
+        {ALERT_LEVELS.map(([k, label]) => (
+          <button
+            key={k}
+            type="button"
+            role="radio"
+            aria-checked={level === k}
+            disabled={level === null}
+            onClick={() => pick(k)}
+            className={clsx("chip px-2", level === k && "border-orange bg-orange text-brand-ink")}
+          >
+            {label}
+          </button>
+        ))}
+      </div>
+      {line && <p className="hint mt-2" aria-live="polite">{line}</p>}
+      {canInstall && (
+        <button type="button" className="btn mt-3 w-full" onClick={askToInstall}>
+          ADD TO HOME SCREEN
+        </button>
+      )}
+      {canTurnOn && (
+        <button type="button" className="btn mt-3 w-full" disabled={busy} onClick={turnOn}>
+          {busy ? "ONE MOMENT" : "TURN ON ALERTS"}
+        </button>
+      )}
+      {process.env.NODE_ENV !== "production" && live && (
+        <div className="mt-3">
+          <button
+            type="button"
+            className="btn btn-ghost w-full"
+            onClick={async () => {
+              setTest("Sending");
+              const r = await sendTestAlert();
+              setTest(r ? `Sent to ${r.sent} browser${r.sent === 1 ? "" : "s"}` : "Could not send");
+            }}
+          >
+            SEND ME A TEST ALERT
+          </button>
+          {test && <p className="hint mt-2" aria-live="polite">{test} (development only)</p>}
+        </div>
+      )}
     </div>
   );
 }
@@ -131,6 +292,7 @@ export default function SettingsGroup({
             )}
             <RowValue label="HOME AREA" value={area} action="CHANGE" onAction={onChangeArea} />
             <Appearance />
+            <SpawnAlerts />
             {accountReady &&
               (hasAccount ? (
                 <RowLink href="/account" icon={UserRound} title="Account" hint={email ?? undefined} />
