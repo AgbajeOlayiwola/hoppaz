@@ -210,6 +210,128 @@
   width: 70%;
   height: 70%;
 }
+/* A deck card: the deck's own image (5 by 8) in a tier-coloured edge, over a plate of its name that holds if the image never comes. */
+.deckF {
+  position: absolute;
+  inset: 0;
+  overflow: hidden;
+  border-radius: 14px;
+  border: 3px solid #f5ebdd;
+  background: #17120f;
+}
+.deckPlate {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  place-content: center;
+  gap: 10px;
+  padding: 16px;
+  text-align: center;
+}
+.deckPlate b {
+  font: 900 calc(18px * var(--u)) / 1.1 var(--font-poppins), sans-serif;
+  color: #f5ebdd;
+}
+.deckPlate i {
+  font: 500 calc(9px * var(--u)) / 1 var(--font-mono), monospace;
+  font-style: normal;
+  letter-spacing: 0.14em;
+}
+.deckImg {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  opacity: 0;
+  transition: opacity 0.18s;
+}
+.deckImg.on {
+  opacity: 1;
+}
+.miniDeck {
+  width: calc(40px * var(--u));
+  height: calc(64px * var(--u));
+}
+.miniDeck img {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  border-radius: 4px;
+  border: 2px solid var(--tc, #f5ebdd);
+}
+/* NEW on a first copy: a tag stuck on the card's corner. */
+.tagNew {
+  position: absolute;
+  left: -10px;
+  top: -17px;
+  padding: 5px 9px 4px;
+  border-radius: 6px;
+  background: #ff4d00;
+  color: #0e0b0a;
+  font: 500 calc(11px * var(--u)) / 1 var(--font-mono), monospace;
+  letter-spacing: 0.14em;
+  box-shadow: 0 3px 0 #b83600, 0 6px 14px rgba(0, 0, 0, 0.45);
+  opacity: 0;
+  pointer-events: none;
+}
+/* What this copy was, under the card: its number, a guarantee, a repeat, a stamp. */
+.caps {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  flex-wrap: wrap; /* three chips on the narrowest phone can run past the row */
+  pointer-events: none;
+}
+.capChip {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 6px 10px;
+  border-radius: 99px;
+  border: 1px solid rgba(245, 235, 221, 0.32);
+  background: rgba(14, 11, 10, 0.85);
+  color: #f5ebdd;
+  font: 500 max(10px, calc(10px * var(--u))) / 1 var(--font-mono), monospace;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  white-space: nowrap;
+}
+.capChip[data-stamp] {
+  border-color: #ff4d00;
+}
+.capChip svg {
+  width: calc(11px * var(--u));
+  height: calc(11px * var(--u));
+}
+.stampBtn {
+  pointer-events: auto !important;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  background: #ff4d00;
+  color: #0e0b0a;
+  border: 0;
+  border-radius: 99px;
+  font: 500 max(11px, calc(11px * var(--u))) / 1 var(--font-mono), monospace;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  cursor: pointer;
+  box-shadow: 0 3px 0 #b83600;
+}
+.stampBtn:disabled {
+  opacity: 0.65;
+  cursor: default;
+  box-shadow: none;
+}
+.stampBtn[data-done] {
+  background: rgba(14, 11, 10, 0.85);
+  color: #f5ebdd;
+  box-shadow: inset 0 0 0 1.5px #ff4d00;
+}
 .hint svg {
   width: 100%;
   height: 100%;
@@ -260,7 +382,7 @@
   stroke-linejoin: round;
 }
 .note {
-  font-size: calc(10px * var(--u));
+  font-size: max(10px, calc(10px * var(--u)));
   letter-spacing: 0.06em;
   text-transform: uppercase;
   color: #f5ebdd;
@@ -272,6 +394,15 @@
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
+}
+
+/* the note under "Stamp it" may need two lines */
+.noteWrap {
+  white-space: normal;
+  overflow: visible;
+  text-overflow: clip;
+  line-height: 1.35;
+  border-radius: 14px;
 }
 
 /* Landing effects live in their own layer on the body, so they outlive the stage. */

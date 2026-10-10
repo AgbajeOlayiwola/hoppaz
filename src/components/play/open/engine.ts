@@ -2,7 +2,8 @@ import { sfx } from "@/lib/sound/sfx";
 import { haptics } from "@/lib/haptics";
 import { levelFor } from "@/lib/brand";
 import s from "./OpenStage.module.css";
-import { cardSVG, crateSVG, rewardCardSVG, CHECK_SVG, SHARE_SVG, SWIPE_SVG, TAP_SVG } from "./art";
+import { artUrl, cardLabel, copyLine, isCardPrize, preloadCard, type StampResult, type WonCard } from "@/lib/cards";
+import { cardSVG, crateSVG, deckFaceHTML, rewardCardSVG, CHECK_SVG, SHARE_SVG, SWIPE_SVG, TAP_SVG } from "./art";
 import { MAP_SCALE, TIER } from "./tiers";
 import { emitOpenEvent } from "./events";
 import type { ClaimOk, ClaimRefused, ClaimResult, LandKind, OpenTargets, OpenTier } from "./types";
@@ -20,11 +21,14 @@ type Pt = { x: number; y: number; w: number; h: number; l: number; t: number };
 
 type Item =
   | { type: "xp"; v: number; x?: number; y?: number; done?: boolean }
-  | { type: "card"; card: { key: string; name: string }; x?: number; y?: number; done?: boolean }
+  | { type: "card"; card: { key: string; name: string }; deck?: WonCard; x?: number; y?: number; done?: boolean }
   | { type: "stamp"; x?: number; y?: number; done?: boolean };
 
-/** The big card that rare, epic and legendary boxes show: a collectible, or the XP reward when there is no collectible. */
-type BigCard = { kind: "collectible"; card: { key: string; name: string } } | { kind: "xp"; xp: number; title: string };
+/**
+ * The big card a box shows: the deck card it paid (any rarity, face up after a flip), or on a rare, epic or legendary box
+ * a collectible, or the XP reward when there is nothing else.
+ */
+type BigCard = { kind: "deck"; card: WonCard } | { kind: "collectible"; card: { key: string; name: string } } | { kind: "xp"; xp: number; title: string };
 
 export type EngineDeps = {
   root: HTMLElement;
@@ -37,6 +41,10 @@ export type EngineDeps = {
   firstOfDay: () => boolean;
   xpBefore: () => number | null;
   share: (title: string) => void;
+  /** "Stamp it": the shell reads where the player stands and calls visit_card. The position goes into that call only. */
+  stamp: (card: WonCard) => Promise<StampResult>;
+  /** Whether to offer "Stamp it" under a card: a fresh reading puts the player inside its circle. */
+  canStamp: (card: WonCard) => boolean;
   onLand: (kind: LandKind, result: ClaimOk) => void;
   onDone: (r: ClaimResult) => void;
   onCancel: () => void;
@@ -87,8 +95,10 @@ export type OpenEngine = {
 };
 
 export function createOpenEngine(d: EngineDeps): OpenEngine {
-  const { stage, dim, root, tier } = d;
-  const T = TIER[tier];
+  const { stage, dim, root } = d;
+  // The crate is drawn at the box's tier. A box that pays a card is celebrated at the card's rarity (retier, once the answer is in).
+  let tier = d.tier;
+  let T = TIER[tier];
   const RM = typeof window !== "undefined" && window.matchMedia("(prefers-reduced-motion: reduce)").matches;
   const LOW = typeof navigator !== "undefined" && ((navigator.hardwareConcurrency || 8) <= 2 || ((navigator as Navigator & { deviceMemory?: number }).deviceMemory || 8) <= 2);
   /** Reduced motion keeps every beat but halves the waits and drops the shake and freeze. */
@@ -265,7 +275,7 @@ export function createOpenEngine(d: EngineDeps): OpenEngine {
     } else if (it.type === "card") {
       ringAt(where.shelf(), 46 * U, "#F5EBDD");
       sfx.click();
-      d.onLand("collectible", result);
+      d.onLand(it.deck ? "card" : "collectible", result);
     } else {
       ringAt(where.pips(), 26 * U, "#FF4D00");
       sfx.stamp();
@@ -284,6 +294,8 @@ export function createOpenEngine(d: EngineDeps): OpenEngine {
     } else if (it.type === "stamp") {
       inner = `<div class="${s.stampi}">${CHECK_SVG}</div>`;
       lab = "TODAY";
+    } else if (it.deck) {
+      inner = `<div class="${s.miniDeck}" style="--tc:${T.t}"><img src="${artUrl(it.deck, "thumb")}" alt="" draggable="false"></div>`;
     } else {
       inner = `<div class="${s.mini}">${cardSVG(it.card, tier)}</div>`;
     }
@@ -441,8 +453,10 @@ export function createOpenEngine(d: EngineDeps): OpenEngine {
 
   /** The full-screen card. Face up after a flip. */
   function showCard(big: BigCard, opts: { w?: number; y?: number; dur?: number; instant?: boolean } = {}) {
-    const w = (opts.w || 212) * U;
-    const h = Math.round(w * 1.4);
+    const deck = big.kind === "deck";
+    // A deck card is 5 by 8, narrower than the 1 by 1.4 plate the collectibles and the XP card use.
+    const w = (opts.w || (deck ? 184 : 212)) * U;
+    const h = Math.round(w * (deck ? 1.6 : 1.4));
     const y = opts.y ?? CY + 12 * U;
     const dur = D(opts.dur || 600);
     const wrap = mk(s.card, w, h, "");
@@ -454,12 +468,27 @@ export function createOpenEngine(d: EngineDeps): OpenEngine {
         wrap.click();
       }
     });
-    wrap.setAttribute("aria-label", big.kind === "collectible" ? `${big.card.name}. Tap to put it on your Shelf.` : `${big.title}. Tap to collect.`);
+    wrap.setAttribute(
+      "aria-label",
+      deck ? `${cardLabel(big.card)}. Tap to keep it.` : big.kind === "collectible" ? `${big.card.name}. Tap to put it on your Shelf.` : `${big.title}. Tap to collect.`
+    );
     const inn = document.createElement("div");
     inn.className = s.cardIn;
-    const face = big.kind === "collectible" ? cardSVG(big.card, tier) : rewardCardSVG({ xp: big.xp, title: big.title }, tier);
+    const face = big.kind === "deck" ? deckFaceHTML(big.card, tier) : big.kind === "collectible" ? cardSVG(big.card, tier) : rewardCardSVG({ xp: big.xp, title: big.title }, tier);
     inn.innerHTML = `<div class="${s.cardF}" style="filter:drop-shadow(0 0 ${tier === "legendary" ? 34 : 22}px ${T.c})">${face}</div><div class="${s.cardB}"><svg viewBox="0 0 60 60"><circle cx="30" cy="30" r="26" fill="none" stroke="#5B2EFF" stroke-width="3"/><circle cx="30" cy="30" r="17" fill="none" stroke="#FF4D00" stroke-width="3"/><circle cx="30" cy="30" r="7" fill="#F5EBDD"/></svg></div>`;
     wrap.appendChild(inn);
+    if (deck) {
+      // The image fades in over its plate; one that cannot load leaves the plate (the name and rarity) as the face.
+      const img = inn.querySelector<HTMLImageElement>("img");
+      if (img) {
+        const on = () => img.classList.add(s.on);
+        if (img.complete && img.naturalWidth) on();
+        else {
+          img.addEventListener("load", on, { once: true });
+          img.addEventListener("error", () => img.remove(), { once: true });
+        }
+      }
+    }
     put(wrap, CX, y, 0.5);
     wrap.style.opacity = "0";
     anim(wrap, [{ transform: tf(CX, y, 0.5), opacity: 0 }, { transform: tf(CX, y, 1), opacity: 1 }], { duration: dur, easing: "cubic-bezier(.2,.9,.3,1)" });
@@ -476,6 +505,102 @@ export function createOpenEngine(d: EngineDeps): OpenEngine {
     const el = mk(s.hint, 34 * U, 34 * U, `<div class="${s.tap}">${TAP_SVG}</div>`);
     put(el, CX, y);
     return el;
+  }
+
+  /**
+   * What goes with a deck card once it is face up: the NEW tag stuck on its corner, a row saying what this copy was
+   * (its number, a guarantee, a repeat, already stamped) and, when a fresh reading puts the player inside the card's
+   * circle, "Stamp it". `bottom` is where the next thing (the tap hint) goes, `offers` says Stamp it is there (the card then
+   * waits longer to be kept); `clear` takes it all away when the card is kept.
+   */
+  function dock(cd: { wrap: HTMLElement; y: number; h: number }, card: WonCard) {
+    const els: HTMLElement[] = [];
+    let y = cd.y + cd.h / 2;
+    let offers = false;
+    if (card.isNew) {
+      const tag = document.createElement("div");
+      tag.className = s.tagNew;
+      tag.textContent = "NEW";
+      cd.wrap.appendChild(tag);
+      anim(tag, [{ transform: "rotate(-6deg) scale(1.7)", opacity: 0 }, { transform: "rotate(-6deg) scale(1)", opacity: 1 }], { duration: D(220), delay: D(120), easing: "cubic-bezier(.2,.9,.3,1)" });
+    }
+    const chips: string[] = [];
+    const no = copyLine(card, card.copyNo);
+    if (no) chips.push(`<span class="${s.capChip}">${no}</span>`);
+    if (card.lifted) chips.push(`<span class="${s.capChip}">Guaranteed ${card.rarity}</span>`);
+    if (!card.isNew) chips.push(`<span class="${s.capChip}">Another copy</span>`);
+    if (card.visited) {
+      chips.push(`<span class="${s.capChip}" data-stamp>${CHECK_SVG}Visited</span>`);
+      // a walked box that sat inside its circle stamped it on the spot
+      at(D(320), () => {
+        sfx.stamp();
+        haptics.buzz("stampSmall");
+      });
+    }
+    if (chips.length) {
+      const row = mk(s.caps, Math.min(W - 24, 330 * U), 26 * U, chips.join(""));
+      y += 22 * U;
+      put(row, CX, y);
+      row.style.opacity = "0";
+      anim(row, [{ opacity: 0, transform: tf(CX, y + 8 * U) }, { opacity: 1, transform: tf(CX, y) }], { duration: D(240) });
+      els.push(row);
+      y += 14 * U;
+    }
+    if (!card.visited && d.canStamp(card)) {
+      const bw = 150 * U;
+      const bh = Math.max(44, 36 * U); // the main action of the moment: never under a 44 px tap target
+      offers = true;
+      y += 26 * U + (bh - 36 * U) / 2;
+      const by = y; // the button's own height on the stage (y moves on below)
+      const btn = document.createElement("button");
+      btn.type = "button";
+      btn.className = s.stampBtn;
+      btn.style.cssText = `position:absolute;left:0;top:0;width:${bw}px;height:${bh}px;margin:${-bh / 2}px 0 0 ${-bw / 2}px;opacity:0;`;
+      btn.textContent = "Stamp it";
+      stage.appendChild(btn);
+      put(btn, CX, by);
+      anim(btn, [{ opacity: 0, transform: tf(CX, by + 10 * U, 0.92) }, { opacity: 1, transform: tf(CX, by) }], { duration: D(260) });
+      // a line under the button for what the stamp said (it may run to two lines)
+      const noteY = by + bh / 2 + 20 * U; // 6 below the button, then half the note's own height
+      const note = mk(`${s.note} ${s.noteWrap}`, Math.min(W - 40, 280 * U), 28 * U, "");
+      note.style.opacity = "0";
+      put(note, CX, noteY);
+      let busy = false;
+      btn.onclick = async (e) => {
+        e.stopPropagation();
+        if (busy || btn.dataset.done) return;
+        busy = true;
+        btn.disabled = true;
+        btn.textContent = "Stamping";
+        let r: StampResult;
+        try {
+          r = await d.stamp(card);
+        } catch {
+          r = { ok: false, reason: "error", message: "That didn't stamp. Try again in a bit." };
+        }
+        if (destroyed || finished) return;
+        busy = false;
+        const say = r.ok ? r.line : r.message;
+        d.say(say);
+        if (r.ok) {
+          btn.dataset.done = "1";
+          btn.textContent = r.xp > 0 ? `Stamped +${r.xp} XP` : "Stamped";
+          if (r.xpSkipped) showNote(note, say, noteY);
+        } else {
+          btn.disabled = false;
+          btn.textContent = "Stamp it";
+          showNote(note, say, noteY);
+        }
+      };
+      els.push(btn, note);
+      y += 64 * U + (bh - 36 * U) / 2;
+    }
+    return { bottom: y, offers, clear: () => els.forEach((e) => e.remove()) };
+  }
+  function showNote(note: HTMLElement, text: string, y: number) {
+    note.textContent = text;
+    note.style.height = "auto";
+    anim(note, [{ opacity: 0, transform: tf(CX, y - 8 * U) }, { opacity: 1, transform: tf(CX, y) }], { duration: D(200) });
   }
 
   /* ------------------------------------------------------------- the open -- */
@@ -644,16 +769,22 @@ export function createOpenEngine(d: EngineDeps): OpenEngine {
     if (destroyed) return;
     waitAnim?.cancel();
     waitAnim = null;
+    if (res.ok && res.card) {
+      // the card decides how big this is: its rarity picks the burst, the drum and the turn-up, whatever the crate was
+      preloadCard(res.card);
+      tier = res.card.rarity;
+      T = TIER[tier];
+    }
     emitOpenEvent({ type: "open-claimed", tier, result: res });
     if (!res.ok) {
       refuse(res);
       return;
     }
     result = res;
-    if (big) {
+    if (tier === "legendary") {
       const wait = Math.max(0, D(600) - (performance.now() - began));
       at(wait, () => seqLegend(res));
-    } else if (tier === "common") seqCommon(res);
+    } else if (tier === "common" && !res.card) seqCommon(res);
     else seqRare(res);
   }
 
@@ -684,7 +815,11 @@ export function createOpenEngine(d: EngineDeps): OpenEngine {
   function itemsFor(res: ClaimOk): { list: Item[]; big: BigCard | null } {
     const list: Item[] = [];
     let big: BigCard | null = null;
-    if (tier === "common") {
+    if (res.card) {
+      // a deck card is always the big face-up card, at any rarity; the XP flies as an orb beside it
+      list.push({ type: "xp", v: res.xp });
+      big = { kind: "deck", card: res.card };
+    } else if (tier === "common") {
       list.push({ type: "xp", v: res.xp });
       if (res.collectible) list.push({ type: "card", card: res.collectible });
     } else if (res.collectible) {
@@ -692,7 +827,8 @@ export function createOpenEngine(d: EngineDeps): OpenEngine {
       big = { kind: "collectible", card: res.collectible };
     } else {
       // XP only: the big card carries the XP, so no orb.
-      big = { kind: "xp", xp: res.xp, title: res.title || `${T.name} box` };
+      // a card prize that found no card ("Card" on the receipt) is a plain XP reward here, named after the box
+      big = { kind: "xp", xp: res.xp, title: res.title && !isCardPrize(res.title) ? res.title : `${T.name} box` };
     }
     if (d.firstOfDay()) list.push({ type: "stamp" });
     return { list, big };
@@ -721,7 +857,8 @@ export function createOpenEngine(d: EngineDeps): OpenEngine {
 
   function announce(res: ClaimOk, big: BigCard | null) {
     const parts = [`${res.xp} XP`];
-    if (res.collectible) parts.push(res.collectible.name);
+    if (res.card) parts.push(`${res.card.name}, a ${res.card.rarity} card${res.card.isNew ? ", new" : ""}`);
+    else if (res.collectible) parts.push(res.collectible.name);
     d.say(`${big ? `${T.name}. ` : ""}You got ${parts.join(" and ")}.`);
   }
 
@@ -737,17 +874,25 @@ export function createOpenEngine(d: EngineDeps): OpenEngine {
     at(D(1500), finish);
   }
 
+  /** What flies to the Shelf or the XP bar when the big card is tapped. */
+  function keepItem(big: BigCard): Item {
+    if (big.kind === "deck") return { type: "card", card: { key: big.card.key, name: big.card.name }, deck: big.card };
+    return big.kind === "collectible" ? { type: "card", card: big.card } : { type: "xp", v: big.xp };
+  }
+
   function seqRare(res: ClaimOk) {
     const c = crate as HTMLElement;
     const ep = tier === "epic";
+    // a Common card gets the same turn-up with the Common burst: no glow on the edges
+    const lowKey = tier === "common";
     const { list, big } = itemsFor(res);
     announce(res, big);
     squash(c, 120);
     rip(c);
     let parts: Animation[] = [];
     at(D(120), () => {
-      parts = burst({ n: ep ? 36 : 26, waves: ep ? 2 : 1, pw: ep ? 1.25 : 1 });
-      edgeEl = edge(ep ? 0.95 : 0.6);
+      parts = burst({ n: ep ? 36 : lowKey ? 18 : 26, waves: ep ? 2 : 1, pw: ep ? 1.25 : 1 });
+      if (!lowKey) edgeEl = edge(ep ? 0.95 : 0.6);
       if (ep) raysEl = rays(420 * U);
     });
     const fr = ep && !RM ? 200 : 0; // epic: a 200 ms freeze frame on the burst
@@ -763,14 +908,17 @@ export function createOpenEngine(d: EngineDeps): OpenEngine {
       anim(c, [{ transform: tf(CX, CY, 1), opacity: 1 }, { transform: tf(CX, CY + 30 * U, 0.5), opacity: 0 }], { duration: D(260) });
       const cd = showCard(big, { dur: 600, y: CY + 12 * U });
       at(D(640), () => {
-        const h = readyHint(cd.y + cd.h / 2 + 30 * U);
+        const ex = big.kind === "deck" ? dock(cd, big.card) : null;
+        if (ex) haptics.buzz("cardUp");
+        const h = readyHint(ex ? ex.bottom + 18 * U : cd.y + cd.h / 2 + 30 * U);
         let done = false;
         const go = () => {
           if (done || destroyed) return;
           done = true;
           cardGo = null;
           h.remove();
-          const item: Item = big.kind === "collectible" ? { type: "card", card: big.card } : { type: "xp", v: big.xp };
+          ex?.clear();
+          const item = keepItem(big);
           const t = targetOf(item);
           if (edgeEl) anim(edgeEl, [{ opacity: ep ? 0.95 : 0.6 }, { opacity: 0 }], { duration: D(450) });
           if (raysEl) anim(raysEl, [{ opacity: 0.55 }, { opacity: 0 }], { duration: D(450) });
@@ -788,7 +936,7 @@ export function createOpenEngine(d: EngineDeps): OpenEngine {
         stage.onclick = (e) => {
           if (e.target === stage) go();
         };
-        at(6500, go);
+        at(ex?.offers ? 20000 : 6500, go);
       });
     });
   }
@@ -827,18 +975,19 @@ export function createOpenEngine(d: EngineDeps): OpenEngine {
     const showIt = (instant: boolean) => {
       if (cardUp || !big) return;
       anim(c, [{ transform: tf(CX, CY, 1), opacity: 1 }, { transform: tf(CX, CY + 30 * U, 0.5), opacity: 0 }], { duration: instant ? 10 : D(260) });
-      const cd = showCard(big, { dur: instant ? 10 : 700, w: 214, y: CY + 10 * U, instant });
+      const cd = showCard(big, { dur: instant ? 10 : 700, w: big.kind === "deck" ? undefined : 214, y: CY + 10 * U, instant });
       if (instant && edgeEl) anim(edgeEl, [{ opacity: 1 }], { duration: 10 });
       at(instant ? 60 : D(760), () => {
         sfx.sparkle();
         haptics.buzz("cardUp");
+        const ex = big.kind === "deck" ? dock(cd, big.card) : null;
         const sh = mk(s.share, 150 * U, 38 * U, `${SHARE_SVG}Share`);
-        const sy = cd.y + cd.h / 2 + 32 * U;
+        const sy = ex ? ex.bottom + 22 * U : cd.y + cd.h / 2 + 32 * U;
         put(sh, CX, sy);
         anim(sh, [{ opacity: 0, transform: tf(CX, sy + 12 * U, 0.9) }, { opacity: 1, transform: tf(CX, sy) }], { duration: D(260) });
         sh.onclick = (e) => {
           e.stopPropagation();
-          d.share(big.kind === "collectible" ? big.card.name : big.title);
+          d.share(big.kind === "xp" ? big.title : big.card.name);
         };
         const h = readyHint(sy + 50 * U);
         let done = false;
@@ -848,7 +997,8 @@ export function createOpenEngine(d: EngineDeps): OpenEngine {
           cardGo = null;
           sh.remove();
           h.remove();
-          const item: Item = big.kind === "collectible" ? { type: "card", card: big.card } : { type: "xp", v: big.xp };
+          ex?.clear();
+          const item = keepItem(big);
           const t = targetOf(item);
           if (edgeEl) anim(edgeEl, [{ opacity: 1 }, { opacity: 0 }], { duration: D(500) });
           if (raysEl) anim(raysEl, [{ opacity: 0.55 }, { opacity: 0 }], { duration: D(500) });
@@ -866,7 +1016,7 @@ export function createOpenEngine(d: EngineDeps): OpenEngine {
         stage.onclick = (e) => {
           if (e.target === stage) go();
         };
-        at(9000, go);
+        at(ex?.offers ? 20000 : 9000, go);
       });
     };
 
@@ -892,7 +1042,8 @@ export function createOpenEngine(d: EngineDeps): OpenEngine {
     result = res;
     dim.classList.add(s.dimOn);
     const list: Item[] = [{ type: "xp", v: res.xp }];
-    if (res.collectible) list.push({ type: "card", card: res.collectible });
+    if (res.card) list.push({ type: "card", card: { key: res.card.key, name: res.card.name }, deck: res.card });
+    else if (res.collectible) list.push({ type: "card", card: res.collectible });
     if (d.firstOfDay()) list.push({ type: "stamp" });
     const ens = fan(list, 0, D(90), CY - 20 * U);
     ens.forEach((en, i) => at(D(520) + i * D(60), () => flyItem(en)));

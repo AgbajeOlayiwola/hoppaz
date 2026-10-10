@@ -101,7 +101,22 @@ Same function and same answer as before, plus a remote path.
 Success:
 
 ```json
-{ "ok": true, "claim_id": "0d5b2c7a-91e3-4c58-8f0a-3b6e7d21a9c4", "reward": "Small find", "description": "", "code": null, "xp": 10 }
+{ "ok": true, "claim_id": "0d5b2c7a-91e3-4c58-8f0a-3b6e7d21a9c4", "reward": "Small find", "description": "", "code": null, "xp": 10, "card": null }
+```
+
+`card` is `null` for every prize except a card prize (a box with `card_max_tier`, so never a small or welcome box). For a card prize it is the card as the client shows it, and `xp` is the prize row's XP, topped up to the lifted tier's when a guarantee (the 10th card claim since a Rare, the 60th since an Epic) lifted the card. `card` is also `null` on a card prize when the deck has nothing left for that box (XP only). On a card prize `reward` reads "Card", never a tier ("Epic card"): the card that lands can be another tier than the prize row, so a client shows the card, not that text. `xp` is the XP of the card that landed (a lifted card pays its tier's XP; a card below the prize tier pays its own tier's, except in a Golden Box). Shape, and the rest of the card API: [CARDS.md](CARDS.md), "As built".
+
+```json
+"card": {
+  "id": "43c26ef4-ac2b-499c-9630-c2549a7299aa", "key": "YAB-01", "name": "Yaba Higher College",
+  "set": { "key": "yaba", "name": "Yaba" }, "division": "Lagos Mainland", "category": "institution",
+  "rarity": "epic", "numbered": true, "copies_total": 100, "copy_no": 7,
+  "is_new": true, "lifted": false, "visited": false,
+  "known_for": "...", "lore": "...", "fact": "...", "question": "...", "home_area": "Yaba",
+  "source": { "title": "...", "url": "..." },
+  "geo": { "kind": "place", "lat": 6.518728, "lng": 3.374141, "radius_m": 150 },
+  "art": { "front": "/cards/s1/front/YAB-01.webp", "back": "/cards/s1/back/YAB-01.webp", "thumb": "/cards/s1/thumb/YAB-01.webp", "version": 1, "credit": null }
+}
 ```
 
 Refusals (`ok: false`):

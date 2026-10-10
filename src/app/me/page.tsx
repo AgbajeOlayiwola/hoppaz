@@ -79,6 +79,8 @@ function MePagePage() {
   const [picking, setPicking] = useState(false);
   const [earnOpen, setEarnOpen] = useState(false);
   const [revealing, setRevealing] = useState(false);
+  /** Bumped when today's box paid a card, so the shelf strip reads its cards again. */
+  const [shelfKey, setShelfKey] = useState(0);
   const [birthday, setBirthday] = useState("");
 
   useEffect(() => {
@@ -259,9 +261,12 @@ function MePagePage() {
     if ("error" in r) return r;
     if (r.already) return { error: "You already opened today's box. Back tomorrow." };
     if (DEMO) setDemoMe((p) => (p ? { ...p, xp: p.xp + r.box.xp } : p));
+    if (r.card) setShelfKey((k) => k + 1);
     return {
       items: [
         { kind: "reward", title: r.box.title, line: "Your box for today." },
+        // a card only when staff have switched cards on for today's box
+        ...(r.card ? [{ kind: "card" as const, title: r.card.name, card: r.card }] : []),
         { kind: "xp", title: `+${r.box.xp} XP`, line: "Added to your XP. Streak kept." },
       ],
     };
@@ -332,7 +337,7 @@ function MePagePage() {
         />
       )}
 
-      <ShelfStrip userId={userId} offline={state === "offline"} />
+      <ShelfStrip key={shelfKey} userId={userId} offline={state === "offline"} />
 
       <BadgeShelf badges={badges} earned={owned} fresh={fresh} />
 

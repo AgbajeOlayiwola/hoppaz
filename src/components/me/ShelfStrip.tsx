@@ -3,9 +3,12 @@
 import Link from "next/link";
 import { useEffect, useState } from "react";
 import { Bus, ChevronRight, CookingPot, Disc3, Drum, Gift, Lock, Shell, Ticket, type LucideIcon } from "lucide-react";
+import CardFace from "@/components/cards/CardFace";
+import CardSheet from "@/components/cards/CardSheet";
+import { isCardPrize, shortDay, useCards, type CardShelf } from "@/lib/cards";
 import { HUNT_ITEMS, HUNT_KEYS, RARITY, type HuntKey, type Rarity } from "@/lib/huntItems";
 import { loadCollection, loadDropReceipts, type CollectionEntry, type DropReceipt } from "@/lib/useCollectibles";
-import { DEMO, demoCollection, demoEmpty, demoReceipts } from "./demo";
+import { DEMO, demoCardShelf, demoCollection, demoEmpty, demoReceipts } from "./demo";
 
 /* eslint-disable @next/next/no-img-element -- collectible art is Hoppaz or partner supplied, sizes unknown */
 
@@ -23,12 +26,15 @@ const ON: Record<Rarity, string> = { legendary: "#0E0B0A", epic: "#0E0B0A", rare
 
 const CARD = "flex h-[104px] w-[74px] flex-none flex-col overflow-hidden rounded-[8px] border-[1.5px]";
 
+/** How many deck cards the strip shows, newest first. The rest are in the Cards tab of the collection. */
+const RECENT_CARDS = 12;
+
 /** One trading-card tile: coloured art on top, the name and a mono tag under it. */
 function Tile({ name, tag, color, ink, icon: Icon, art }: { name: string; tag: string; color?: string; ink?: string; icon: LucideIcon; art?: string | null }) {
   return (
     <li className="flex-none">
       <Link
-        href="/collection"
+        href="/collection?tab=shelf"
         aria-label={`${name}, ${tag.toLowerCase()}. Open your shelf`}
         className={`${CARD} ${color ? "" : "border-line"}`}
         style={color ? { borderColor: color } : undefined}
@@ -54,7 +60,7 @@ function Locked({ hint }: { hint: string }) {
   return (
     <li className="flex-none">
       <Link
-        href="/collection"
+        href="/collection?tab=shelf"
         aria-label={`Not found yet. ${hint}`}
         className="flex h-[104px] w-[74px] flex-col items-center justify-center gap-1.5 rounded-[8px] border-[1.5px] border-dashed border-line text-dim"
       >
@@ -68,10 +74,11 @@ function Locked({ hint }: { hint: string }) {
 }
 
 /**
- * Your shelf as a strip of trading cards: the camera-hunt items first (found
+ * Your shelf as a strip of trading cards: your newest deck cards first (the deck's own thumbnails, a stamped one
+ * carries the Visited stamp, a tap opens the card), then the camera-hunt items (found
  * ones in their rarity colour, the rest dashed and locked), then collectibles
  * and the rewards you claimed. The strip is light on purpose (no 3D); the full
- * shelf at /collection has the models. Under it, how much of the hunt set you
+ * shelf at /collection has the models. Under it, how much of the deck and of the hunt set you
  * have.
  */
 export default function ShelfStrip({ userId, offline = false }: { userId: string | null; offline?: boolean }) {
@@ -79,12 +86,17 @@ export default function ShelfStrip({ userId, offline = false }: { userId: string
   const [receipts, setReceipts] = useState<DropReceipt[]>([]);
   const [loaded, setLoaded] = useState(false);
   const [failed, setFailed] = useState(false);
+  const [demoCards, setDemoCards] = useState<CardShelf | null>(null);
+  const deck = useCards(userId, { demo: demoCards });
+  const [openId, setOpenId] = useState<string | null>(null);
+  const [stampedNow, setStampedNow] = useState<string | null>(null);
 
   useEffect(() => {
     if (DEMO) {
       const t = Date.now();
       setItems(demoEmpty() ? [] : demoCollection(t));
       setReceipts(demoEmpty() ? [] : demoReceipts(t));
+      if (!demoEmpty()) setDemoCards(demoCardShelf(t));
       setLoaded(true);
       return;
     }
@@ -107,14 +119,18 @@ export default function ShelfStrip({ userId, offline = false }: { userId: string
 
   // Camera hunt finds arrive as drop receipts tagged with the 3D item they unlocked.
   const found = new Map(receipts.filter((r) => r.hunt_item).map((r) => [r.hunt_item!, r]));
-  const rewards = receipts.filter((r) => !r.hunt_item);
+  // a card prize's receipt is not a reward tile: the card itself is in the strip
+  const rewards = receipts.filter((r) => !r.hunt_item && !isCardPrize(r.reward));
   const hunted = HUNT_KEYS.filter((k) => found.has(k)).length;
-  const total = hunted + items.length + rewards.length;
+  const cards = deck.shelf?.owned ?? [];
+  const total = hunted + items.length + rewards.length + (deck.shelf?.totals.cards ?? 0);
+  const opened = openId ? (cards.find((o) => o.card.id === openId) ?? null) : null;
+  const openedSet = opened ? deck.shelf?.sets?.find((x) => x.key === opened.card.setKey) : null;
   const cantLoad = !DEMO && !loaded && (failed || offline);
 
   return (
     <section aria-label="Your shelf" className="mt-7">
-      <div className="mb-2.5 flex items-center justify-between">
+      <div className="relative z-10 mb-2.5 flex items-center justify-between">
         <p className="seclabel">YOUR SHELF{loaded ? ` · ${total}` : ""}</p>
         {!cantLoad && (
           <Link href="/collection" className="seclabel -my-4 -mr-2 flex min-h-[44px] items-center gap-0.5 pl-3 pr-2 hover:text-cream">
@@ -127,7 +143,20 @@ export default function ShelfStrip({ userId, offline = false }: { userId: string
         <p className="hint">Couldn&apos;t load your shelf. It&apos;ll be here when you&apos;re back online.</p>
       ) : loaded ? (
         <>
-          <ul className="-mx-4 flex gap-2.5 overflow-x-auto px-4 pb-1 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+          {/* the Rare and Epic glow reaches about 10 px past a tile, and overflow-x clips the top too: room for it, taken back with margins */}
+          <ul className="-mx-4 -mb-2 -mt-3 flex gap-2.5 overflow-x-auto px-4 pb-3 pt-3 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+            {cards.slice(0, RECENT_CARDS).map((o) => (
+              <li key={o.card.id} className="w-[66px] flex-none">
+                <button
+                  type="button"
+                  onClick={() => setOpenId(o.card.id)}
+                  aria-label={`${o.card.name}, ${o.card.rarity} card${o.count > 1 ? `, you have ${o.count}` : ""}${o.visited && o.visitedOn ? `, visited ${shortDay(o.visitedOn)}` : ""}. Open it`}
+                  className="block w-full rounded-[6px]"
+                >
+                  <CardFace card={o.card} mode="tile" tileSizes="66px" visited={o.visited} visitedOn={o.visitedOn} count={o.count} />
+                </button>
+              </li>
+            ))}
             {HUNT_KEYS.map((key) => {
               const item = HUNT_ITEMS[key];
               return found.has(key) ? (
@@ -143,6 +172,23 @@ export default function ShelfStrip({ userId, offline = false }: { userId: string
               <Tile key={r.drop_id} name={r.reward} tag="REWARD" icon={Ticket} />
             ))}
           </ul>
+          {deck.shelf && deck.shelf.totals.cards > 0 && deck.shelf.totals.of > 0 && (
+            <div className="mt-3 flex items-center gap-3">
+              <p className="seclabel flex-none">
+                CARDS · {deck.shelf.totals.cards} OF {deck.shelf.totals.of} · {deck.shelf.totals.visited} VISITED
+              </p>
+              <div
+                role="progressbar"
+                aria-label="Cards found"
+                aria-valuemin={0}
+                aria-valuemax={deck.shelf.totals.of}
+                aria-valuenow={deck.shelf.totals.cards}
+                className="h-1.5 flex-1 overflow-hidden rounded-full bg-line"
+              >
+                <span className="block h-full rounded-full bg-orange" style={{ width: `${Math.min(100, (deck.shelf.totals.cards / deck.shelf.totals.of) * 100)}%` }} />
+              </div>
+            </div>
+          )}
           <div className="mt-3 flex items-center gap-3">
             <p className="seclabel flex-none">
               CAMERA HUNT SET · {hunted} OF {HUNT_KEYS.length}
@@ -163,6 +209,20 @@ export default function ShelfStrip({ userId, offline = false }: { userId: string
         </>
       ) : (
         <div aria-hidden className="h-[104px]" />
+      )}
+      {opened && (
+        <CardSheet
+          key={opened.card.id}
+          card={opened.card}
+          owned={opened}
+          setCount={{ have: openedSet?.owned ?? 1, total: openedSet?.total ?? 1 }}
+          justStamped={stampedNow === opened.card.id}
+          onClose={() => setOpenId(null)}
+          onStamped={(r) => {
+            setStampedNow(opened.card.id);
+            deck.markVisited(opened.card.id, r.visitedOn);
+          }}
+        />
       )}
     </section>
   );

@@ -43,6 +43,11 @@
 -- Guests (anonymous users) may call play_tick until their three welcome boxes
 -- are opened; after that it answers need_account. Guests get no small boxes.
 --
+-- Cards: claim_game_drop calls grant_card() (cards.sql, run after this file) for a
+-- 'card' prize on a box that has game_drops.card_max_tier, and answers with `card`
+-- (null for every other prize). Nothing changes until cards.sql is loaded and a box
+-- carries a card prize.
+--
 -- Not in this file yet (later phases): the 150 XP box ceiling, the speed rule
 -- v2, collectible delivery, the special box, spots and rooms.
 -- ============================================================================
@@ -216,9 +221,10 @@ grant execute on function public.play_tick(double precision, double precision, d
 -- coordinates. The account gate is unchanged: the drop_claims trigger in
 -- chat_accounts.sql still refuses guests, except for their own welcome boxes.
 -- Small boxes also log the street_drop score, like street and welcome boxes.
+-- The second addition (marked "card prize"): the card hook above the XP.
 create or replace function public.claim_game_drop(p_drop uuid,p_lat double precision default null,p_lng double precision default null,p_code text default null)
 returns jsonb language plpgsql security definer set search_path=public,extensions as $$
-declare d game_drops; r drop_rewards; e events; claim_id uuid; voucher text; dist double precision; ticket drop_qr_codes; roll numeric; total numeric; used_loc boolean:=false; prev record; remote boolean:=false;
+declare d game_drops; r drop_rewards; e events; claim_id uuid; voucher text; dist double precision; ticket drop_qr_codes; roll numeric; total numeric; used_loc boolean:=false; prev record; remote boolean:=false; card jsonb; paid integer;
 begin
   if auth.uid() is null then return jsonb_build_object('ok',false,'reason','no_session'); end if;
   -- one claim at a time per Hopper: the speed and cooldown checks read committed claims, so parallel calls would all pass
@@ -267,10 +273,16 @@ begin
   end if;
   insert into drop_claims(drop_id,user_id,reward_id,lat,lng) values(d.id,auth.uid(),r.id,case when remote then null else p_lat end,case when remote then null else p_lng end) returning id into claim_id;
   update game_drops set claimed_count=claimed_count+1 where id=d.id;
-  if r.xp_amount>0 then update profiles set xp=xp+r.xp_amount where id=auth.uid(); end if;
+  -- card prize (cards.sql): a 'card' prize on a box with card_max_tier hands out a card. A pity lift (the 10th claim since a Rare, the 60th since an Epic) tops the XP up to the lifted tier; otherwise the XP is the prize row's, as always. A walked box passes its position so the card is stamped Visited when the box sits inside the card's radius; neither is stored.
+  if r.reward_type='card' and d.card_max_tier is not null then
+    card:=public.grant_card(auth.uid(),r.card_tier,d.id,d.card_max_tier,r.xp_amount,case when remote then null else p_lat end,case when remote then null else p_lng end,'box',claim_id);
+  end if;
+  paid:=coalesce((card->>'xp')::integer,r.xp_amount);
+  card:=card->'card';
+  if paid>0 then update profiles set xp=xp+paid where id=auth.uid(); end if;
   if r.badge_key is not null then perform award_badge(auth.uid(),r.badge_key); end if;
   insert into activity_log(user_id,action,source_id,event_id,outside_score) values(auth.uid(),'drop',claim_id,d.event_id,coalesce((select score from game_score_rules where key=case when d.kind in ('spawn','welcome','near') then 'street_drop' else 'drop' end),0));
-  return jsonb_build_object('ok',true,'claim_id',claim_id,'reward',r.title,'description',r.description,'code',voucher,'xp',r.xp_amount);
+  return jsonb_build_object('ok',true,'claim_id',claim_id,'reward',r.title,'description',r.description,'code',voucher,'xp',paid,'card',card);
 end $$;
 
 -- ----------------------------------------------------------- welcome boxes ---

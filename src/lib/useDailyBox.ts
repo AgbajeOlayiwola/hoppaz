@@ -3,11 +3,13 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { lagosDate } from "@/components/me/lagosDay";
 import { getSupabase } from "./supabase/client";
+import { toWonCard, type WonCard } from "./cards";
 import type { Rarity } from "./huntItems";
 
 /** What today's box held. Same words and numbers the database used (supabase/daily_box.sql). */
 export type DailyBox = { title: string; xp: number; rarity: Rarity };
-export type OpenResult = { box: DailyBox; already: boolean } | { error: string };
+/** `card` is the deck card today's box paid: null unless staff switched cards on for it (card_rules daily_box), so usually null. */
+export type OpenResult = { box: DailyBox; already: boolean; card: WonCard | null } | { error: string };
 
 /** The sample box a development run without a database hands out. */
 const DEMO_BOX: DailyBox = { title: "Good find", xp: 30, rarity: "rare" };
@@ -68,16 +70,16 @@ export function useDailyBox(userId: string | null, opts: { demo?: boolean } = {}
   const open = useCallback(async (): Promise<OpenResult> => {
     if (demo) {
       demoBox.current = DEMO_BOX;
-      return { box: DEMO_BOX, already: false };
+      return { box: DEMO_BOX, already: false, card: null };
     }
     const sb = getSupabase();
     if (!sb) return { error: "You're offline. Try again when you're back." };
     const { data, error } = await sb.rpc("open_daily_box");
-    const r = data as { ok?: boolean; already?: boolean; title?: string; xp?: number; rarity?: Rarity; reason?: string } | null;
+    const r = data as { ok?: boolean; already?: boolean; title?: string; xp?: number; rarity?: Rarity; reason?: string; card?: unknown } | null;
     if (error || !r?.ok || !r.title || !r.xp || !r.rarity) {
       return { error: r?.reason === "not_signed_in" ? "Your session ran out. Reopen Hoppaz." : "That didn't open. Try again in a bit." };
     }
-    return { box: { title: r.title, xp: r.xp, rarity: r.rarity }, already: !!r.already };
+    return { box: { title: r.title, xp: r.xp, rarity: r.rarity }, already: !!r.already, card: toWonCard(r.card) };
   }, [demo]);
 
   const status = !ready ? "loading" : !available ? "unavailable" : box ? "opened" : "ready";

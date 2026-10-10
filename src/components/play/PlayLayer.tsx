@@ -15,6 +15,7 @@ import { getSupabase } from "@/lib/supabase/client";
 import { useToast } from "@/lib/store";
 import { lagosDate } from "@/components/me/lagosDay";
 import { DEMO } from "@/components/me/demo";
+import { loadCardCount, toWonCard } from "@/lib/cards";
 import { loadCollection } from "@/lib/useCollectibles";
 import { setDevPosition, useGeoPermission, useLivePosition } from "@/lib/useLivePosition";
 import { emitPlayEvent, markFirst, playSeen, usePlayBackButton, usePlayMode } from "@/lib/usePlayMode";
@@ -298,8 +299,8 @@ export default function PlayLayer({
       return;
     }
     let on = true;
-    void loadCollection(userId)
-      .then((rows) => on && setShelf(rows.length))
+    void Promise.all([loadCollection(userId), loadCardCount()])
+      .then(([rows, cards]) => on && setShelf(rows.length + cards))
       .catch(() => {});
     return () => {
       on = false;
@@ -660,8 +661,8 @@ export default function PlayLayer({
         p_code: null,
       });
       if (error || !data) return { ok: false, reason: "error", message: "That didn't open. Try again in a bit." };
-      const r = data as { ok: boolean; reason?: string; reward?: string; xp?: number; distance_m?: number };
-      if (r.ok) return { ok: true, xp: r.xp ?? 0, title: r.reward };
+      const r = data as { ok: boolean; reason?: string; reward?: string; xp?: number; distance_m?: number; card?: unknown };
+      if (r.ok) return { ok: true, xp: r.xp ?? 0, title: r.reward, card: toWonCard(r.card) };
       const reason = r.reason ?? "error";
       if (GONE.has(reason)) tick.removeBox(box.id);
       if (reason === "need_account") requireAccount("open this box");
@@ -1249,7 +1250,10 @@ export default function PlayLayer({
           origin={opening.origin}
           firstOfDay={opening.firstOfDay}
           xpBefore={xp}
-          onLand={(kind, r) => credit(kind, r)}
+          onLand={(kind, r) => {
+            credit(kind, r);
+            if (kind === "card" && r.card?.isNew) setShelf((n) => (n === null ? n : n + 1));
+          }}
           onDone={(result) => finish(opening, result)}
           onCancel={() => {
             setOpening(null);

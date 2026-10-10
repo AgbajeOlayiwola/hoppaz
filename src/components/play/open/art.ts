@@ -1,3 +1,4 @@
+import css from "./OpenStage.module.css";
 import { TIER } from "./tiers";
 import type { OpenTier } from "./types";
 
@@ -62,6 +63,20 @@ export function cardSVG(card: { key: string; name: string }, tier: OpenTier) {
     `<g transform="translate(10,13)">${ART[artFor(card.key)](T.t)}</g>` +
     `<text x="60" y="130" text-anchor="middle" font-family="var(--font-mono),monospace" font-size="10" fill="#F5EBDD">${name}</text>` +
     `<text x="60" y="149" text-anchor="middle" font-family="var(--font-mono),monospace" font-size="8.5" letter-spacing="1" fill="${T.t}">${T.name.toUpperCase()}</text></svg>`
+  );
+}
+
+/**
+ * A deck card's face: the deck's own front image (the name, rarity and picture are drawn into it) over a plate that shows
+ * the name and rarity until the image is in, and stays if it never comes. The caller hides the plate on the image's load
+ * and removes the image if it errors (see dressDeckFace in engine.ts).
+ */
+export function deckFaceHTML(card: { name: string; rarity: OpenTier; art: { front: string; version: number } }, tier: OpenTier) {
+  const T = TIER[tier];
+  return (
+    `<div class="${css.deckF}" style="border-color:${T.t}">` +
+    `<div class="${css.deckPlate}"><b>${esc(card.name)}</b><i style="color:${T.t}">${T.name.toUpperCase()}</i></div>` +
+    `<img class="${css.deckImg}" src="${esc(`${card.art.front}?v=${card.art.version}`)}" alt="" draggable="false" decoding="async"></div>`
   );
 }
 

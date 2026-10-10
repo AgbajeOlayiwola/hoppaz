@@ -32,6 +32,9 @@
 --                     who only opened daily boxes (score 0) would be "#N in
 --                     Lagos". The change is the "having sum" in each.
 --
+-- Cards (cards.sql, run after play.sql): open_daily_box answers with `card`, null unless
+-- staff switch on card_rules 'daily_box'. Nothing else about the box changes.
+--
 -- activity_log.action gets one new value, 'daily'. The check is widened, no
 -- row changes. Days are Lagos days (Africa/Lagos), the same as my_game_stats().
 --
@@ -106,6 +109,8 @@ declare
   v_today date := (now() at time zone 'Africa/Lagos')::date;
   v_prize record;
   v_box   public.daily_boxes;
+  v_card  jsonb;
+  v_max   text;
 begin
   if v_me is null then return jsonb_build_object('ok', false, 'reason', 'not_signed_in'); end if;
   if not exists (select 1 from public.profiles where id = v_me) then
@@ -123,13 +128,27 @@ begin
 
   if v_box.id is null then
     select * into v_box from public.daily_boxes where user_id = v_me and day = v_today;
-    return jsonb_build_object('ok', true, 'already', true, 'title', v_box.reward_title, 'xp', v_box.xp, 'rarity', v_box.rarity);
+    -- cards.sql: the card today's box gave, if it gave one
+    if to_regclass('public.user_cards') is not null then
+      v_card := public.card_for_source(v_me, 'daily', v_box.id);
+    end if;
+    return jsonb_build_object('ok', true, 'already', true, 'title', v_box.reward_title, 'xp', v_box.xp, 'rarity', v_box.rarity, 'card', v_card);
   end if;
 
   update public.profiles set xp = xp + v_box.xp where id = v_me;
   insert into public.activity_log (user_id, action, source_id, outside_score) values (v_me, 'daily', v_box.id, 0) on conflict do nothing;
 
-  return jsonb_build_object('ok', true, 'already', false, 'title', v_box.reward_title, 'xp', v_box.xp, 'rarity', v_box.rarity);
+  -- cards.sql: this box pays a card only when staff set card_rules 'daily_box' max_tier
+  -- (null by default: Today's box pays XP only). The card's tier is the box's rarity,
+  -- capped at max_tier. The XP above is not touched.
+  if to_regclass('public.card_rules') is not null then
+    v_max := public.card_rule('daily_box') ->> 'max_tier';
+    if v_max is not null then
+      v_card := public.grant_card(v_me, v_box.rarity, null, v_max, v_box.xp, null, null, 'daily', v_box.id) -> 'card';
+    end if;
+  end if;
+
+  return jsonb_build_object('ok', true, 'already', false, 'title', v_box.reward_title, 'xp', v_box.xp, 'rarity', v_box.rarity, 'card', v_card);
 end $$;
 revoke all on function public.open_daily_box() from public, anon;
 grant execute on function public.open_daily_box() to authenticated;
