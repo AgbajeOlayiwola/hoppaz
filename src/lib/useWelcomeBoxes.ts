@@ -1,8 +1,9 @@
 "use client";
 
 import { getSupabase } from "./supabase/client";
+import { isTestHost } from "./testHost";
 
-/** Development only: a laptop has no GPS worth trusting, so a picked area counts too and the welcome boxes can be seen. */
+/** Development, and the test hosts (lib/testHost.ts): a laptop has no GPS worth trusting, so a picked area counts too and the welcome boxes can be seen. */
 const IS_DEV = process.env.NODE_ENV !== "production";
 
 const doneKey = (userId: string) => `hz-welcome-v1:${userId}`;
@@ -37,8 +38,8 @@ export type WelcomeResult = "created" | "already" | "skipped" | "failed";
  *
  * Only a fresh GPS reading counts (`fresh` is the caller's word that it is one).
  * A picked area is the centre of that area, not where the Hopper is, and the
- * one-time grant must not be spent on a guess; in development a picked area
- * counts as well, so the boxes can be seen on a laptop.
+ * one-time grant must not be spent on a guess; in development and on the test
+ * hosts a picked area counts as well, so the boxes can be seen on a laptop.
  */
 export async function ensureWelcomeBoxes(
   userId: string | null,
@@ -46,7 +47,7 @@ export async function ensureWelcomeBoxes(
 ): Promise<WelcomeResult> {
   const sb = getSupabase();
   if (!sb || !userId || !pos) return "skipped";
-  if (!pos.fresh && !IS_DEV) return "skipped";
+  if (!pos.fresh && !IS_DEV && !isTestHost()) return "skipped";
   if (wasDone(userId)) return "already";
   if (asked.has(userId)) return "skipped";
   asked.add(userId);

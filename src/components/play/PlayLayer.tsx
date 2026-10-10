@@ -21,6 +21,7 @@ import { setDevPosition, useGeoPermission, useLivePosition } from "@/lib/useLive
 import { emitPlayEvent, markFirst, playSeen, usePlayBackButton, usePlayMode } from "@/lib/usePlayMode";
 import { usePlayTick } from "@/lib/usePlayTick";
 import { useSession } from "@/lib/useSession";
+import { isTestHost } from "@/lib/testHost";
 import { ensureWelcomeBoxes } from "@/lib/useWelcomeBoxes";
 import Avatar, { type AvatarHandle } from "./Avatar";
 import Crate, { TIER_ART } from "./Crate";
@@ -158,12 +159,14 @@ export default function PlayLayer({
     precise: playing || wantLive,
   });
   const livePos = live.fresh && live.pos && (!IS_DEV || live.pos.source === "dev" || insideLagos(live.pos.lat, live.pos.lng)) ? live.pos : null;
-  // A laptop has no GPS worth trusting: in development the picked area stands in.
+  // A laptop has no GPS worth trusting: in development the picked area stands in. On the test hosts it does too, but only once the
+  // browser has refused location (the Claude Browser pane does), so a phone that can still find itself waits for its real fix.
+  const areaForGps = IS_DEV || (isTestHost() && (live.status === "denied" || geoPermission === "denied"));
   const here: Here | null = useMemo(() => {
     if (livePos) return { lat: livePos.lat, lng: livePos.lng, accuracy: livePos.accuracy, real: true };
-    if (IS_DEV && fix) return { lat: fix.lat, lng: fix.lng, accuracy: 15, real: false };
+    if (areaForGps && fix) return { lat: fix.lat, lng: fix.lng, accuracy: 15, real: false };
     return null;
-  }, [livePos, fix]);
+  }, [livePos, fix, areaForGps]);
   const hereRef = useRef(here);
   // Boxes and the avatar's home are Lagos only; hotspots are for everyone, wherever they are or with location off.
   const place: Pt | null = useMemo(() => here ?? (fix ? { lat: fix.lat, lng: fix.lng } : null), [here, fix]);
@@ -1041,7 +1044,7 @@ export default function PlayLayer({
       }
       return;
     }
-    if (livePos || (IS_DEV && fix)) {
+    if (livePos || (areaForGps && fix)) {
       enterNow();
       return;
     }
@@ -1059,7 +1062,7 @@ export default function PlayLayer({
     }
     pendingEnter.current = true;
     setWantLive(true);
-  }, [playing, map, livePos, fix, enterNow, live.status, say, onNeedLocation]);
+  }, [playing, map, livePos, fix, areaForGps, enterNow, live.status, say, onNeedLocation]);
 
   // The precise watch is on only while Play is wanted: once we are in, or the attempt fails, it lets go.
   useEffect(() => {

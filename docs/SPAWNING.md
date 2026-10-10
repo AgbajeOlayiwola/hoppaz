@@ -45,6 +45,9 @@ Every Hopper gets 3 personal boxes the first time the app has their GPS location
 Lagos. A picked area does not count: it is the middle of the area, not where the
 Hopper is, and the one-time grant would be spent on a guess. The call waits until
 they share their location. They are worth 250 XP in total by day (50, 50 and 150).
+The one exception is testing: in development, and on the test hosts (this Mac, the
+Wi-Fi addresses, the Cloudflare tunnel) once the browser has refused location, a picked
+area counts, so a laptop or the Claude Browser pane can see the boxes (`lib/testHost.ts`).
 
 | When | Where | Reward |
 |---|---|---|
