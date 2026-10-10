@@ -1180,5 +1180,8 @@ export default function NightMap({
     m.easeTo({ center: [f.lng, f.lat], zoom: Math.max(m.getZoom(), 11.4), duration: ms(700) });
   }, [epoch, fixKey]);
 
-  return <div ref={holder} className="absolute inset-0" aria-label="Lagos map" />;
+  // Inline on purpose: MapLibre's own CSS gives .maplibregl-map position relative, and when the
+  // production build orders that sheet after Tailwind's, the class "absolute" loses and the map
+  // collapses to 0 px tall.
+  return <div ref={holder} className="absolute inset-0" style={{ position: "absolute", inset: 0 }} aria-label="Lagos map" />;
 }
