@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useState, useSyncExternalStore } from "react";
 import clsx from "clsx";
 import { ChevronDown, FileText, Lock, Play, Settings, ShieldCheck, Trash2, UserRound } from "lucide-react";
 import { RowButton, RowLink, RowValue } from "./Rows";
@@ -21,6 +21,8 @@ import {
   type PushState,
 } from "@/lib/push";
 import { supabaseConfigured } from "@/lib/supabase/client";
+import { sfx } from "@/lib/sound/sfx";
+import { haptics } from "@/lib/haptics";
 import { useSessionStore } from "@/lib/useSession";
 import ReplayTourRow from "@/components/intro/ReplayTourRow";
 
@@ -57,6 +59,51 @@ function Appearance() {
       </div>
       {pref === "clock" && <p className="hint mt-2">Light from 6:30am, dark after 6:45pm, Lagos time.</p>}
     </div>
+  );
+}
+
+/** One on/off setting: a row like HOME AREA (label, value, one small action) with a quiet line under it. */
+function SwitchRow({ label, on, line, onToggle }: { label: string; on: boolean; line: string; onToggle: () => void }) {
+  return (
+    <div>
+      <RowValue label={label} value={on ? "On" : "Off"} action={on ? "TURN OFF" : "TURN ON"} onAction={onToggle} />
+      <p className="hint -mt-1.5 px-4 pb-3.5" aria-live="polite">{line}</p>
+    </div>
+  );
+}
+
+/**
+ * Sound and Buzz. Sound is the app's one mute (the speaker in Play and the button on Today are the same
+ * switch, saved as hz-sound). Buzz is its own switch for the Android buzz (lib/haptics.ts), on by default.
+ * Turning either on answers with a tiny tick or tap, so the tap is felt.
+ */
+function SoundRows() {
+  const muted = useSyncExternalStore(sfx.subscribe, sfx.isMuted, () => false);
+  const buzz = useSyncExternalStore(haptics.subscribe, haptics.isOn, () => true);
+  const [canBuzz, setCanBuzz] = useState(true);
+  // Whether the phone can buzz is only known in the browser, so read it after mount.
+  useEffect(() => setCanBuzz(typeof navigator.vibrate === "function"), []);
+  return (
+    <>
+      <SwitchRow
+        label="SOUND"
+        on={!muted}
+        line={muted ? "Hoppaz stays quiet. You still see everything." : "You hear boxes, rewards and taps. Quieter from 11pm to 7am."}
+        onToggle={() => {
+          sfx.setMuted(!muted);
+          if (muted) sfx.agogo(3);
+        }}
+      />
+      <SwitchRow
+        label="BUZZ"
+        on={buzz}
+        line={!canBuzz ? "This phone can't buzz. Android phones can." : buzz ? "A small buzz when something lands for you." : "No buzz."}
+        onToggle={() => {
+          haptics.setOn(!buzz);
+          if (!buzz) haptics.buzz("snap");
+        }}
+      />
+    </>
   );
 }
 
@@ -205,8 +252,9 @@ function SpawnAlerts() {
 }
 
 /**
- * Settings, folded away at the bottom of Me. Name, home area, account, replay
- * the intro, privacy, community rules, staff (only for staff) and delete.
+ * Settings, folded away at the bottom of Me. Name, home area, appearance, sound and
+ * buzz, spawn alerts, account, replay the intro, privacy, community rules, staff
+ * (only for staff) and delete.
  */
 export default function SettingsGroup({
   className = "mt-7",
@@ -293,6 +341,7 @@ export default function SettingsGroup({
             )}
             <RowValue label="HOME AREA" value={area} action="CHANGE" onAction={onChangeArea} />
             <Appearance />
+            <SoundRows />
             <SpawnAlerts />
             {accountReady &&
               (hasAccount ? (

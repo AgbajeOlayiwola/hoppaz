@@ -3,6 +3,8 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { getSupabase } from "./supabase/client";
 import { shrink } from "./image";
+import { sfx } from "./sound/sfx";
+import { haptics } from "./haptics";
 import type { DmMessage, DmThread, Message, Person, Wave } from "./types";
 
 /**
@@ -277,16 +279,30 @@ export function usePeople(room: PeopleOf | null, userId: string | null) {
 export function useInbox(userId: string | null) {
   const [waves, setWaves] = useState<Wave[]>([]);
   const [dms, setDms] = useState<DmThread[]>([]);
+  // Every wave a good read has shown. Null until the first read, so the list that opens with the screen never sounds.
+  const knownWaves = useRef<Set<string> | null>(null);
 
   const load = useCallback(async () => {
     const sb = getSupabase();
     if (!sb || !userId) return;
     const [w, d] = await Promise.all([sb.rpc("my_waves"), sb.rpc("my_dms")]);
-    setWaves((w.data ?? []) as Wave[]);
+    const list = (w.data ?? []) as Wave[];
+    if (!w.error) {
+      // A wave no read has shown before has just arrived: a soft chime and a tap. A failed read says nothing either way.
+      const known = knownWaves.current ?? new Set<string>();
+      if (knownWaves.current && list.some((x) => !known.has(x.id))) {
+        sfx.wave();
+        haptics.buzz("wave");
+      }
+      list.forEach((x) => known.add(x.id));
+      knownWaves.current = known;
+    }
+    setWaves(list);
     setDms((d.data ?? []) as DmThread[]);
   }, [userId]);
 
   useEffect(() => {
+    knownWaves.current = null; // a different Hopper starts from their own list
     void load();
     const sb = getSupabase();
     if (!sb || !userId) return;

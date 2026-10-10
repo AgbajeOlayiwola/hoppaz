@@ -39,6 +39,11 @@ type Seen = { streak: number; xp: number; level: string };
 const SEEN_KEY = "hoppaz.me.seen";
 const BADGES_KEY = "hoppaz.me.badges";
 const WAVE_KEY = "hoppaz.me.wave";
+/**
+ * "What did I last see" is one person's: a second account on the same phone must not read the first one's, or its whole
+ * shelf and its streak would stamp in as new (now with sound). No account yet (the sample Hopper, offline) keeps the plain key.
+ */
+const lastSeen = (key: string, userId: string | null) => (userId ? `${key}.${userId}` : key);
 const DAY_MS = 24 * 3.6e6;
 
 function MePagePage() {
@@ -144,7 +149,7 @@ function MePagePage() {
   const [stamp, setStamp] = useState<Partial<Record<TileKey | "level", boolean>>>({});
   useEffect(() => {
     if (!numbersReady) return;
-    const prev = readJSON<Seen | null>(SEEN_KEY, null);
+    const prev = readJSON<Seen | null>(lastSeen(SEEN_KEY, userId), null);
     const moved: Partial<Record<TileKey | "level", boolean>> = {};
     if (prev) {
       if (xp !== prev.xp) moved.xp = true;
@@ -152,8 +157,8 @@ function MePagePage() {
       if (lvl.name !== prev.level) moved.level = true;
     }
     setStamp(moved);
-    writeJSON(SEEN_KEY, { streak, xp, level: lvl.name } satisfies Seen);
-  }, [numbersReady, streak, xp, lvl.name]);
+    writeJSON(lastSeen(SEEN_KEY, userId), { streak, xp, level: lvl.name } satisfies Seen);
+  }, [numbersReady, streak, xp, lvl.name, userId]);
 
   // This week's seven dots: the days that counted toward the streak.
   const today = now === null ? null : lagosDate(now);
@@ -174,11 +179,11 @@ function MePagePage() {
   useEffect(() => {
     if (!loaded) return;
     const keys = Object.keys(owned);
-    const seen = readJSON<string[] | null>(BADGES_KEY, null);
-    // The first time on a phone nothing stamps: only badges earned since the last look do.
+    const seen = readJSON<string[] | null>(lastSeen(BADGES_KEY, userId), null);
+    // The first time this account looks on a phone nothing stamps: only badges earned since the last look do.
     setFresh(new Set(seen ? keys.filter((k) => !seen.includes(k)) : []));
-    writeJSON(BADGES_KEY, keys);
-  }, [loaded, owned]);
+    writeJSON(lastSeen(BADGES_KEY, userId), keys);
+  }, [loaded, owned, userId]);
 
   const hopBadges = Object.keys(owned).filter((k) => k === "hop" || /^hop[-_]/.test(k)).length;
   const status = statusFor(hopBadges);

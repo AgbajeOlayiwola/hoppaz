@@ -38,7 +38,6 @@ import {
 } from "@/lib/filters";
 import { demoFlyer } from "@/components/event/demo";
 import { eventTitle, haversineKm } from "@/lib/geo";
-import { sfx } from "@/lib/sound/sfx";
 import { useHoppaz, useToast } from "@/lib/store";
 import { isNeedAccount } from "@/lib/accountGate";
 import { useCheckin } from "@/lib/useCheckin";
@@ -56,13 +55,14 @@ const NO_TYPES: string[] = [];
  * TODAY (the /discover route): the night as a deck of big flyer cards you
  * slide through, one centred and the neighbours peeking, tilted back in 3D.
  * The screen behind takes the colours of the flyer in the middle and blends as
- * you slide, with a soft agogo tick on each snap (the speaker button in the
- * header is its mute). SHARE TO STORY makes a 9:16 picture of the middle card;
- * ?demo=1 slides the deck by itself, for filming. Pick the night on the same
- * rail the Map uses (or NEXT, the next twenty). Tap the centred card and
- * it opens into the breakdown: the event card as a sheet on a phone, docked on
- * the right on a wide screen. A slow strip of tags underneath scrolls what is
- * coming up and jumps the deck to whichever one you tap.
+ * you slide, silent (a phone that can buzz gives a tiny tap on each snap; the
+ * speaker button in the header is the app's one mute). SHARE TO STORY makes a
+ * 9:16 picture of the middle card; ?demo=1 slides the deck by itself, for
+ * filming. Pick the night on the same rail the Map uses (or NEXT, the next
+ * twenty). Tap the centred card and it opens into the breakdown: the event
+ * card as a sheet on a phone, docked on the right on a wide screen. A slow
+ * strip of tags underneath scrolls what is coming up and jumps the deck to
+ * whichever one you tap.
  */
 export default function TodayPage() {
   const { fix, radiusKm, dateFilter, setDateFilter, types, setTypes } = useHoppaz();
@@ -175,17 +175,11 @@ export default function TodayPage() {
   const onPos = useCallback((pos: number) => glow.current?.set(pos), []);
   const slideTo = useCallback(
     (i: number) => {
-      snapTick(i >= indexRef.current ? 1 : -1);
+      snapTick();
       setIndex(i);
     },
     [setIndex]
   );
-  // Sound belongs to this screen while it is on: the tick works after the first touch, and follows the mute switch
-  // (the speaker button in the header, the same one Play has).
-  useEffect(() => {
-    sfx.acquire();
-    return () => sfx.release();
-  }, []);
 
   // Share to story: the card in the middle, as a 9:16 picture.
   const [story, setStory] = useState<EventRow | null>(null);

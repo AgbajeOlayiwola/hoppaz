@@ -36,3 +36,5 @@ Jae's calls, newest first, so the team (and Ola) build to the same thing.
 Still open: photos on Me and in crews, the rabbit face rule for Paz, ticketing for organisers, a catalogue screen of every collectible, 3D venue models, the strict four colour rule, and crew faces on events (needs one small database addition).
 
 Today page: approved as the advertisable mock (9 Oct 2026). The flyer is the whole card with a ticket strip and TAP FOR DETAILS; the screen takes each event's colours and blends as you slide; 3D neighbours with an agogo tick on snap; live countdown, going count with crew faces, BOX HERE badge, an honest Featured label; tap for details with I'M GOING and WE OUTSIDE; Share to story makes a real 9:16 image; a demo mode for filming ads. Jae: "that share to story is sick."
+
+Today page approved for use (9 Oct 2026, after testing on the phone). Sliding the deck left or right makes no sound (Jae found the tick annoying); the other sounds stay as they are.

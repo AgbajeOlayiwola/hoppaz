@@ -4,6 +4,15 @@
  * app plays the file instead of the synth voice. "synth" puts the synth back and
  * removes the shipped copy.
  *
+ * A row of picks.ts is { file, g, aim }. g is the trim and aim is where the cue
+ * should sit, as the LUFS of the trimmed file (before the master and the lane). A new
+ * take is trimmed to the same aim from its LUFS in manifest.json:
+ *   g = 10^((aim - take LUFS) / 20)
+ * so a take that is a few dB louder or softer than the last one still lands in the
+ * same place. The aim was set by matching the synth voice through the real chain
+ * (docs/SOUND-FILES.md, Levels); listen after a new pick and nudge g if it needs it.
+ * Synth keeps its aim and goes back to g 1.
+ *
  *   node scripts/sfx/apply-picks.mjs "open-common:2 coin:synth"
  *   node scripts/sfx/apply-picks.mjs box_burst_common:2 coin:synth --dry
  *
@@ -41,13 +50,13 @@ if (!tokens.length) {
 
 // ---------- the table ----------
 
-// One row of picks.ts:   "talkingDrum:common": "synth", // box_burst_common
-const ROW = /^(\s*)("?)([\w:]+)\2: "([^"]*)",(\s*\/\/\s*)([a-z0-9_]+)\s*$/;
+// One row of picks.ts:   "talkingDrum:common": { file: "synth", g: 1, aim: -24 }, // box_burst_common
+const ROW = /^(\s*)("?)([\w:]+)\2: \{ file: "([^"]*)", g: ([\d.]+), aim: (-?[\d.]+) \},(\s*\/\/\s*)([a-z0-9_]+)\s*$/;
 const lines = (await readFile(picksFile, "utf8")).split("\n");
 const rows = new Map();
 lines.forEach((line, i) => {
   const m = ROW.exec(line);
-  if (m) rows.set(m[3], { i, m, cue: m[6], file: m[4] });
+  if (m) rows.set(m[3], { i, m, cue: m[8], file: m[4], g: Number(m[5]), aim: Number(m[6]) });
 });
 if (!rows.size) {
   console.log("no rows found in src/lib/sound/picks.ts, is the format changed?");
@@ -75,7 +84,7 @@ for (const tok of tokens) {
   }
   const { cue } = rows.get(key);
   if (v === "synth") {
-    plan.set(key, { key, cue, file: "synth" });
+    plan.set(key, { key, cue, file: "synth", g: 1 });
     continue;
   }
   const entry = manifest.find((c) => c.name === cue);
@@ -89,7 +98,9 @@ for (const tok of tokens) {
     errors.push(`${tok}: public/sfx/try/${take.file} is missing`);
     continue;
   }
-  plan.set(key, { key, cue, file: cue + extname(take.file), from, take });
+  // the same place as the last pick of this cue: its aim, from this take's own loudness
+  const g = Math.round(Math.pow(10, (rows.get(key).aim - take.lufs) / 20) * 1000) / 1000;
+  plan.set(key, { key, cue, file: cue + extname(take.file), from, take, g });
 }
 if (errors.length) {
   console.log(errors.join("\n"));
@@ -107,11 +118,12 @@ for (const p of plan.values()) {
     // the shipped copy of this cue under another extension, or none when it goes back to the synth
     for (const e of EXTS) if (p.file !== p.cue + e) await rm(resolve(outDir, p.cue + e), { force: true });
     if (p.from) await copyFile(p.from, resolve(outDir, p.file));
-    lines[i] = `${m[1]}${m[2]}${m[3]}${m[2]}: "${p.file}",${m[5]}${m[6]}`;
+    lines[i] = `${m[1]}${m[2]}${m[3]}${m[2]}: { file: "${p.file}", g: ${p.g}, aim: ${m[6]} },${m[7]}${m[8]}`;
   }
   if (p.from) {
     const note = p.take.flagged ? `  (flagged: ${p.take.flags.join(", ")})` : "";
-    console.log(`${p.key.padEnd(26)}${p.take.file} -> public/sfx/${p.file}  ${kb(p.take.bytes)}${note}`);
+    const warn = p.g > 2 ? "  (trim above 2: it needs a lot of gain, check it is not clipping)" : "";
+    console.log(`${p.key.padEnd(26)}${p.take.file} -> public/sfx/${p.file}  ${kb(p.take.bytes)}  g ${p.g}${note}${warn}`);
   } else {
     console.log(`${p.key.padEnd(26)}synth`);
   }

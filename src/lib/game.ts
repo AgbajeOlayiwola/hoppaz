@@ -131,32 +131,39 @@ export function useQuests(userId: string | null) {
       if (!sb) return "NOT CONNECTED";
       if (!requireAccount("complete quests and earn XP")) return NEED_ACCOUNT;
       setBusy(quest.id);
-      const { data, error } = await sb.rpc("claim_quest", {
-        p_quest: quest.id,
-        p_event: opts.eventId ?? quest.event_id ?? null,
-        p_code: opts.code ?? null,
-        p_evidence: opts.evidence ?? null,
-        p_crew: opts.crewId ?? null,
-      });
-      setBusy(null);
-      if (error) return "COULD NOT COMPLETE QUEST";
-      const r = data as { ok: boolean; reason?: string; status?: string; xp?: number };
-      if (!r.ok)
-        return (
-          (
-            {
-              already: "ALREADY COMPLETED",
-              wrong_event: "THIS QUEST IS FOR ANOTHER EVENT",
-              checkin_required: "CHECK IN AT THE EVENT FIRST",
-              invalid_code: "CODE NOT VALID",
-              crew_required: "JOIN A CREW FIRST",
-              group_not_there: "YOUR CREW NEEDS MORE PEOPLE HERE",
-              closed: "QUEST IS CLOSED",
-            } as Record<string, string>
-          )[r.reason ?? ""] ?? "QUEST NOT READY"
-        );
-      await reload();
-      return r.status === "pending" ? "SUBMITTED FOR REVIEW" : `QUEST COMPLETE · +${r.xp ?? 0} XP`;
+      // CLAIM stays off until the claims have been read again (finally, below): a second tap in that gap would only be told ALREADY COMPLETED.
+      try {
+        const { data, error } = await sb.rpc("claim_quest", {
+          p_quest: quest.id,
+          p_event: opts.eventId ?? quest.event_id ?? null,
+          p_code: opts.code ?? null,
+          p_evidence: opts.evidence ?? null,
+          p_crew: opts.crewId ?? null,
+        });
+        if (error) return "COULD NOT COMPLETE QUEST";
+        const r = data as { ok: boolean; reason?: string; status?: string; xp?: number };
+        if (!r.ok) {
+          // Already claimed (a second tap, another phone): read the claims again so the row shows DONE, not a stale CLAIM.
+          if (r.reason === "already") await reload();
+          return (
+            (
+              {
+                already: "ALREADY COMPLETED",
+                wrong_event: "THIS QUEST IS FOR ANOTHER EVENT",
+                checkin_required: "CHECK IN AT THE EVENT FIRST",
+                invalid_code: "CODE NOT VALID",
+                crew_required: "JOIN A CREW FIRST",
+                group_not_there: "YOUR CREW NEEDS MORE PEOPLE HERE",
+                closed: "QUEST IS CLOSED",
+              } as Record<string, string>
+            )[r.reason ?? ""] ?? "QUEST NOT READY"
+          );
+        }
+        await reload();
+        return r.status === "pending" ? "SUBMITTED FOR REVIEW" : `QUEST COMPLETE · +${r.xp ?? 0} XP`;
+      } finally {
+        setBusy(null);
+      }
     },
     [reload]
   );

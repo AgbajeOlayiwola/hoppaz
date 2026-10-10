@@ -5,6 +5,7 @@ import { usePathname } from "next/navigation";
 import { Map, CalendarDays, Users, MessageSquare, CircleUserRound, type LucideIcon } from "lucide-react";
 import clsx from "clsx";
 import { usePlayMode } from "@/lib/usePlayMode";
+import { sfx } from "@/lib/sound/sfx";
 
 type Tab = { href: string; label: string; Icon: LucideIcon; intro?: string };
 
@@ -44,7 +45,7 @@ export default function BottomNav() {
       style={{ paddingBottom: "env(safe-area-inset-bottom, 0px)" }}
       aria-label="Main"
     >
-      {TABS.map(({ href, label, Icon, intro }) => {
+      {TABS.map(({ href, label, Icon, intro }, i) => {
         const on = href === "/" ? active === "/" : active === href || active.startsWith(`${href}/`);
         return (
           <Link
@@ -52,6 +53,10 @@ export default function BottomNav() {
             href={href}
             data-intro={intro}
             aria-current={on ? "page" : undefined}
+            // A very quiet wood tick, one pitch up the scale per tab, only when the lit tab is about to change.
+            onClick={() => {
+              if (!on) sfx.tabTick(i);
+            }}
             className={clsx(
               "flex min-h-[52px] flex-1 flex-col items-center justify-center gap-1 transition-colors",
               on ? "text-orange" : "text-dim"

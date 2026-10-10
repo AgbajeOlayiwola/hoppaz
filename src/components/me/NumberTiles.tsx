@@ -1,8 +1,11 @@
 "use client";
 
 import clsx from "clsx";
+import { useEffect, useRef } from "react";
 import { ChevronRight, Flame } from "lucide-react";
 import { DAY_NAMES } from "./lagosDay";
+import { sfx } from "@/lib/sound/sfx";
+import { haptics } from "@/lib/haptics";
 
 export type TileKey = "streak" | "xp";
 
@@ -11,7 +14,8 @@ export type TileKey = "streak" | "xp";
  * under. The streak is orange (it is the thing to keep going) and carries
  * this week's seven dots, Monday to Sunday: filled for a day that counted, a
  * dashed ring for today while it has not. The XP tile opens "Ways to earn".
- * A number that moved since you last looked stamps in once.
+ * A number that moved since you last looked stamps in once. The streak's stamp has a sound with it: the warm
+ * agogo of the streak stamp, and on day 7 of the cycle (the Golden Box) the Hoppaz three as well.
  */
 export default function NumberTiles({
   streak,
@@ -40,6 +44,20 @@ export default function NumberTiles({
   onXp: () => void;
 }) {
   const days = week && today ? week.map((d, i) => ({ name: DAY_NAMES[i], done: weekDone.has(d), now: d === today })) : null;
+  // A streak of 0 stamping in is a streak that ended: that is no cause for a bell, so it stays silent.
+  const kept = ready && !!stamp.streak && streak > 0;
+  const latest = useRef(streak);
+  useEffect(() => {
+    latest.current = streak;
+  }, [streak]);
+  useEffect(() => {
+    if (!kept) return;
+    sfx.stamp();
+    haptics.buzz("streak");
+    if (latest.current % 7 !== 0) return;
+    const t = setTimeout(() => sfx.motif("full"), 450); // the stamp rings first, then the three notes
+    return () => clearTimeout(t);
+  }, [kept]);
   return (
     <section aria-label="Your numbers" className="grid grid-cols-2 gap-3">
       <div className="card flex flex-col">

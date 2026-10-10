@@ -1,9 +1,11 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useRef, useState, type CSSProperties } from "react";
 import clsx from "clsx";
 import Sheet from "@/components/Sheet";
 import { BADGES, CAPTAIN_HOPS } from "@/lib/brand";
+import { sfx } from "@/lib/sound/sfx";
+import { haptics } from "@/lib/haptics";
 import StampMark from "./StampMark";
 import { shortDate } from "./dropTime";
 
@@ -20,7 +22,9 @@ export function shelfBadges(extra: { key: string; name: string; description: str
 /**
  * The badge shelf: each badge is a round rubber stamp with its name under it.
  * One you have is a solid disc; one you do not have yet is a dashed ring. Tap
- * any stamp for the date you earned it, or how to.
+ * any stamp for the date you earned it, or how to. Badges you have not seen
+ * before stamp in one after another, 220ms apart (the beat of the check-in
+ * strip), each with its stamp sound.
  */
 export default function BadgeShelf({
   badges,
@@ -40,6 +44,40 @@ export default function BadgeShelf({
   const ordered = [...got, ...left];
   const detail = open ? ordered.find((b) => b.key === open.key) ?? open : null;
 
+  // The new ones, in shelf order. Each stamps 220ms behind the one before (the delay on its <li>), and its sound
+  // rides the same delay. The page marks a badge as seen as soon as it hands it over, so a badge that has sounded
+  // is remembered here, and the timers run on even if `fresh` empties before the last one lands.
+  const newKeys = got.filter((b) => fresh.has(b.key)).map((b) => b.key);
+  const newList = newKeys.join(" ");
+  const sounded = useRef(new Set<string>());
+  const timers = useRef<ReturnType<typeof setTimeout>[]>([]);
+  useEffect(() => {
+    if (!newList) return;
+    let buzzed = false;
+    newList.split(" ").forEach((key, i) => {
+      if (sounded.current.has(key)) return;
+      sounded.current.add(key);
+      // one buzz for the batch, on its first stamp: the next would land inside the 400ms window and be dropped
+      const buzz = !buzzed;
+      buzzed = true;
+      timers.current.push(
+        setTimeout(() => {
+          sfx.stamp();
+          if (buzz) haptics.buzz("stampSmall");
+        }, i * 220)
+      );
+    });
+  }, [newList]);
+  useEffect(() => {
+    const pending = timers.current;
+    const done = sounded.current;
+    return () => {
+      pending.forEach(clearTimeout);
+      pending.length = 0;
+      done.clear();
+    };
+  }, []);
+
   return (
     <section aria-label="Badges" className="mt-7">
       <p className="seclabel mb-3">
@@ -49,7 +87,11 @@ export default function BadgeShelf({
         {ordered.map((b) => {
           const has = !!earned[b.key];
           return (
-            <li key={b.key} className="flex justify-center">
+            <li
+              key={b.key}
+              className="flex justify-center [&_.animate-stamp]:[animation-delay:var(--stamp-delay)]"
+              style={has && fresh.has(b.key) ? ({ "--stamp-delay": `${newKeys.indexOf(b.key) * 220}ms` } as CSSProperties) : undefined}
+            >
               <button
                 type="button"
                 onClick={() => setOpen(b)}

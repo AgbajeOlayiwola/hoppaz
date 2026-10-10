@@ -1,41 +1,69 @@
 /**
- * The Lagos sounds for Play. Web Audio, generated; a voice can be swapped for a
+ * The Lagos sounds for the app. Web Audio, generated; a voice can be swapped for a
  * picked sound file (picks.ts, samples.ts) and the synth is always the fallback.
  *
  * Instruments: shekere (beaded gourd), agogo (double iron bell), talking drum
  * (gangan, with the squeeze bend), danfo horn, the crowd's "ehn!", a calabash
  * knock. Everything pitched sits in D major pentatonic.
  *
- * Chain: voices -> master gain -> low-pass -> compressor -> out. At most 6
+ * Chain: voices -> lane gain -> master gain -> low-pass -> compressor -> out. At most 6
  * voices at once (lowest priority, then oldest, is dropped first). A voice
  * frees its nodes when its sources end.
  *
+ * Lanes (GAMIFY-NEXT 5.4). Every sound belongs to one, and the lane sets the voice's
+ * priority and its output gain, so nothing fights:
+ *   moment  priority 3, full      box open, level up, the full motif, the danfo horn
+ *   reward  priority 2, about 60% check-in, quest, streak, wave, the short motif
+ *   ui      priority 1, about 30% tab tick, toast, count-up, the unmute tick
+ * The shekere is the one exception: a bed at priority 0, so it goes first and hush() cuts it.
+ * One Moment at a time: while a Moment plays, UI sounds are skipped, not queued. The same
+ * sound (a cue and its note) never retriggers inside 120 ms, and the UI lane plays at most
+ * 4 a second. The motif plays at most once every 8 seconds (the short form waits out the full one too).
+ *
  * Samples: sfx.x() plays the picked file for that call if one is decoded and
- * ready, as a voice like any other (same chain, cap, priority, mute); otherwise
+ * ready, as a voice like any other (same chain, cap, lane, mute); otherwise
  * it runs the synth voice. The files load once, from the first unlock() after a
  * real tap or key press, never on page load.
  *
  * Rules:
  *  - The AudioContext is created and resumed only inside a real user gesture
- *    (pointerdown, touchend, click, keydown), and only while Play is active, so
- *    nothing plays or takes the phone's audio session outside Play and the
- *    screens that hold a lease (below).
- *  - Play is active while the shell has called setPlaying(true), or while a
- *    screen holds a lease (acquire/release): an open stage, and the Today deck
- *    (its agogo tick on each card). Today has its own sound button, which is this
- *    same mute (setMuted), so it can always be silenced there.
+ *    (pointerdown, touchend, click, keydown). Nothing is fetched or made before one.
+ *  - The sound is app-wide: <SoundLane /> in the root layout calls setApp(true), so every
+ *    tab and screen can sound, not only Play. Without it, sound runs only while Play is
+ *    active (setPlaying(true), or a lease from acquire/release: an open stage, and the Today screen).
+ *  - After about 15 s of silence the context is suspended, so the app does not hold the phone's
+ *    audio session or battery, and it wakes on the next tap. Play is exempt while it is open.
+ *    Nothing sounds while the page is hidden.
+ *  - Quiet hours, 23:00 to 07:00 in Lagos (the same window as push): the master drops to
+ *    half and the crowd "ehn", the shekere and the horn are skipped. A low-tier phone
+ *    (deviceTier()) skips the shekere and the ehn.
  *  - setMuted(boolean) is persisted in localStorage key "hz-sound" ("off" or
  *    "on"). Default is on.
  */
 
+import { deviceTier } from "@/lib/deviceTier";
 import type { PickKey } from "./picks";
-import { samples } from "./samples";
+import { samples, type Lane } from "./samples";
 
 type Ctx = BaseAudioContext;
 
 const KEY = "hz-sound";
 const MAXV = 6;
 const LEVEL = 0.7;
+/** Priority and level per lane. The level is against LEVEL, the master. */
+const LANES: Record<Lane, { p: number; g: number }> = {
+  moment: { p: 3, g: 1 },
+  reward: { p: 2, g: 0.6 },
+  ui: { p: 1, g: 0.3 },
+};
+/** The same sound never retriggers inside this long (ms). */
+const COOL = 120;
+/** The UI lane plays at most this many sounds in any second (the count-up tick, at most half of them). */
+const UI_MAX = 4;
+/** The motif is the signature: each form once every 8 s. */
+const MOTIF_EVERY = 8000;
+/** Silence this long (ms) and the context sleeps. */
+const IDLE = 15000;
 const PEN = [293.66, 329.63, 369.99, 440, 493.88];
 /** The n-th note of D major pentatonic, wrapping up the octaves. */
 function pen(i: number) {
@@ -47,6 +75,7 @@ type Voice = {
   s: number;
   e: number;
   p: number;
+  l: Lane;
   out: GainNode;
   add: <T extends AudioNode>(n: T) => T;
   src: (s: AudioScheduledSourceNode, t0: number, t1: number, off?: number) => void;
@@ -59,13 +88,20 @@ let AC: Ctx | null = null;
 let MG: GainNode | null = null;
 let NB: AudioBuffer | null = null;
 let VO: Voice[] = [];
-let gestT = 0;
+let gestT = -Infinity;
 let tapped = false;
 let shk: ReturnType<typeof setInterval> | undefined;
 let muted = false;
 let playing = false;
 let leases = 0;
+let app = false;
 let offline = false;
+/** Dev only: renderOffline plays the picked files too, and may set their trim. */
+let offSamples = false;
+let offG: number | undefined;
+/** The lane of the public call that is running, so the voices it calls inherit it. */
+let cur: Lane | null = null;
+let mgNow = LEVEL;
 const listeners = new Set<() => void>();
 
 try {
@@ -75,8 +111,17 @@ try {
 }
 
 const isOff = (a: Ctx): a is OfflineAudioContext => "startRendering" in a;
-const isActive = () => playing || leases > 0;
+const isActive = () => app || playing || leases > 0;
+const hidden = () => typeof document !== "undefined" && document.hidden;
 const emit = () => listeners.forEach((f) => f());
+
+/** 23:00 to 07:00 in Lagos, which is UTC+1 all year. The same window as push (supabase/push.sql). */
+const quiet = () => {
+  const h = (new Date(Date.now()).getUTCHours() + 1) % 24;
+  return h >= 23 || h < 7;
+};
+/** What the master gain should be right now: off when muted, half in quiet hours. */
+const master = () => (muted ? 0 : LEVEL * (quiet() ? 0.5 : 1));
 
 function mkChain(a: Ctx) {
   const g = a.createGain();
@@ -85,7 +130,7 @@ function mkChain(a: Ctx) {
   const n = Math.floor(a.sampleRate * 1.2);
   const b = a.createBuffer(1, n, a.sampleRate);
   const d = b.getChannelData(0);
-  g.gain.value = LEVEL;
+  g.gain.value = isOff(a) ? LEVEL : master();
   lp.type = "lowpass";
   lp.frequency.value = 9000;
   lp.Q.value = 0.5;
@@ -101,6 +146,19 @@ function mkChain(a: Ctx) {
   return { g, nb: b };
 }
 
+/** Moves the master to where it should be (quiet hours start and end, mute). Cheap when nothing changed. */
+function syncMaster() {
+  if (!AC || !MG || offline) return;
+  const v = master();
+  if (v === mgNow) return;
+  mgNow = v;
+  const t = AC.currentTime;
+  const g = MG.gain;
+  g.cancelScheduledValues(t);
+  g.setValueAtTime(g.value, t);
+  g.linearRampToValueAtTime(v, t + 0.03);
+}
+
 function wake() {
   try {
     const p = (AC as AudioContext | null)?.resume();
@@ -110,10 +168,11 @@ function wake() {
   }
 }
 
-/** The only places a context is made or resumed: a real gesture, while Play is active. */
+/** The only places a context is made or resumed: a real gesture, while sound is on (the app lane, or Play). */
 function unlock() {
   gestT = performance.now();
-  if (muted || !isActive()) return;
+  // Not before a real tap or key press: a script's dispatchEvent, or a mount, never makes the context.
+  if (muted || !tapped || !isActive()) return;
   try {
     if (!AC) {
       const C = window.AudioContext || (window as unknown as { webkitAudioContext?: typeof AudioContext }).webkitAudioContext;
@@ -122,37 +181,78 @@ function unlock() {
       const k = mkChain(AC);
       MG = k.g;
       NB = k.nb;
+      mgNow = master();
     }
     if (AC.state !== "running") wake();
-    // A mount early in the page's life can make the context before any tap (see gestT). The files still wait for a real one.
-    if (tapped) samples.load(AC);
+    syncMaster();
+    samples.load(AC);
+    arm(IDLE);
   } catch {
     /* no audio on this device */
   }
 }
 
 /**
- * Outside Play the context is suspended, so the app does not hold the phone's audio session. It wakes in unlock() on
- * the next gesture while Play is active.
+ * Sleep. Silence for IDLE ms (nothing started, nothing still ringing) and the context suspends, so the
+ * app does not hold the phone's audio session or battery. The next tap wakes it in unlock(). While Play is
+ * open it stays awake: its sounds come from timers and polls (a box appears, a box is in reach), not taps.
+ */
+let idleAt = 0;
+let idleT: ReturnType<typeof setTimeout> | undefined;
+function arm(ms: number) {
+  if (offline) return;
+  idleAt = Math.max(idleAt, performance.now() + ms);
+  if (idleT) return;
+  const check = () => {
+    idleT = undefined;
+    const left = idleAt - performance.now();
+    if (left > 50) idleT = setTimeout(check, left);
+    else doze();
+  };
+  idleT = setTimeout(check, ms);
+}
+function doze(force?: boolean) {
+  if (!AC || offline || isOff(AC) || AC.state !== "running") return;
+  if (!force && (playing || leases > 0)) return;
+  try {
+    void (AC as AudioContext).suspend().catch(() => {});
+  } catch {
+    /* ignore */
+  }
+}
+
+/**
+ * Without the app lane, outside Play the context is suspended too. It wakes in unlock() on the next gesture
+ * while sound is on. With the app lane on, the idle timer above does this.
  */
 let parkT: ReturnType<typeof setTimeout> | undefined;
 function park() {
+  if (isActive()) {
+    arm(IDLE);
+    return;
+  }
   if (parkT) clearTimeout(parkT);
   parkT = setTimeout(() => {
     parkT = undefined;
-    if (isActive() || !AC || offline || isOff(AC) || AC.state !== "running") return;
-    try {
-      void (AC as AudioContext).suspend().catch(() => {});
-    } catch {
-      /* ignore */
-    }
+    if (isActive()) return;
+    doze(true);
   }, 400);
 }
 
-/** A gesture listener: only a real tap or key (not a script's dispatchEvent) lets the sound files load. */
+/** A gesture listener: only a real tap or key (not a script's dispatchEvent) lets the context and the sound files load. */
 function onGesture(e: Event) {
   if (e.isTrusted) tapped = true;
   unlock();
+}
+
+/** Hidden page: nothing sounds. Voices stop, the context sleeps; it wakes on the next tap (or now, if the browser lets it). */
+function onVisibility() {
+  if (hidden()) {
+    voices.hush();
+    const t = AC ? AC.currentTime : 0;
+    VO.slice().forEach((v) => v.kill(t));
+    doze(true);
+  } else if (AC && !muted && isActive()) wake();
 }
 
 let installed = false;
@@ -160,13 +260,14 @@ function install() {
   if (installed || typeof document === "undefined") return;
   installed = true;
   ["pointerdown", "touchend", "click", "keydown"].forEach((n) => document.addEventListener(n, onGesture, true));
+  document.addEventListener("visibilitychange", onVisibility);
 }
 install();
 
 function ac(): Ctx | null {
   if (!AC) return null;
   if (offline) return AC;
-  if (muted || !isActive()) return null;
+  if (muted || !isActive() || hidden()) return null;
   if (AC.state !== "running") {
     wake();
     if (performance.now() - gestT > 500) return null;
@@ -174,11 +275,15 @@ function ac(): Ctx | null {
   return AC;
 }
 
-/** A voice is one sound event: its nodes, its end time and a kill switch. */
-function voice(a: Ctx, t: number, d: number, pr?: number): Voice {
+/**
+ * A voice is one sound event: its nodes, its end time and a kill switch. Its lane (given, or the one of the
+ * public call it belongs to) sets its priority and its output gain.
+ */
+function voice(a: Ctx, t: number, d: number, pr?: number, ln?: Lane): Voice {
   const now = a.currentTime;
   const e = t + d;
-  const P = pr == null ? 1 : pr;
+  const L: Lane = ln ?? cur ?? "moment";
+  const P = pr == null ? LANES[L].p : pr;
   let dead = false;
   VO = VO.filter((v) => v.e > now);
   /* cap: at the busiest moment inside this voice's life, drop the lowest priority, oldest voice (or stay silent if all outrank it) */
@@ -200,13 +305,14 @@ function voice(a: Ctx, t: number, d: number, pr?: number): Voice {
   const sources: AudioScheduledSourceNode[] = [];
   let count = 0;
   const out = a.createGain();
-  if (dead) out.gain.value = 0;
+  out.gain.value = dead ? 0 : LANES[L].g;
   out.connect(MG as GainNode);
   nodes.push(out);
   const v: Voice = {
     s: t,
     e,
     p: P,
+    l: L,
     out,
     add: (n) => {
       nodes.push(n);
@@ -251,8 +357,12 @@ function voice(a: Ctx, t: number, d: number, pr?: number): Voice {
     },
   };
   VO.push(v);
+  arm(Math.max(0, e - now) * 1000 + IDLE);
   return v;
 }
+
+/** A Moment is sounding (or scheduled to): UI sounds wait it out. */
+const momentOn = (a: Ctx) => VO.some((v) => v.l === "moment" && v.e > a.currentTime);
 
 function env(p: AudioParam, t: number, pk: number, at: number, d: number) {
   p.setValueAtTime(0.0001, t);
@@ -286,6 +396,7 @@ const AG: ReadonlyArray<ReadonlyArray<readonly [number, number, number, number]>
   [[1318.5, 0.1, 0.16, 0], [1760, 0.1, 0.22, 0.07]], // 3 short tick: coin
 ];
 const ACC = [1, 0.35, 0.6, 0.35, 0.85, 0.35, 0.55, 0.45]; // shekere accents
+const TAB = [pen(10), pen(12), pen(13), pen(14), pen(16)]; // tab ticks: D6 F#6 A6 B6 E7, the octave the tab_tick file itself is in
 
 /* ------------------------------------------------------------ the voices -- */
 const voices = {
@@ -321,12 +432,12 @@ const voices = {
     x.src(s, t, t + d + 0.02, Math.random() * 0.9);
   },
 
-  /** Shekere: band-passed noise grains (bright 5.6 kHz plus body 1.5 kHz) on a swung, accented grid. Builds and speeds up over `ms`. */
-  shekere(ms: number) {
+  /** Shekere: band-passed noise grains (bright 5.6 kHz plus body 1.5 kHz) on a swung, accented grid. Builds and speeds up over `ms`, starting `delay` s from now. */
+  shekere(ms: number, delay?: number) {
     const a = ac();
     if (!a || !NB) return;
     voices.hush();
-    const t0 = a.currentTime + 0.02;
+    const t0 = a.currentTime + 0.02 + (delay || 0);
     const end = t0 + ms / 1000;
     const look = isOff(a) ? 1e3 : 0.2;
     const base = 0.115 - (Math.min(ms, 2200) / 2200) * 0.04;
@@ -341,7 +452,7 @@ const voices = {
       while (nt < end && nt < A.currentTime + look) {
         const p = (nt - t0) / (end - t0);
         const lv = (0.45 + 0.55 * p) * ACC[k % 8] * 0.5;
-        const x = voice(A, nt, 0.11, 0);
+        const x = voice(A, nt, 0.11, 0, "moment");
         const s = A.createBufferSource();
         s.buffer = NB;
         const at = nt;
@@ -386,7 +497,7 @@ const voices = {
     const a = ac();
     if (!a || !NB) return;
     const t = a.currentTime + (delay || 0);
-    const x = voice(a, t, d + 0.05, 2);
+    const x = voice(a, t, d + 0.05);
     (
       [
         [1, 1, 1],
@@ -421,7 +532,7 @@ const voices = {
     const a = ac();
     if (!a || !NB) return;
     const t = a.currentTime + (delay || 0);
-    const x = voice(a, t, d + 0.06, 2);
+    const x = voice(a, t, d + 0.06);
     const lp = bp(a, x, 1400, 0.7, "lowpass");
     const g = x.add(a.createGain());
     lp.connect(g);
@@ -468,7 +579,7 @@ const voices = {
     const a = ac();
     if (!a) return;
     const t = a.currentTime + 0.01;
-    const x = voice(a, t, 0.9, 2);
+    const x = voice(a, t, 0.9);
     const m = x.add(a.createGain());
     const hg = x.add(a.createGain());
     const lp = bp(a, x, 1500, 2.5, "lowpass");
@@ -515,13 +626,13 @@ const voices = {
     });
   },
 
-  /** Crowd "ehn!": 5 detuned saws through formants 530 / 1840 / 2480 Hz, a quick pitch rise then fall, a breath of noise. */
-  crowdEhn() {
+  /** Crowd "ehn!": 5 detuned saws through formants 530 / 1840 / 2480 Hz, a quick pitch rise then fall, a breath of noise. `small` is the lighter, shorter one (3 saws) for WE OUTSIDE. */
+  crowdEhn(small?: boolean) {
     const a = ac();
     if (!a || !NB) return;
     const t = a.currentTime + 0.01;
-    const d = 0.6;
-    const x = voice(a, t, d + 0.1, 2);
+    const d = small ? 0.38 : 0.6;
+    const x = voice(a, t, d + 0.1);
     const m = x.add(a.createGain());
     const bus = x.add(a.createGain());
     m.gain.setValueAtTime(0.0001, t);
@@ -547,14 +658,14 @@ const voices = {
       g.connect(bus);
     });
     bus.connect(x.out);
-    [-30, -14, 2, 16, 31].forEach((c, j) => {
+    (small ? [-22, 2, 24] : [-30, -14, 2, 16, 31]).forEach((c, j) => {
       const o = a.createOscillator();
       const g = x.add(a.createGain());
       const ts = t + j * 0.011;
       const f0 = 212 * Math.pow(2, (c + rnd(-6, 6)) / 1200);
       const q = o.frequency;
       o.type = "sawtooth";
-      g.gain.value = 0.34;
+      g.gain.value = small ? 0.3 : 0.34;
       q.setValueAtTime(f0 * 0.84, ts);
       q.exponentialRampToValueAtTime(f0 * 1.3, ts + 0.13);
       q.exponentialRampToValueAtTime(f0 * 0.97, ts + d);
@@ -575,7 +686,7 @@ const voices = {
 
   /** Wood and gourd: calabash knock (a far box) and a soft click (a card on the Shelf). */
   knock() {
-    voices.noise(0.07, 0.3, 520, 260, 0, 2, 1);
+    voices.noise(0.07, 0.3, 520, 260, 0, 2);
     voices.tone(130, 0.16, "sine", 0.26, 0, 88);
   },
   click() {
@@ -620,6 +731,67 @@ const voices = {
   rise() {
     voices.tone(pen(0), 0.3, "sine", 0.08, 0, pen(5));
   },
+
+  /**
+   * The Hoppaz three (GAMIFY-NEXT 5.3): bells on D5, F#5, A5, short short long (about 120, 120, 420 ms) in the
+   * danfo horn's rhythm, with one low drum stroke on D3 landing with the last note. "full" is the signature
+   * (a Moment) and adds a short shekere shake, left out in quiet hours and on a low-tier phone; "short" is
+   * the last two notes (a Reward).
+   */
+  motif(form?: "full" | "short") {
+    const full = form !== "short";
+    const N = full
+      ? ([[pen(5), 0, 0.26], [pen(7), 0.12, 0.26], [pen(8), 0.24, 0.8]] as const)
+      : ([[pen(7), 0, 0.26], [pen(8), 0.12, 0.8]] as const);
+    N.forEach((n) => voices.bell(n[0], full ? 0.14 : 0.1, n[2], n[1]));
+    voices.stroke(146.8, 1.4, 0.9, 0.3, full ? 0.18 : 0.1, full ? 0.24 : 0.12);
+    if (full && (offline || (!quiet() && deviceTier() !== "low"))) voices.shekere(380, 0.24);
+  },
+  /** Check-in lands: a low thump, a wood slap and one agogo note. Pairs with motif("short") and the +100 XP count-up. */
+  checkin() {
+    voices.tone(120, 0.2, "sine", 0.38, 0, 62);
+    voices.noise(0.05, 0.28, 1800, 900, 0, 2);
+    voices.bell(pen(8), 0.13, 0.5, 0.03);
+  },
+  /** WE OUTSIDE: the small crowd "ehn". */
+  outside() {
+    voices.crowdEhn(true);
+  },
+  /** Someone waves at you: two soft rising pings, a chime. */
+  wave() {
+    voices.tone(pen(8), 0.4, "triangle", 0.11);
+    voices.tone(pen(10), 0.45, "triangle", 0.09, 0.09);
+  },
+  /** A box alert arrives while the app is open: short, short, long, the shape of the vibration. */
+  alert() {
+    [[0, 0.07], [0.12, 0.07], [0.24, 0.22]].forEach((b) => voices.tone(pen(8), b[1], "triangle", 0.15, b[0]));
+  },
+  /** A toast: "ok" is a soft chime, "error" a low gentle knock. */
+  toast(kind?: "ok" | "error") {
+    if (kind === "error") {
+      voices.tone(98, 0.22, "sine", 0.26, 0, 66);
+      voices.noise(0.05, 0.12, 450, 220, 0, 2);
+    } else {
+      voices.tone(pen(8), 0.22, "sine", 0.12);
+      voices.tone(pen(10), 0.3, "sine", 0.09, 0.07);
+    }
+  },
+  /** A tab switch: a very quiet wood tick, one pitch per tab (D, F#, A, B, E up the scale, from D6). */
+  tabTick(index: number) {
+    voices.tone(TAB[(((index | 0) % 5) + 5) % 5], 0.05, "triangle", 0.14);
+    voices.noise(0.012, 0.14, 3200, 2400, 0, 3);
+  },
+  /** You enter a Hotspot: two soft agogo notes with a low drum under. */
+  hotspot() {
+    voices.bell(pen(8), 0.09, 0.55);
+    voices.bell(pen(10), 0.09, 0.6, 0.14);
+    voices.stroke(110, 1.2, 0.9, 0.3, 0.08, 0.14);
+  },
+  /** A vibe sticker arrives: one tiny soft pop. */
+  vibe() {
+    voices.tone(520, 0.07, "sine", 0.14, 0, 980);
+    voices.noise(0.015, 0.08, 3000, 2000, 0, 3);
+  },
 };
 
 export type VoiceName = keyof typeof voices;
@@ -644,36 +816,38 @@ Object.assign(voices, wrapped);
 const NOTE: Partial<Record<VoiceName, (n: number) => number>> = {
   chime: (i) => [pen(6), pen(8), pen(9), pen(11)][(((i | 0) % 4) + 4) % 4],
   tick: (k) => pen(5 + (((k || 0) | 0) % 6)),
+  tabTick: (i) => TAB[(((i | 0) % 5) + 5) % 5],
 };
 
 /**
- * Plays a picked sample as a voice: same cap, priority, master chain and mute as
+ * Plays a picked sample as a voice: same cap, lane, master chain and mute as
  * the synth. Returns false when nothing is picked for `key` or the file is not
  * decoded yet, and the caller plays the synth voice. `hz` steps the pitch of a
  * stepped voice, `max` cuts the file short (the shekere runs for as long as the box asks).
  */
 function sample(key: string, hz?: number, max?: number): boolean {
-  if (offline) return false;
+  if (offline && !offSamples) return false;
   const s = samples.get(key);
   if (!s) return false;
-  // Nothing sounds while the page is hidden. Muted or outside Play, ac() is null and the synth would be silent too.
-  if (typeof document !== "undefined" && document.hidden) return true;
+  // Nothing sounds while the page is hidden. Muted or asleep, ac() is null and the synth would be silent too.
+  if (hidden()) return true;
   const a = ac();
   if (!a) return true;
   if (s.p === 0) voices.hush();
   const r = hz && s.base ? Math.min(4, Math.max(0.25, hz / s.base)) : 1;
   const whole = s.buf.duration / r;
   const d = max != null && max > 0 ? Math.min(whole, max) : whole;
+  const gain = offline && offG != null ? offG : s.g;
   const t = a.currentTime;
-  const x = voice(a, t, d + 0.02, s.p);
+  const x = voice(a, t, d + 0.02, s.p, s.lane);
   const o = a.createBufferSource();
   const g = x.add(a.createGain());
   o.buffer = s.buf;
   o.playbackRate.value = r;
-  g.gain.value = s.g;
+  g.gain.value = gain;
   if (d < whole - 0.001) {
     // cut short: fade out instead of ending on a click
-    g.gain.setValueAtTime(s.g, t + Math.max(0, d - 0.06));
+    g.gain.setValueAtTime(gain, t + Math.max(0, d - 0.06));
     g.gain.linearRampToValueAtTime(0.0001, t + d);
   }
   o.connect(g);
@@ -682,37 +856,210 @@ function sample(key: string, hz?: number, max?: number): boolean {
   return true;
 }
 
-/** The sample for a public voice call, if one is picked and ready. A custom stroke list, tone() and noise() never have one. */
+/** The sample for a public voice call, if one is picked and ready. A custom stroke list, tone(), noise() and bell() never have one. */
 function picked(k: VoiceName, a: unknown[]): boolean {
   const n = a[0];
-  if (k === "talkingDrum") return (n == null || typeof n === "string") && sample("talkingDrum:" + (n || "common"));
-  if (k === "agogo") return sample("agogo:" + n);
-  if (k === "shekere") return sample(k, undefined, typeof n === "number" ? n / 1000 : undefined);
-  return sample(k, NOTE[k]?.(n as number));
+  switch (k) {
+    case "talkingDrum":
+      return (n == null || typeof n === "string") && sample("talkingDrum:" + (n || "common"));
+    case "agogo":
+      return sample("agogo:" + n);
+    case "shekere":
+      return sample(k, undefined, typeof n === "number" ? n / 1000 : undefined);
+    case "motif":
+      return sample(n === "short" ? "hoppaz_three_short" : "hoppaz_three_full");
+    case "checkin":
+      return sample("checkin_stamp");
+    case "outside":
+      return sample("we_outside_ehn");
+    case "wave":
+      return sample("wave_received");
+    case "alert":
+      return sample("box_alert");
+    case "toast":
+      return sample(n === "error" ? "toast_error" : "toast_ok");
+    case "hotspot":
+      return sample("hotspot_enter");
+    case "vibe":
+      return sample("vibe_sticker_pop");
+    case "tabTick":
+      return sample("tab_tick", NOTE.tabTick?.(n as number));
+    default:
+      return sample(k, NOTE[k]?.(n as number));
+  }
+}
+
+/* ------------------------------------------------------------------ lanes -- */
+/**
+ * What the lane of each public call is (the cue's lane in public/sfx/try/manifest.json), and whether it
+ * is loud: "noisy" calls (shekere, the crowd) are skipped in quiet hours and on a low-tier phone, "loud"
+ * ones (the horn) in quiet hours only.
+ */
+type Rule = { l: Lane | ((a: unknown[]) => Lane); skip?: "noisy" | "loud" };
+const moment: Rule = { l: "moment" };
+const reward: Rule = { l: "reward" };
+const ui: Rule = { l: "ui" };
+const RULE: Record<Exclude<VoiceName, "hush">, Rule> = {
+  tone: ui,
+  noise: ui,
+  shekere: { l: "moment", skip: "noisy" },
+  bell: reward,
+  agogo: { l: (a) => (a[0] === 3 ? "ui" : "reward") },
+  stroke: moment,
+  talkingDrum: { l: (a) => (a[0] === "exit" ? "reward" : "moment") },
+  danfoHorn: { l: "moment", skip: "loud" },
+  crowdEhn: { l: "moment", skip: "noisy" },
+  knock: ui,
+  click: ui,
+  rip: moment,
+  swish: moment,
+  fly: reward,
+  chime: reward,
+  coin: reward,
+  stamp: reward,
+  tick: ui,
+  flip: ui,
+  sparkle: moment,
+  fill: reward,
+  rise: reward,
+  motif: { l: (a) => (a[0] === "short" ? "reward" : "moment") },
+  checkin: reward,
+  outside: { l: "reward", skip: "noisy" },
+  wave: reward,
+  alert: ui,
+  toast: ui,
+  tabTick: ui,
+  hotspot: reward,
+  vibe: ui,
+};
+const laneOf = (r: Rule, a: unknown[]) => (typeof r.l === "function" ? r.l(a) : r.l);
+
+/** Runs `fn` with `l` as the lane of every voice it makes. The outermost call wins, so a voice that calls others keeps its lane. */
+function scoped(l: Lane, fn: () => void) {
+  const prev = cur;
+  if (!prev) cur = l;
+  try {
+    fn();
+  } finally {
+    cur = prev;
+  }
+}
+
+/* The same sound: a call and its first argument (chime(1) is a different note from chime(2), toast("ok") from toast("error")). */
+const seen = new Map<string, number>();
+let uiAt: number[] = [];
+let motifAt = -Infinity;
+let shortAt = -Infinity;
+let motifTo = 0;
+
+/** The rules of 5.4 that say whether this call sounds at all. Counts it when it does. */
+function admit(k: string, a: unknown[], r: Rule, l: Lane): boolean {
+  const now = performance.now();
+  const n = a[0];
+  const key = typeof n === "string" || typeof n === "number" || typeof n === "boolean" ? k + ":" + n : k;
+  if (now - (seen.get(key) ?? -Infinity) < COOL) return false;
+  if (r.skip && (quiet() || (r.skip === "noisy" && deviceTier() === "low"))) return false;
+  if (l === "ui") {
+    uiAt = uiAt.filter((t) => now - t < 1000);
+    // the count-up tick is chatter (10 a second in the open): it takes at most half the budget, so the flip and the click after it still sound
+    if (uiAt.length >= (k === "tick" ? UI_MAX / 2 : UI_MAX) || (AC && momentOn(AC))) return false;
+  }
+  if (k === "motif") {
+    const full = n !== "short";
+    // the signature: not twice in one moment, and once every 8 s. The full one has its own clock, so a day-7 streak is
+    // never lost to a check-in a few seconds before; the short one waits out both (a quest claimed soon after a check-in gets the coin only).
+    if (now < motifTo || now - (full ? motifAt : Math.max(motifAt, shortAt)) < MOTIF_EVERY) return false;
+    motifTo = now + (full ? 1300 : 900);
+    if (full) motifAt = now;
+    else shortAt = now;
+  }
+  if (l === "ui") uiAt.push(now);
+  seen.set(key, now);
+  if (seen.size > 80) seen.forEach((t, x) => now - t > 2000 && seen.delete(x));
+  return true;
+}
+
+/**
+ * Every public call comes through here: the context must exist (made in a tap), sound must be on and the
+ * page visible, and admit() must say yes. A context that went to sleep wakes in the tap that follows; for a
+ * sound that comes from a timer or a message it is asked to wake now, and the sound plays only if it is up
+ * within 400 ms, so nothing queues up and bursts out later.
+ */
+function play(k: string, a: unknown[], r: Rule, fn: () => void) {
+  const l = laneOf(r, a);
+  if (offline) {
+    scoped(l, fn);
+    return;
+  }
+  const ctx = AC as AudioContext | null;
+  if (!ctx || muted || !isActive() || hidden()) return;
+  const go = () => {
+    if (!admit(k, a, r, l)) return;
+    syncMaster();
+    scoped(l, fn);
+  };
+  if (ctx.state !== "running" && performance.now() - gestT > 500) {
+    const t = performance.now();
+    try {
+      void ctx.resume().then(
+        () => performance.now() - t < 400 && ctx.state === "running" && go(),
+        () => {}
+      );
+    } catch {
+      /* cannot wake without a tap */
+    }
+    return;
+  }
+  go();
 }
 
 /** The public voices: the picked sample, else the synth voice above. The synth set stays as it was for voices that call each other. */
 const routed = {} as typeof wrapped;
 (Object.keys(wrapped) as VoiceName[]).forEach((k) => {
   const f = wrapped[k] as (...a: unknown[]) => unknown;
-  (routed as Record<string, unknown>)[k] = (...args: unknown[]) => {
-    try {
-      if (picked(k, args)) return;
-    } catch (e) {
-      console.warn("sfx." + k + " sample", e instanceof Error ? e.message : e);
-    }
-    return f(...args);
-  };
+  const r = RULE[k as Exclude<VoiceName, "hush">];
+  (routed as Record<string, unknown>)[k] = r
+    ? (...args: unknown[]) =>
+        play(k, args, r, () => {
+          try {
+            if (picked(k, args)) return;
+          } catch (e) {
+            console.warn("sfx." + k + " sample", e instanceof Error ? e.message : e);
+          }
+          f(...args);
+        })
+    : f;
 });
 
-/** A cue with no synth voice yet (see PICKS): the picked sample, or nothing. */
+/**
+ * The cues that have no voice of their own name (see PICKS), and the public call each one belongs to, so
+ * cue() keeps the same lane and rules as sfx.motif(), toast() and the rest. They are the same sounds.
+ */
 export type CueName = Exclude<PickKey, VoiceName | `${string}:${string}`>;
+const CUE_OF: Record<CueName, [Exclude<VoiceName, "hush">, unknown[]]> = {
+  hoppaz_three_full: ["motif", ["full"]],
+  hoppaz_three_short: ["motif", ["short"]],
+  checkin_stamp: ["checkin", []],
+  we_outside_ehn: ["outside", []],
+  wave_received: ["wave", []],
+  hotspot_enter: ["hotspot", []],
+  box_alert: ["alert", []],
+  toast_ok: ["toast", ["ok"]],
+  toast_error: ["toast", ["error"]],
+  vibe_sticker_pop: ["vibe", []],
+  tab_tick: ["tabTick", [0]],
+};
+/** The picked file for a cue, or nothing (no synth fallback; sfx.motif() and the rest have one). `hz` steps a stepped cue's pitch. */
 function cue(name: CueName, hz?: number) {
-  try {
-    sample(name, hz);
-  } catch (e) {
-    console.warn("sfx.cue " + name, e instanceof Error ? e.message : e);
-  }
+  if (!samples.get(name)) return;
+  const [k, a] = CUE_OF[name];
+  play(k, a, RULE[k], () => {
+    try {
+      sample(name, hz);
+    } catch (e) {
+      console.warn("sfx.cue " + name, e instanceof Error ? e.message : e);
+    }
+  });
 }
 
 /* ---------------------------------------------------------------- control -- */
@@ -728,12 +1075,9 @@ const control = {
       /* storage blocked */
     }
     if (AC && MG && !offline) {
-      const t = AC.currentTime;
-      const g = MG.gain;
-      g.cancelScheduledValues(t);
-      g.setValueAtTime(g.value, t);
-      g.linearRampToValueAtTime(on ? 0 : LEVEL, t + 0.03);
+      syncMaster();
       if (on) {
+        const t = AC.currentTime;
         voices.hush();
         VO.slice().forEach((v) => v.kill(t + 0.03));
       }
@@ -749,7 +1093,16 @@ const control = {
       listeners.delete(fn);
     };
   },
-  /** The shell calls this with true on entering Play and false on leaving it. Nothing sounds while false. */
+  /**
+   * The root layout calls this with true (<SoundLane />): reward and UI sounds then work on every tab, not
+   * only in Play. The context is still made only in a real tap, and it sleeps after about 15 s of silence.
+   */
+  setApp(on: boolean) {
+    app = on;
+    if (!on) park();
+    else if (AC) arm(IDLE);
+  },
+  /** The shell calls this with true on entering Play and false on leaving it. Without the app lane, nothing sounds while false. */
   setPlaying(on: boolean) {
     playing = on;
     if (on) {
@@ -758,8 +1111,11 @@ const control = {
       if (ua?.isActive || performance.now() - gestT < 1000) unlock();
     } else {
       voices.hush();
-      const t = AC ? AC.currentTime : 0;
-      VO.slice().forEach((v) => v.kill(t));
+      // Leaving Play stops what Play was playing. With the app lane on, the rest of the app keeps its sounds.
+      if (!app) {
+        const t = AC ? AC.currentTime : 0;
+        VO.slice().forEach((v) => v.kill(t));
+      }
       park();
     }
   },
@@ -784,26 +1140,36 @@ export const sfx = Object.assign(routed, control, { cue }) as typeof routed & ty
 /**
  * Dev and test only: renders one voice (or a function that plays several, to
  * test overlaps) through the real chain into an OfflineAudioContext and reports
- * its peak and RMS. Not used by the app.
+ * its peak and RMS, and the samples. A voice name renders the synth in its lane; a function
+ * such as () => sfx.chime(1) goes through the public call, and with `opts.samples` plays the
+ * picked file (decoded earlier by the real context) at its trim, or at `opts.g` to try another.
+ * None of the lane rules (cooldown, Moment skip, quiet hours) apply offline. Not used by the app.
  */
 export async function renderOffline(
   name: VoiceName | (() => void),
   args: unknown[] = [],
   seconds = 3,
-  rate = 44100
-): Promise<{ peak: number; rms: number; seconds: number }> {
+  rate = 44100,
+  opts: { samples?: boolean; g?: number } = {}
+): Promise<{ peak: number; rms: number; seconds: number; data: Float32Array }> {
   const off = new OfflineAudioContext(1, Math.ceil(seconds * rate), rate);
-  const saved = { AC, MG, NB, VO, offline };
+  const saved = { AC, MG, NB, VO, offline, offSamples, offG, cur };
   AC = off;
   const k = mkChain(off);
   MG = k.g;
   NB = k.nb;
   VO = [];
   offline = true;
+  offSamples = !!opts.samples;
+  offG = opts.g;
+  cur = null;
   let data: Float32Array;
   try {
     if (typeof name === "function") name();
-    else (voices[name] as (...a: unknown[]) => unknown)(...args);
+    else {
+      const r = RULE[name as Exclude<VoiceName, "hush">];
+      scoped(r ? laneOf(r, args) : "moment", () => (voices[name] as (...a: unknown[]) => unknown)(...args));
+    }
     const buf = await off.startRendering();
     data = buf.getChannelData(0);
   } finally {
@@ -813,6 +1179,9 @@ export async function renderOffline(
     NB = saved.NB;
     VO = saved.VO;
     offline = saved.offline;
+    offSamples = saved.offSamples;
+    offG = saved.offG;
+    cur = saved.cur;
   }
   let peak = 0;
   let sum = 0;
@@ -821,5 +1190,5 @@ export async function renderOffline(
     if (v > peak) peak = v;
     sum += data[i] * data[i];
   }
-  return { peak, rms: Math.sqrt(sum / data.length), seconds };
+  return { peak, rms: Math.sqrt(sum / data.length), seconds, data };
 }

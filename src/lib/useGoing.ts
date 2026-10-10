@@ -5,6 +5,8 @@ import { create } from "zustand";
 import { getSupabase } from "./supabase/client";
 import { NEED_ACCOUNT, requireAccount } from "./accountGate";
 import { useSessionStore } from "./useSession";
+import { sfx } from "./sound/sfx";
+import { haptics } from "./haptics";
 
 /**
  * "I'm going", shared by the event page, the Today list and the swipe mode.
@@ -59,6 +61,16 @@ function markFirstGoing() {
   }
 }
 
+/**
+ * WE OUTSIDE took (GAMIFY-NEXT 5.2): the small crowd "ehn" and a short buzz. Only when the toggle turns ON and
+ * the save went through, so undoing, an error and the sign-up gate stay silent. The gated tap that the sheet
+ * finishes after sign-up sounds when it lands, with the button that flips on screen.
+ */
+function weOutside() {
+  sfx.outside();
+  haptics.buzz("outside");
+}
+
 export function useGoing(userId: string | null) {
   const { loadedFor, decisions, busy, setLoaded, setDecision, setBusy } = useGoingStore();
 
@@ -90,7 +102,10 @@ export function useGoing(userId: string | null) {
       const sb = getSupabase();
       if (!sb) {
         setDecision(eventId, decision);
-        if (decision === "in") markFirstGoing();
+        if (decision === "in") {
+          markFirstGoing();
+          weOutside();
+        }
         return null;
       }
       // Saying you're going needs an account; the sheet opens and finishes this after.
@@ -109,7 +124,10 @@ export function useGoing(userId: string | null) {
           if (error) return "That didn't save. Try again.";
         }
         setDecision(eventId, decision);
-        if (decision === "in") markFirstGoing();
+        if (decision === "in") {
+          markFirstGoing();
+          weOutside();
+        }
         return null;
       } finally {
         setBusy(eventId, false);

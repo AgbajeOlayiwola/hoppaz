@@ -7,6 +7,8 @@ import { areaByName } from "./geo";
 import { useToast } from "./store";
 import { requireAccount } from "./accountGate";
 import { useSessionStore } from "./useSession";
+import { sfx } from "./sound/sfx";
+import { haptics } from "./haptics";
 import type { CheckinClaim, EventRow } from "./types";
 
 export const CHECKIN_RADIUS_M = 1500;
@@ -46,6 +48,18 @@ function prettyKey(key: string) {
 /** The name a badge goes by on screen. */
 export function badgeName(key: string) {
   return BADGES.find((b) => b.key === key)?.name ?? prettyKey(key);
+}
+
+/**
+ * The stamp landed (GAMIFY-NEXT 5.2): its thump and one buzz, then the two-note motif as the 180ms stamp
+ * settles. Called on success only, so a refusal, an error and the sign-up gate stay silent. It also runs when
+ * the sheet finishes a gated check-in, because the stamp lands then too. The badges and the XP count-up
+ * sound from CheckInBlock, on the same beat as what they show.
+ */
+function landed() {
+  sfx.checkin();
+  haptics.buzz("checkin");
+  setTimeout(() => sfx.motif("short"), 180);
 }
 
 /** The badges the real check-in would hand out, worked out in the browser for the sample night (dev only). */
@@ -93,6 +107,7 @@ export function useCheckin(userId: string | null, onDone?: () => void) {
         setDone((s) => new Set(s).add(event.id));
         setCheckedAt((m) => ({ ...m, [event.id]: at }));
         markFirstCheckin();
+        landed();
         return { ok: true, at, xp: 50, badges: demoBadges(event) };
       }
       // Checking in (and the XP and badges with it) needs an account; the sheet finishes it after.
@@ -133,6 +148,7 @@ export function useCheckin(userId: string | null, onDone?: () => void) {
       setCheckedAt((m) => ({ ...m, [event.id]: at }));
       onDone?.();
       markFirstCheckin();
+      landed();
       return { ok: true, at, xp: res.xp, badges: res.badges ?? [] };
     },
     [userId, say, onDone]

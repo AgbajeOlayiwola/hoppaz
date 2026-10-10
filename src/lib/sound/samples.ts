@@ -3,8 +3,9 @@
  *
  * This file only loads them and says what each one needs. sfx.ts plays them as
  * its own voices, so a sample goes through the same master gain, low-pass and
- * compressor, counts against the same 6-voice cap, keeps the priority of the synth
- * voice it replaces, and follows the same mute and Play rules.
+ * compressor, counts against the same 6-voice cap, sits in the same lane as the
+ * synth voice it replaces (lane gain and priority), and follows the same mute and
+ * quiet-hour rules.
  *
  * Nothing is fetched until load() runs, and sfx.ts runs it once, from the first real
  * tap or key press once the engine is on. So there is no network on page load, and
@@ -16,65 +17,70 @@ import { PICKS, type PickKey } from "./picks";
 
 const BASE = "/sfx/";
 
+/** The three lanes of GAMIFY-NEXT 5.4. sfx.ts gives each its priority and level. */
+export type Lane = "moment" | "reward" | "ui";
+
 type Meta = {
-  /** Voice priority, the same as the synth voice it replaces (shekere 0, bells, drums, horn and crowd 2, the rest 1). */
-  p: number;
-  /** Level of the file (see META). */
-  g: number;
-  /** The note the file was made at (Hz), for the voices whose pitch steps with playbackRate. */
+  /** The lane of the synth voice it replaces, and of the cue in manifest.json. */
+  lane: Lane;
+  /** Voice priority when it is not the lane's own: the shekere is a bed (0), dropped first and cut by hush(). */
+  p?: number;
+  /** The note the file was made at (Hz), for the voices whose pitch steps with playbackRate. Measured, see docs/SOUND-FILES.md. */
   base?: number;
 };
-export type Sample = Meta & { buf: AudioBuffer };
+export type Sample = Meta & {
+  /** The trim from picks.ts: where the file sits next to the synth voice it replaces, before the lane. */
+  g: number;
+  buf: AudioBuffer;
+};
 
 /*
- * g is where each file sits next to the synth voice it replaces. The files are peak-normalised
- * to -1 dBFS and the synth is far quieter, so every g is below 1: measured as loudness over the
- * first 3 s through the same chain (master, low-pass, compressor), the three takes averaged,
- * peak and RMS both weighed. A cue with no synth voice is set by lane (GAMIFY-NEXT 5.4: moments
- * full, rewards about 60%, small UI about 30%). A different take can be a few dB off, so tune by ear.
+ * What each sound needs besides its trim (which is in picks.ts, next to the pick). The lane is the
+ * cue's lane in manifest.json. base is the file's own pitch, measured with an FFT on the decoded
+ * file, so the stepped voices land on the notes chime(), tick() and tabTick() ask for.
  */
 const META: Record<PickKey, Meta> = {
   // the box opens
-  "talkingDrum:common": { p: 2, g: 0.45 },
-  "talkingDrum:rare": { p: 2, g: 0.45 },
-  "talkingDrum:epic": { p: 2, g: 0.65 },
-  "talkingDrum:legendary": { p: 2, g: 0.55 },
-  "talkingDrum:legendPhrase": { p: 2, g: 0.9 },
-  rip: { p: 1, g: 0.15 },
-  shekere: { p: 0, g: 0.25 },
-  swish: { p: 1, g: 0.08 },
+  "talkingDrum:common": { lane: "moment" },
+  "talkingDrum:rare": { lane: "moment" },
+  "talkingDrum:epic": { lane: "moment" },
+  "talkingDrum:legendary": { lane: "moment" },
+  "talkingDrum:legendPhrase": { lane: "moment" },
+  rip: { lane: "moment" },
+  shekere: { lane: "moment", p: 0 },
+  swish: { lane: "moment" },
   // level up
-  crowdEhn: { p: 2, g: 0.25 },
-  sparkle: { p: 1, g: 0.3 },
+  crowdEhn: { lane: "moment" },
+  sparkle: { lane: "moment" },
   // Play, the bus, the Hoppaz three
-  "talkingDrum:call": { p: 2, g: 0.75 },
-  "talkingDrum:exit": { p: 2, g: 0.55 },
-  danfoHorn: { p: 2, g: 0.25 },
-  hoppaz_three_full: { p: 2, g: 0.65 },
-  hoppaz_three_short: { p: 2, g: 0.4 },
+  "talkingDrum:call": { lane: "moment" },
+  "talkingDrum:exit": { lane: "reward" },
+  danfoHorn: { lane: "moment" },
+  hoppaz_three_full: { lane: "moment" },
+  hoppaz_three_short: { lane: "reward" },
   // rewards
-  chime: { p: 1, g: 0.12, base: 880 },
-  fly: { p: 1, g: 0.06 },
-  fill: { p: 1, g: 0.06 },
-  stamp: { p: 2, g: 0.4 },
-  coin: { p: 2, g: 0.3 },
-  checkin_stamp: { p: 2, g: 0.45 },
-  we_outside_ehn: { p: 2, g: 0.2 },
-  wave_received: { p: 1, g: 0.25 },
-  hotspot_enter: { p: 2, g: 0.2 },
-  rise: { p: 1, g: 0.04 },
-  "agogo:0": { p: 2, g: 0.15 },
+  chime: { lane: "reward", base: 440.4 },
+  fly: { lane: "reward" },
+  fill: { lane: "reward" },
+  stamp: { lane: "reward" },
+  coin: { lane: "reward" },
+  checkin_stamp: { lane: "reward" },
+  we_outside_ehn: { lane: "reward" },
+  wave_received: { lane: "reward" },
+  hotspot_enter: { lane: "reward" },
+  rise: { lane: "reward" },
+  "agogo:0": { lane: "reward" },
   // small UI
-  click: { p: 1, g: 0.2 },
-  flip: { p: 1, g: 0.08 },
-  tick: { p: 1, g: 0.08, base: 987.77 },
-  knock: { p: 1, g: 0.25 },
-  "agogo:3": { p: 2, g: 0.4 },
-  box_alert: { p: 1, g: 0.15 },
-  toast_ok: { p: 1, g: 0.18 },
-  toast_error: { p: 1, g: 0.13 },
-  vibe_sticker_pop: { p: 1, g: 0.13 },
-  tab_tick: { p: 1, g: 0.1, base: 587.33 },
+  click: { lane: "ui" },
+  flip: { lane: "ui" },
+  tick: { lane: "ui", base: 987.77 },
+  knock: { lane: "ui" },
+  "agogo:3": { lane: "ui" },
+  box_alert: { lane: "ui" },
+  toast_ok: { lane: "ui" },
+  toast_error: { lane: "ui" },
+  vibe_sticker_pop: { lane: "ui" },
+  tab_tick: { lane: "ui", base: 1190 },
 };
 
 const ready = new Map<string, Sample>();
@@ -94,7 +100,7 @@ async function grab(a: BaseAudioContext, key: PickKey, file: string) {
     const r = await fetch(BASE + file);
     if (!r.ok) throw new Error("HTTP " + r.status);
     const buf = await decode(a, await r.arrayBuffer());
-    ready.set(key, { ...META[key], buf });
+    ready.set(key, { ...META[key], g: PICKS[key].g, buf });
   } catch (e) {
     console.warn("sfx sample " + file, e instanceof Error ? e.message : e);
   }
@@ -106,10 +112,10 @@ export const samples = {
     if (started) return;
     started = true;
     try {
-      const todo = (Object.keys(PICKS) as PickKey[]).filter((k) => PICKS[k] !== "synth");
+      const todo = (Object.keys(PICKS) as PickKey[]).filter((k) => PICKS[k].file !== "synth");
       // four at a time, so a slow phone connection is not flooded
       const run = async () => {
-        for (let k = todo.shift(); k; k = todo.shift()) await grab(a, k, PICKS[k]);
+        for (let k = todo.shift(); k; k = todo.shift()) await grab(a, k, PICKS[k].file);
       };
       for (let i = 0; i < Math.min(4, todo.length); i++) void run();
     } catch (e) {

@@ -4,6 +4,7 @@ import { create } from "zustand";
 import { persist } from "zustand/middleware";
 import type { Look } from "./avatar";
 import { TODAY, type DateFilter } from "./filters";
+import { sfx } from "./sound/sfx";
 
 type Fix = { lat: number; lng: number; source: "gps" | "area"; area: string | null };
 
@@ -70,6 +71,9 @@ export const useHoppaz = create<HoppazState>()(
  */
 export type ToastTone = "orange" | "violet" | "ok" | "error";
 
+/** A copy confirmation is information, not an event: "Link copied" stays silent even though it is sent as "ok" (GAMIFY-NEXT 5.2). */
+const COPIED = /\bcopied\b/i;
+
 type ToastState = {
   toast: { text: string; tone: ToastTone; id: number } | null;
   say: (text: string, tone?: ToastTone) => void;
@@ -87,5 +91,8 @@ export const useToast = create<ToastState>((set) => ({
     if (toastTimer) clearTimeout(toastTimer);
     set({ toast: { text, tone, id: Date.now() } });
     toastTimer = setTimeout(() => set({ toast: null }), 3200);
+    // The toast's sound, in the UI lane: a soft chime for done, a low knock for failed. A plain notice is silent,
+    // and so is a drop or reward toast ("violet"), which has its own sound where it happens.
+    if (tone === "error" || (tone === "ok" && !COPIED.test(text))) sfx.toast(tone);
   },
 }));

@@ -29,5 +29,9 @@ export function sentence(raw: string) {
   return /[.!?]$/.test(s) ? s : `${s}.`;
 }
 
-/** Reads a legacy one-liner as done (true) or not. */
-export const looksDone = (raw: string) => /COMPLETE|SUBMITTED|ADDED|CLAIMED|OPENED/.test(raw);
+/**
+ * Reads a quest claim's own answer as done (true) or not: "QUEST COMPLETE · +50 XP" or "SUBMITTED FOR REVIEW".
+ * Anchored on purpose. A refusal carries the same words ("COULD NOT COMPLETE QUEST", "ALREADY COMPLETED")
+ * and must not read as done: it would show a green "Quest done." toast on a failed claim.
+ */
+export const looksDone = (raw: string) => /^(QUEST COMPLETE|SUBMITTED)/.test(raw);

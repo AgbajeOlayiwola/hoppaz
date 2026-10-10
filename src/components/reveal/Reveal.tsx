@@ -7,6 +7,8 @@ import { Share2, X } from "lucide-react";
 import Mascot, { type MascotState } from "@/components/Mascot";
 import Serial from "@/components/me/Serial";
 import { useToast } from "@/lib/store";
+import { haptics } from "@/lib/haptics";
+import { sfx } from "@/lib/sound/sfx";
 import { flyStarsToMe } from "./starFlight";
 
 /* eslint-disable @next/next/no-img-element -- collectible art is Hoppaz or partner supplied, sizes unknown */
@@ -31,15 +33,10 @@ const TILT = [-3, 2, 1.5, -2];
 const TEAR_AT = 0.62;
 /** How far a card has to be thrown before it counts as flicked away. */
 const FLICK_AT = 90;
+/** The Common drum rings about 0.8 s, and a UI tick is skipped while a Moment sounds: the first card counts up after it. */
+const DRUM_MS = 850;
 
 const reduced = () => window.matchMedia("(prefers-reduced-motion: reduce)").matches;
-const buzz = (ms: number) => {
-  try {
-    navigator.vibrate?.(ms);
-  } catch {
-    /* no vibration on this phone */
-  }
-};
 
 /**
  * The drop reveal, the one extravagance in the app. Four frames:
@@ -56,6 +53,11 @@ const buzz = (ms: number) => {
  * Built for partner drops and collectibles now; the daily box reuses it, with
  * its own words for the top bar, the last frame and the share line (it is not a
  * drop, and nothing lands on the shelf).
+ *
+ * It is loud on purpose, a first box is the first reward (GAMIFY-NEXT 5.2): a click
+ * on pick, the rip on the tear, the Common drum as the first card comes out, a tick
+ * as an XP number counts up, a flip on each flick. Every one is on a tap or a drag,
+ * none on load, and each sits with a picture and a buzz (haptics.ts).
  */
 export default function Reveal({
   label,
@@ -94,6 +96,12 @@ export default function Reveal({
   const summary = useRef<HTMLDivElement>(null);
   const started = useRef(false);
 
+  // Sound runs while the reveal is on screen, even where the app lane is off.
+  useEffect(() => {
+    sfx.acquire();
+    return () => sfx.release();
+  }, []);
+
   const items = outcome && "items" in outcome ? outcome.items : [];
   const claimed = items.length > 0;
   const error = outcome && "error" in outcome ? outcome.error : null;
@@ -104,7 +112,8 @@ export default function Reveal({
     started.current = true;
     setPicked(i);
     setPhase("chosen");
-    buzz(8);
+    haptics.buzz("pick");
+    sfx.click();
     // The claim goes off now, so the result is usually in before the tape is torn.
     void open()
       .then(setOutcome)
@@ -119,20 +128,29 @@ export default function Reveal({
   const finishTear = () => {
     setTear(1);
     setPhase("torn");
-    buzz(18);
+    haptics.buzz("tear");
+    sfx.rip();
   };
 
   // Torn and the result is in: the tape flies off, then the first thing comes out.
   useEffect(() => {
     if (phase !== "torn" || !claimed) return;
-    const t = setTimeout(() => setPhase("pulled"), reduced() ? 0 : 520);
+    const t = setTimeout(
+      () => {
+        sfx.talkingDrum("common");
+        setPhase("pulled");
+      },
+      reduced() ? 0 : 520
+    );
     return () => clearTimeout(t);
   }, [phase, claimed]);
 
   const next = (to: { dx: number; dy: number } = { dx: 0, dy: -420 }) => {
+    if (gone) return; // the card is already leaving: one flip, one buzz
     setGone(to);
     setDrag(null);
-    buzz(6);
+    haptics.buzz("snap");
+    sfx.flip();
     setTimeout(
       () => {
         setGone(null);
@@ -325,7 +343,7 @@ export default function Reveal({
               setDrag(null);
             }}
           >
-            <PulledCard item={item} />
+            <PulledCard item={item} wait={index === 0 ? DRUM_MS : 300} />
           </div>
         )}
 
@@ -428,12 +446,13 @@ function Box({
   );
 }
 
-/** One thing out of the box, face up: a ticket stub for a reward, art for a collectible, a big number for XP. */
-function PulledCard({ item }: { item: RevealItem }) {
+/** One thing out of the box, face up: a ticket stub for a reward, art for a collectible, a big number for XP. `wait` is how long the XP number holds at 0 before it counts up. */
+function PulledCard({ item, wait }: { item: RevealItem; wait: number }) {
   if (item.kind === "xp") {
+    const xp = /^(\+?)(\d+)\s*XP$/i.exec(item.title);
     return (
       <div className="stub stub-night grid w-[min(80vw,280px)] place-items-center px-6 py-9 text-center">
-        <p className="num text-[84px] leading-none text-orange">{item.title.replace(/\s*XP$/i, "")}</p>
+        <p className="num text-[84px] leading-none text-orange">{xp ? <CountUp sign={xp[1]} to={Number(xp[2])} wait={wait} /> : item.title.replace(/\s*XP$/i, "")}</p>
         <p className="seclabel mt-3">XP</p>
         {item.line && <p className="hint mt-2">{item.line}</p>}
       </div>
@@ -457,5 +476,47 @@ function PulledCard({ item }: { item: RevealItem }) {
         </div>
       )}
     </div>
+  );
+}
+
+/**
+ * The XP number counting up from 0 in 50 ms steps, as the "+30" under the XP bar does in the open, with the
+ * same rising tick. With reduced motion it is just the number. Screen readers get the whole number, not the count.
+ */
+function CountUp({ sign, to, wait }: { sign: string; to: number; wait: number }) {
+  const still = reduced() || to <= 0;
+  const [n, setN] = useState(still ? to : 0);
+
+  useEffect(() => {
+    if (still) return;
+    const steps = Math.max(2, Math.min(to, 10));
+    let i = 0;
+    let iv: ReturnType<typeof setInterval> | undefined;
+    const t = setTimeout(() => {
+      iv = setInterval(() => {
+        i++;
+        setN(Math.round((to * i) / steps));
+        // the UI lane lets two ticks through a second, so they go partway and on the number landing
+        if (i === steps || i === steps - 4) sfx.tick(Math.ceil(i / 2));
+        if (i >= steps) clearInterval(iv);
+      }, 50);
+    }, wait);
+    return () => {
+      clearTimeout(t);
+      clearInterval(iv);
+    };
+  }, [still, to, wait]);
+
+  return (
+    <>
+      <span className="sr-only">
+        {sign}
+        {to}
+      </span>
+      <span aria-hidden>
+        {sign}
+        {n}
+      </span>
+    </>
   );
 }

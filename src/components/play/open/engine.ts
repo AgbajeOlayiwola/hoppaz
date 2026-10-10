@@ -1,4 +1,5 @@
 import { sfx } from "@/lib/sound/sfx";
+import { haptics } from "@/lib/haptics";
 import { levelFor } from "@/lib/brand";
 import s from "./OpenStage.module.css";
 import { cardSVG, crateSVG, rewardCardSVG, CHECK_SVG, SHARE_SVG, SWIPE_SVG, TAP_SVG } from "./art";
@@ -45,14 +46,6 @@ export type EngineDeps = {
 const clamp = (v: number, a: number, b: number) => Math.max(a, Math.min(b, v));
 const rnd = (a: number, b: number) => a + Math.random() * (b - a);
 const tf = (x: number, y: number, sc = 1, r = 0) => `translate(${x}px,${y}px) scale(${sc}) rotate(${r}deg)`;
-
-function buzz(p: number | number[]) {
-  try {
-    navigator.vibrate?.(p);
-  } catch {
-    /* no vibration on this phone (iPhone): the sound and the picture carry it */
-  }
-}
 
 const NOOP_ANIM = { cancel() {}, pause() {}, play() {}, playbackRate: 1, onfinish: null } as unknown as Animation;
 function anim(e: Element, frames: Keyframe[], opts: KeyframeAnimationOptions): Animation {
@@ -215,7 +208,8 @@ export function createOpenEngine(d: EngineDeps): OpenEngine {
     const iv = setInterval(() => {
       i++;
       c.textContent = "+" + Math.round((v * i) / steps);
-      if (i % 2 === 0) sfx.tick(i / 2);
+      // the UI lane lets two ticks through a second, so they go partway and on the number landing (as in Reveal)
+      if (i === steps || i === steps - 4) sfx.tick(Math.ceil(i / 2));
       if (i >= steps) {
         clearInterval(iv);
         c.textContent = "+" + v;
@@ -263,7 +257,7 @@ export function createOpenEngine(d: EngineDeps): OpenEngine {
             sfx.crowdEhn();
             sfx.sparkle();
             levelAt(where.xp(), b.name);
-            buzz([20, 40, 30]);
+            haptics.buzz("levelUp");
           }, D(520));
         }
       }
@@ -275,7 +269,7 @@ export function createOpenEngine(d: EngineDeps): OpenEngine {
     } else {
       ringAt(where.pips(), 26 * U, "#FF4D00");
       sfx.stamp();
-      buzz(25);
+      haptics.buzz("stampSmall");
       d.onLand("stamp", result);
     }
   }
@@ -360,7 +354,7 @@ export function createOpenEngine(d: EngineDeps): OpenEngine {
       at(650, () => bit.remove());
     }
     sfx.rip();
-    buzz(8);
+    // No buzz here: the burst follows within 120 ms, and a buzz inside the 400 ms window would swallow its pattern.
   }
   function burst(o: { n?: number; waves?: number; big?: boolean; pw?: number; dur?: number } = {}) {
     const n = Math.round((o.n || 18) * (LOW ? 0.6 : 1));
@@ -426,7 +420,7 @@ export function createOpenEngine(d: EngineDeps): OpenEngine {
     sfx.hush();
     sfx.talkingDrum(o.big ? "legendPhrase" : tier);
     sfx.swish(o.big);
-    buzz(o.big ? [60, 30, 90] : 25);
+    haptics.buzz(o.big ? "burstBig" : "stampSmall");
     emitOpenEvent({ type: "open-burst", tier });
     return anims;
   }
@@ -609,7 +603,7 @@ export function createOpenEngine(d: EngineDeps): OpenEngine {
         { duration: D(600), easing: "linear" }
       );
       c.style.filter = `drop-shadow(0 0 28px ${T.c})`;
-      buzz([20, 40, 30, 40, 50]);
+      haptics.buzz("crateShake");
     } else {
       anim(c, [{ transform: tf(CX, CY, 1) }, { transform: `translate(${CX}px,${CY + 6 * U}px) scale(1.05,.92)` }], { duration: 110, easing: "ease-out" });
     }
@@ -678,7 +672,7 @@ export function createOpenEngine(d: EngineDeps): OpenEngine {
     note.textContent = text;
     put(note, CX, CY - ch / 2 - 26 * U);
     anim(note, [{ opacity: 0, transform: tf(CX, CY - ch / 2 - 18 * U) }, { opacity: 1, transform: tf(CX, CY - ch / 2 - 26 * U) }], { duration: D(200) });
-    buzz(12);
+    haptics.buzz("refused");
     at(D(1000), () => {
       if (destroyed) return;
       cleanup();
@@ -837,7 +831,7 @@ export function createOpenEngine(d: EngineDeps): OpenEngine {
       if (instant && edgeEl) anim(edgeEl, [{ opacity: 1 }], { duration: 10 });
       at(instant ? 60 : D(760), () => {
         sfx.sparkle();
-        buzz([20, 60, 20]);
+        haptics.buzz("cardUp");
         const sh = mk(s.share, 150 * U, 38 * U, `${SHARE_SVG}Share`);
         const sy = cd.y + cd.h / 2 + 32 * U;
         put(sh, CX, sy);

@@ -8,6 +8,9 @@ import QrScanner from "@/components/QrScanner";
 import { useQuests, useGroups, type Quest } from "@/lib/game";
 import { getSupabase } from "@/lib/supabase/client";
 import { useToast } from "@/lib/store";
+import { isNeedAccount } from "@/lib/accountGate";
+import { sfx } from "@/lib/sound/sfx";
+import { haptics } from "@/lib/haptics";
 import { demoQuests, isDemoEvent } from "@/components/event/demo";
 import { looksDone, sentence } from "@/components/event/copy";
 
@@ -18,6 +21,16 @@ const ICONS: Record<Quest["quest_type"], typeof Camera> = {
   insight: PenLine,
   group: Users,
 };
+
+/**
+ * A quest finished (GAMIFY-NEXT 5.2): the coin and a buzz, then the two-note motif behind it. Only a real
+ * completion calls this: "sent for review", every refusal and the sign-up gate stay silent.
+ */
+function questDone() {
+  sfx.coin();
+  haptics.buzz("quest");
+  setTimeout(() => sfx.motif("short"), 160);
+}
 
 /** Only mounted when a crew quest is opened, so the crew lists load only then. */
 function CrewPicker({ userId, value, onChange }: { userId: string | null; value: string; onChange: (id: string) => void }) {
@@ -84,6 +97,7 @@ export default function EventQuestList({
       setDemoClaims({ ...demoClaims, [quest.id]: "ok" });
       setOpen(null);
       say("Quest done.", "ok");
+      questDone();
       return;
     }
     const result = await live.claim(quest, {
@@ -92,9 +106,15 @@ export default function EventQuestList({
       evidence: insights[quest.id],
       crewId: crewIds[quest.id],
     });
+    // One reading of the answer drives the toast, the row and the sound, so they cannot disagree.
     const done = looksDone(result);
-    say(done ? (result.includes("REVIEW") ? "Sent for review." : "Quest done.") : sentence(result), done ? "ok" : "error");
+    const review = done && result.includes("REVIEW");
+    // The sign-up gate is not a failure: the sheet is open over this, so its line is a plain notice (silent), not the red knock.
+    const tone = done ? "ok" : isNeedAccount(result) ? "orange" : "error";
+    say(done ? (review ? "Sent for review." : "Quest done.") : sentence(result), tone);
     if (done) setOpen(null);
+    // Sent for review pays no XP yet, so it stays silent; a refusal and the sign-up gate are not done.
+    if (done && !review) questDone();
   };
 
   const anyLocked = relevant.some((q) => (q.quest_type === "checkin" || q.quest_type === "photo") && !checkedIn && !claims[q.id]);
