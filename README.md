@@ -55,6 +55,9 @@ must not be mistaken for a live event feed. Keep demo fixtures out of production
    rooms for good three days after the event.
    Then `supabase/hunt_items.sql`: the five 3D camera-hunt collectibles staff can
    hide at events from the launch desk (also safe to run again).
+   Then `supabase/swipe_log.sql`: every left and right swipe on the Today deck,
+   for the data (staff read the totals in the `swipe_stats` view; also safe to
+   run again).
 3. **Authentication → Sign In / Providers → turn on Anonymous sign-ins.** Keep
    anonymous identity enabled; there is no mandatory email registration.
 4. Configure the app's Production environment in Vercel with

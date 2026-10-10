@@ -5,7 +5,8 @@ import { Share2, X } from "lucide-react";
 import DayRail from "@/components/DayRail";
 import EventCard from "@/components/EventCard";
 import { SIDE_PANEL, sidePanelWidth } from "@/components/event/side";
-import Deck from "@/components/today/Deck";
+import SwipeStack, { type StackApi, type SwipeDir } from "@/components/today/SwipeStack";
+import WeOutsideSheet, { type Liked } from "@/components/today/WeOutsideSheet";
 import DeckCard, { GhostDeck } from "@/components/today/DeckCard";
 import DeckGlow, { type GlowApi } from "@/components/today/DeckGlow";
 import SoundToggle from "@/components/today/SoundToggle";
@@ -23,6 +24,7 @@ import {
   dateTag,
   hasEnded,
   nextBusyDay,
+  nextBusyLabel,
   weekdayLong,
 } from "@/components/today/helpers";
 import { DEMO_DROP_TITLES } from "@/lib/demoData";
@@ -39,7 +41,9 @@ import {
 import { demoFlyer } from "@/components/event/demo";
 import { eventTitle, haversineKm } from "@/lib/geo";
 import { useHoppaz, useToast } from "@/lib/store";
-import { isNeedAccount } from "@/lib/accountGate";
+import { isNeedAccount, requireAccount } from "@/lib/accountGate";
+import { useEventGroups } from "@/lib/chat";
+import { logSwipe, useGuestLikes } from "@/lib/swipeLog";
 import { useCheckin } from "@/lib/useCheckin";
 import { useCollectibleEventIds } from "@/lib/useCollectibles";
 import { useEvents, useHop } from "@/lib/useEvents";
@@ -52,14 +56,15 @@ import type { EventRow } from "@/lib/types";
 const NO_TYPES: string[] = [];
 
 /**
- * TODAY (the /discover route): the night as a deck of big flyer cards you
- * slide through, one centred and the neighbours peeking, tilted back in 3D.
- * The screen behind takes the colours of the flyer in the middle and blends as
- * you slide, silent (a phone that can buzz gives a tiny tap on each snap; the
- * speaker button in the header is the app's one mute). SHARE TO STORY makes a
- * 9:16 picture of the middle card; ?demo=1 slides the deck by itself, for
+ * TODAY (the /discover route): the night as a pile of big flyer cards you
+ * swipe, Tinder style: right is WE OUTSIDE (you're going), left is a nah for
+ * now and the card goes to the back of the pile, so it comes round again.
+ * The screen behind takes the colours of the flyer on top and blends towards
+ * the next as you drag (a phone that can buzz gives a tiny tap on each swipe;
+ * the speaker button in the header is the app's one mute). SHARE TO STORY
+ * makes a 9:16 picture of the top card; ?demo=1 swipes by itself, for
  * filming. Pick the night on the same rail the Map uses (or NEXT, the next
- * twenty). Tap the centred card and it opens into the breakdown: the event
+ * twenty). Tap the top card and it opens into the breakdown: the event
  * card as a sheet on a phone, docked on the right on a wide screen. A slow
  * strip of tags underneath scrolls what is coming up and jumps the deck to
  * whichever one you tap.
@@ -76,9 +81,14 @@ export default function TodayPage() {
 
   /** Which night the deck shows: one chosen day, or the next twenty events whatever night they fall on. */
   const [mode, setMode] = useState<"day" | "next">("day");
-  /** The card in the middle, remembered by event (not place) so a list that shifts under it keeps it there. */
-  const [cursor, setCursor] = useState<{ key: string; id: string | null }>({ key: "", id: null });
-  /** The breakdown is open on the card in the middle. */
+  /**
+   * The swipe pile for one deck (a night, or NEXT), by event id so a list that shifts under it keeps its place:
+   * `order` is the pile as you left it. Another night starts its own pile.
+   */
+  const [pile, setPile] = useState<{ key: string; order: string[] }>({ key: "", order: [] });
+  /** The WE OUTSIDE list is open. */
+  const [listOpen, setListOpen] = useState(false);
+  /** The breakdown is open on the card on top. */
   const [open, setOpen] = useState(false);
   /** Your own taps, added to the loaded going counts until a fresh load brings the real ones. */
   const [delta, setDelta] = useState<Record<string, number>>({});
@@ -154,38 +164,46 @@ export default function TodayPage() {
   /* ------------------------------------------------------------ the deck -- */
   const deckKey = mode === "next" ? "next" : `day:${dayKey}`;
   const deckEvents = mode === "next" ? next.list : dayEvents;
-  const index = useMemo(() => {
-    const i = cursor.key === deckKey && cursor.id ? deckEvents.findIndex((e) => e.id === cursor.id) : -1;
-    return i < 0 ? 0 : i;
-  }, [cursor, deckKey, deckEvents]);
-  const event = open ? deckEvents[index] ?? null : null;
-
-  const setIndex = useCallback(
-    (i: number) => setCursor({ key: deckKey, id: deckEvents[i]?.id ?? null }),
-    [deckKey, deckEvents]
-  );
-
-  // Where the deck is, for the glow behind it; and the agogo tick each time it lands on a new card.
-  const glow = useRef<GlowApi | null>(null);
-  const indexRef = useRef(index);
+  const byId = useMemo(() => new Map(deckEvents.map((e) => [e.id, e])), [deckEvents]);
+  // The pile: the night's events in the deck's order (the ones that are over are left out), and a card you swipe,
+  // either way, goes to the back so it comes round again. The deck never runs out.
+  const pileIds = useMemo(() => {
+    const live = deckEvents.filter((e) => !hasEnded(e, now));
+    const liveIds = new Set(live.map((e) => e.id));
+    const listed = (pile.key === deckKey ? pile.order : []).filter((id) => liveIds.has(id));
+    const seen = new Set(listed);
+    return [...listed, ...live.filter((e) => !seen.has(e.id)).map((e) => e.id)];
+  }, [pile, deckKey, deckEvents, now]);
+  const pileRef = useRef(pileIds);
   useEffect(() => {
-    indexRef.current = index;
+    pileRef.current = pileIds;
   });
-  const flyers = useMemo(() => deckEvents.map((e) => demoFlyer(e)), [deckEvents]);
-  const onPos = useCallback((pos: number) => glow.current?.set(pos), []);
-  const slideTo = useCallback(
-    (i: number) => {
-      snapTick();
-      setIndex(i);
-    },
-    [setIndex]
+  const top = byId.get(pileIds[0] ?? "") ?? null;
+  /** An event opened from the WE OUTSIDE list: it may be on another night, or over, so it is not the pile's top. */
+  const [picked, setPicked] = useState<EventRow | null>(null);
+  const event = picked ?? (open ? top : null);
+
+  /** Move a card in the pile: to the front (a tag in the strip, the breakdown's back button) or to the back (a swipe). */
+  const move = useCallback(
+    (id: string, to: "front" | "back") =>
+      setPile(() => {
+        const rest = pileRef.current.filter((x) => x !== id);
+        return { key: deckKey, order: to === "front" ? [id, ...rest] : [...rest, id] };
+      }),
+    [deckKey]
   );
 
-  // Share to story: the card in the middle, as a 9:16 picture.
+  // How far the top card has gone, for the glow behind it.
+  const glow = useRef<GlowApi | null>(null);
+  const stack = useRef<StackApi | null>(null);
+  const flyers = useMemo(() => pileIds.slice(0, 3).map((id) => demoFlyer(byId.get(id)!)), [pileIds, byId]);
+  const onPos = useCallback((pos: number) => glow.current?.set(pos), []);
+
+  // Share to story: the card on top, as a 9:16 picture.
   const [story, setStory] = useState<EventRow | null>(null);
   const closeStory = useCallback(() => setStory(null), []);
 
-  // ?demo=1 slides the deck by itself every 2.5 seconds, for filming ads. A touch or a key hands it back to you for a while.
+  // ?demo=1 passes a card by itself every 2.5 seconds, for filming ads. A touch or a key hands it back to you for a while.
   const [filming, setFilming] = useState(false);
   useEffect(() => {
     setFilming(new URLSearchParams(window.location.search).get("demo") === "1");
@@ -194,16 +212,15 @@ export default function TodayPage() {
   const touch = useCallback(() => {
     touched.current = Date.now();
   }, []);
-  const deckCount = deckEvents.length;
+  const pileCount = pileIds.length;
   useEffect(() => {
-    if (!filming || open || story || deckCount < 2) return;
+    if (!filming || open || story || pileCount < 2) return;
     const id = setInterval(() => {
       if (Date.now() - touched.current < 6000) return;
-      const i = indexRef.current;
-      slideTo(i >= deckCount - 1 ? 0 : i + 1);
+      stack.current?.swipe("pass");
     }, 2500);
     return () => clearInterval(id);
-  }, [filming, open, story, deckCount, slideTo]);
+  }, [filming, open, story, pileCount]);
 
   const pickDay = useCallback(
     (f: DateFilter) => {
@@ -214,17 +231,17 @@ export default function TodayPage() {
     [setDateFilter]
   );
 
-  /** A tag in the strip: jump the deck to that event, and to its night if it is not on this deck. */
+  /** A tag in the strip: put that event on top of the pile, on its own night if it is not on this deck. */
   const jump = (e: EventRow) => {
     setOpen(false);
-    if (mode === "next" && next.list.some((x) => x.id === e.id)) {
-      setCursor({ key: "next", id: e.id });
+    if (byId.has(e.id)) {
+      move(e.id, "front");
       return;
     }
     const night = nightOf(Date.parse(e.starts_at));
     setDateFilter({ kind: "night", date: night });
     setMode("day");
-    setCursor({ key: `day:${night}`, id: e.id });
+    setPile({ key: `day:${night}`, order: [e.id] });
   };
 
   /* ----------------------------------------------- drops, quests, your days -- */
@@ -303,6 +320,78 @@ export default function TodayPage() {
   });
   const onGoing = useCallback((e: EventRow) => void weOutsideRef.current(e), []);
 
+  /* ------------------------------------------------------------- a swipe -- */
+  // Right is WE OUTSIDE: you're interested in going. With an account it saves as going (and so the group chat
+  // invite); a guest's right swipes are kept on the phone and saved the moment they sign up (the sheet asks once a
+  // visit, not on every swipe). Every swipe, both ways, goes into the swipe log for the data. Either way the card
+  // goes to the back of the pile and comes round again.
+  const guest = useGuestLikes(async (id) => going.decide(id, "in"));
+  const asked = useRef(false);
+  const toldOnce = useRef(false);
+  const swipeIn = async (e: EventRow) => {
+    if (going.isGoing(e.id) || going.busy[e.id]) return;
+    if (!requireAccount("save your WE OUTSIDE list and get the group chats", undefined, { quiet: asked.current })) {
+      asked.current = true;
+      guest.add(e.id);
+      return;
+    }
+    const err = await going.decide(e.id, "in");
+    if (err) {
+      if (!isNeedAccount(err)) say(err, "error");
+      return;
+    }
+    if (e.id !== openIdRef.current) setDelta((d) => ({ ...d, [e.id]: (d[e.id] ?? 0) + 1 }));
+    // Said once a visit: on an endless deck a line on every swipe would be noise.
+    if (!toldOnce.current) say("We outside. It's in your WE OUTSIDE list, with its group chat.", "ok");
+    toldOnce.current = true;
+  };
+  const swipeInRef = useRef(swipeIn);
+  useEffect(() => {
+    swipeInRef.current = swipeIn;
+  });
+  const filmingRef = useRef(false);
+  useEffect(() => {
+    filmingRef.current = filming;
+  });
+  const onSwipe = useCallback(
+    (id: string, dir: SwipeDir) => {
+      snapTick();
+      move(id, "back");
+      // ?demo=1 swipes on its own for filming: that is not a Hopper's choice, so it is not logged or saved.
+      if (filmingRef.current && Date.now() - touched.current >= 6000) return;
+      logSwipe(id, dir === "in" ? "right" : "left");
+      const e = byId.get(id);
+      if (dir === "in" && e) void swipeInRef.current(e);
+    },
+    [move, byId]
+  );
+
+  /* ------------------------------------------------- the WE OUTSIDE list -- */
+  const groups = useEventGroups(userId);
+  const allById = useMemo(() => new Map(allEvents.map((e) => [e.id, e])), [allEvents]);
+  const liked = useMemo(() => {
+    const items: Liked[] = [];
+    for (const [id, d] of Object.entries(going.decisions)) {
+      const e = d === "in" ? allById.get(id) : undefined;
+      if (e) items.push({ event: e, saved: true });
+    }
+    for (const id of guest.liked) {
+      const e = allById.get(id);
+      if (e && going.decisions[id] !== "in") items.push({ event: e, saved: false });
+    }
+    // Coming up soonest first, then the ones that are over.
+    return items.sort(
+      (a, b) =>
+        Number(hasEnded(a.event, now)) - Number(hasEnded(b.event, now)) ||
+        Date.parse(a.event.starts_at) - Date.parse(b.event.starts_at)
+    );
+  }, [going.decisions, guest.liked, allById, now]);
+  const likedUpcoming = liked.filter((i) => !hasEnded(i.event, now)).length;
+  const reloadGroups = groups.reload;
+  useEffect(() => {
+    if (listOpen) void reloadGroups();
+  }, [listOpen, reloadGroups]);
+
   const isHopStop = useMemo(() => {
     if (!event || !hop) return false;
     return hop.stops.some((s) => haversineKm(s.lat, s.lng, event.lat, event.lng) < 0.2);
@@ -343,7 +432,7 @@ export default function TodayPage() {
       onKeyDownCapture={touch}
     >
       {/* The screen takes the middle card's colours. Behind everything, and it never takes a tap. */}
-      {!loading && !noLiveEvents && !empty && <DeckGlow urls={flyers} index={index} api={glow} />}
+      {!loading && !noLiveEvents && !empty && top && <DeckGlow urls={flyers} index={0} api={glow} />}
       <div className="relative z-[1] min-h-0 flex-1 overflow-y-auto overscroll-contain">
         {/* Paz's tour sets --intro-reserve while its card is up on this screen, so the deck stops above the card. */}
         <div className="flex min-h-full flex-col pb-[var(--intro-reserve,0px)]">
@@ -352,7 +441,20 @@ export default function TodayPage() {
             <div className="flex items-baseline gap-2.5">
               <h1 className="truncate font-display text-[34px] font-black leading-none tracking-[-0.01em]">{title}</h1>
               {mode === "day" && !isToday && mounted && <span className="seclabel flex-none">{dateTag(dayKey)}</span>}
-              {!loading && !noLiveEvents && !empty && <SoundToggle className="-mr-2 ml-auto self-center" />}
+              {mounted && (
+                <button
+                  type="button"
+                  onClick={() => setListOpen(true)}
+                  aria-label={`We outside: ${liked.length} event${liked.length === 1 ? "" : "s"} you swiped right on`}
+                  className="ml-auto inline-flex h-[34px] flex-none items-center gap-1.5 self-center rounded-full border border-line bg-ink-2/70 px-3 font-mono text-[9.5px] font-medium uppercase tracking-[0.12em] text-cream transition-transform active:scale-[0.94]"
+                >
+                  We outside
+                  <span className="grid h-[18px] min-w-[18px] place-items-center rounded-full bg-orange px-1 text-[10px] font-medium tabular-nums text-brand-ink">
+                    {likedUpcoming}
+                  </span>
+                </button>
+              )}
+              {!loading && !noLiveEvents && !empty && <SoundToggle className="-mr-2 self-center" />}
             </div>
             <p className="mt-2.5 min-h-[22px] font-body text-[15px] font-medium leading-snug text-cream">{line}</p>
           </header>
@@ -430,17 +532,31 @@ export default function TodayPage() {
                   />
                 )}
               </div>
+            ) : !top ? (
+              <div className="my-auto px-4 pb-8 pt-8 text-center">
+                <p className="font-display text-[22px] font-black">That&apos;s a wrap.</p>
+                <p className="hint mx-auto mt-1.5 max-w-[30ch]">Everything on this night has ended.</p>
+                {nextBusy && (
+                  <button
+                    type="button"
+                    onClick={() => pickDay({ kind: "night", date: nextBusy.key })}
+                    className="btn mt-5 px-5 text-[12.5px]"
+                  >
+                    {nextBusyLabel(nextBusy)}
+                  </button>
+                )}
+              </div>
             ) : (
               <div key={deckKey} className="flex min-h-0 flex-1 animate-fade flex-col">
-                <Deck
-                  count={deckEvents.length}
-                  index={index}
-                  onIndex={slideTo}
+                <SwipeStack
+                  ids={pileIds}
+                  api={stack}
+                  onSwipe={onSwipe}
                   onPos={onPos}
                   lead={
                     <button
                       type="button"
-                      onClick={() => setStory(deckEvents[index] ?? null)}
+                      onClick={() => setStory(top)}
                       aria-label="Share to story"
                       className="inline-flex h-[38px] flex-none items-center gap-[7px] rounded-full border border-line bg-ink-2/70 pl-[11px] pr-[14px] font-mono text-[9.5px] font-medium uppercase tracking-[0.12em] text-cream transition-transform active:scale-[0.94]"
                     >
@@ -452,9 +568,10 @@ export default function TodayPage() {
                     setOpen(true);
                     introEvent("event_opened");
                   }}
-                  label={(i) => `${i === index ? "Open" : "Show"} ${eventTitle(deckEvents[i])}`}
-                  slide={(i, s) => {
-                    const e = deckEvents[i];
+                  label={(id) => `Open ${eventTitle(byId.get(id)!)}`}
+                  slide={(id, s) => {
+                    const e = byId.get(id);
+                    if (!e) return null;
                     return (
                       <DeckCard
                         event={e}
@@ -493,6 +610,28 @@ export default function TodayPage() {
         </div>
       </div>
 
+      <WeOutsideSheet
+        open={listOpen}
+        onClose={() => setListOpen(false)}
+        items={liked}
+        groups={groups.groups}
+        now={now}
+        onOpen={(e) => {
+          setListOpen(false);
+          setPicked(e);
+          introEvent("event_opened");
+        }}
+        onJoin={async (id) => {
+          const ok = await groups.join(id);
+          say(ok ? "You're in the group chat." : "Couldn't join. Try again.", ok ? "ok" : "error");
+          return ok;
+        }}
+        onSignUp={() => {
+          setListOpen(false);
+          requireAccount("save your WE OUTSIDE list and get the group chats");
+        }}
+      />
+
       <StorySheet event={story} going={story ? goingOf(story) : 0} box={story ? dropSet.has(story.id) : false} onClose={closeStory} />
 
       {/* ------------------------------------------------------ the breakdown -- */}
@@ -501,7 +640,10 @@ export default function TodayPage() {
           type="button"
           aria-label="Close"
           tabIndex={-1}
-          onClick={() => setOpen(false)}
+          onClick={() => {
+            setOpen(false);
+            setPicked(null);
+          }}
           className="absolute inset-0 z-30 animate-fade bg-brand-ink/50"
         />
       )}
@@ -515,11 +657,14 @@ export default function TodayPage() {
           checkedAt={checkedAt[event.id] ?? null}
           busy={busy === event.id}
           onCheckIn={() => checkIn(event, fix)}
-          onClose={() => setOpen(false)}
+          onClose={() => {
+            setOpen(false);
+            setPicked(null);
+          }}
           isHopStop={isHopStop}
           placement={wide ? "side" : "sheet"}
-          onPrev={wide && index > 0 ? () => slideTo(index - 1) : undefined}
-          onNext={wide && index < deckEvents.length - 1 ? () => slideTo(index + 1) : undefined}
+          onPrev={wide && !picked && pileIds.length > 1 ? () => move(pileIds[pileIds.length - 1], "front") : undefined}
+          onNext={wide && !picked && pileIds.length > 1 ? () => move(event.id, "back") : undefined}
         />
       )}
     </div>

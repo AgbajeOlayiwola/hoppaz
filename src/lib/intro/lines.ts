@@ -106,8 +106,8 @@ export const LINES: Record<StepId, Line> = {
     skip: "Skip",
   },
   deck: {
-    title: "Slide and tap",
-    line: "Slide left and right. Tap one for the full gist and its quests.",
+    title: "Swipe and tap",
+    line: "Swipe right if we outside, left if it's a nah. They come round again. Tap one for the full gist.",
     skip: "Skip",
   },
   chat: {

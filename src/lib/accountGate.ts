@@ -49,9 +49,11 @@ export const useAccountGate = create<GateState>((set) => ({
  * sheet is now open, and `then` runs after they sign up or log in.
  * Without a database (local demo) nothing is gated.
  */
-export function requireAccount(reason: string, then?: () => void): boolean {
+export function requireAccount(reason: string, then?: () => void, opts?: { quiet?: boolean }): boolean {
   if (!getSupabase()) return true;
   if (useSessionStore.getState().email) return true;
+  // Quiet: the caller has asked already this visit (the Today deck's right swipes) and only needs the answer.
+  if (opts?.quiet) return false;
   if (introActive()) {
     introNeedAccount();
     return false;
