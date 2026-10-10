@@ -1,0 +1,503 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#0E0B0A">
+<title>Hoppaz hotspots</title>
+<!-- Made by scripts/hotspots/build-map-mock.mjs from scripts/hotspots/hotspots-map.template.html. Edit the template, not this file. -->
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Archivo:wght@400;500;600&family=DM+Mono:wght@500&family=Poppins:wght@900&display=swap">
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/maplibre-gl@5.9.0/dist/maplibre-gl.css" integrity="sha384-gNYNsUmuZqDYiT3gbirWTV5K7rt71RoveS/yXAaU09d4ZUmeDVTD3XoqB6uJAIFR" crossorigin="anonymous">
+<style>
+:root{
+  --or:#FF4D00; --em:#B83600; --ni:#0E0B0A; --ni2:#17110F; --ni3:#231915; --cr:#F5EBDD; --dim:#9C9087; --hair:#2E2320;
+  --body:Archivo,system-ui,-apple-system,"Segoe UI",sans-serif;
+  --disp:Poppins,"Arial Black",system-ui,sans-serif;
+  --mono:"DM Mono",ui-monospace,Menlo,monospace;
+}
+*{box-sizing:border-box}
+html,body{height:100%;margin:0;background:var(--ni);color:var(--cr);font-family:var(--body);font-size:15px;line-height:1.4;
+  -webkit-text-size-adjust:100%;-webkit-tap-highlight-color:transparent;touch-action:manipulation}
+body{overflow:hidden;overscroll-behavior:none}
+button{font:inherit;color:inherit;cursor:pointer;-webkit-appearance:none;appearance:none}
+button:focus-visible{outline:2px solid var(--cr);outline-offset:2px}
+svg{display:block}
+#map{position:fixed;inset:0;background:var(--ni)}
+.maplibregl-canvas{outline:none}
+
+/* top: brand, counter, the "Your hotspot" answer */
+.top{position:fixed;left:0;right:0;top:0;z-index:5;padding:max(12px,env(safe-area-inset-top)) 16px 0;pointer-events:none;
+  display:flex;flex-direction:column;align-items:flex-start;gap:8px}
+.top > *{pointer-events:auto}
+.top-row{display:flex;width:100%;align-items:center;justify-content:space-between;gap:10px}
+.brand,.pill,.count{-webkit-backdrop-filter:blur(8px);backdrop-filter:blur(8px)}
+.brand{display:flex;align-items:center;gap:10px;min-height:44px;padding:0 14px 0 12px;border-radius:99px;background:rgba(23,17,15,.94);border:1px solid var(--hair)}
+.wm{height:24px;width:auto}
+.brand-tag{font:900 13px/1 var(--disp);letter-spacing:.08em;text-transform:uppercase;color:var(--cr)}
+.pill{display:inline-flex;align-items:center;gap:8px;min-height:44px;padding:0 16px;border-radius:99px;background:rgba(23,17,15,.94);border:1px solid var(--hair);
+  font:500 12px/1 var(--mono);letter-spacing:.06em;text-transform:uppercase}
+.pill svg{width:18px;height:18px;stroke:var(--cr);fill:none;stroke-width:2;stroke-linecap:round;stroke-linejoin:round}
+.count{padding:9px 14px 9px 12px;border-radius:16px;background:rgba(23,17,15,.94);border:1px solid var(--hair);max-width:100%}
+.count-main{display:flex;align-items:baseline;gap:8px;font:600 15px/1.2 var(--body)}
+.count-main b{font:900 26px/1 var(--disp);color:var(--or)}
+.count-sub{margin-top:3px;font:500 11px/1.3 var(--mono);letter-spacing:.04em;color:var(--dim);text-transform:uppercase}
+.found{display:flex;align-items:center;gap:10px;width:100%;padding:10px 6px 10px 12px;border-radius:16px;background:var(--or);color:var(--ni)}
+.found[hidden]{display:none}
+.found.err{background:var(--ni3);color:var(--cr);border:1px solid var(--hair)}
+.has-found .count-sub{display:none}
+.found-ico{flex:none;width:26px;height:26px}
+.found-txt{flex:1;min-width:0}
+.found-main{font:900 18px/1.15 var(--disp)}
+.found-main b{font-weight:900}
+.found-sub{margin-top:2px;font:500 13px/1.3 var(--body)}
+.found.err .found-main{font-size:15px}
+.found .x{color:inherit}
+
+/* the dock: card, buttons, credit */
+.dock{position:fixed;left:0;right:0;bottom:0;z-index:5;padding:10px 14px max(12px,env(safe-area-inset-bottom));background:rgba(23,17,15,.97);
+  border-top:1px solid var(--hair);border-radius:22px 22px 0 0;box-shadow:0 -10px 30px rgba(0,0,0,.5)}
+.actions{display:flex;gap:10px}
+.btn{flex:1 1 0;min-width:0;min-height:52px;border-radius:16px;border:1px solid var(--hair);background:var(--ni3);display:flex;align-items:center;justify-content:center;gap:10px;padding:0 12px}
+.btn.primary{background:var(--or);border-color:var(--or);color:var(--ni);font:900 16px/1 var(--disp)}
+.btn.primary svg{width:22px;height:22px;flex:none}
+.btn.primary[aria-busy="true"]{opacity:.7}
+.tog{justify-content:flex-start;text-align:left;font:600 13px/1.15 var(--body)}
+.sw{flex:none;position:relative;width:44px;height:26px;border-radius:99px;background:var(--ni);border:1.5px solid var(--dim);transition:background .15s,border-color .15s}
+.sw i{position:absolute;left:3px;top:3px;width:17px;height:17px;border-radius:50%;background:var(--dim);transition:transform .15s,background .15s}
+.tog[aria-checked="true"] .sw{background:var(--or);border-color:var(--or)}
+.tog[aria-checked="true"] .sw i{transform:translateX(18px);background:var(--cr)}
+.legend{margin:8px 2px 0;font:500 11px/1.35 var(--mono);letter-spacing:.03em;color:var(--dim)}
+.legend[hidden]{display:none}
+.credit{margin:8px 2px 0;font:500 10px/1.35 var(--mono);color:var(--dim);text-align:center}
+
+.card{position:relative;margin:0 0 10px;padding:14px 14px 12px;max-height:min(38vh,340px);max-height:min(38dvh,340px);overflow-y:auto;overscroll-behavior:contain;
+  border-radius:18px;background:var(--ni);border:1px solid var(--hair);animation:rise .22s ease-out}
+.card[hidden]{display:none}
+@keyframes rise{from{transform:translateY(10px);opacity:0}to{transform:none;opacity:1}}
+.card-head{display:flex;align-items:flex-start;justify-content:space-between;gap:8px;margin:-6px -6px 4px 0}
+.tags{display:flex;flex-wrap:wrap;gap:6px;padding-top:6px}
+.tag{padding:4px 8px;border-radius:99px;border:1px solid var(--hair);font:500 10.5px/1 var(--mono);letter-spacing:.08em;text-transform:uppercase;color:var(--dim)}
+.tag.you{background:var(--or);border-color:var(--or);color:var(--ni)}
+.x{flex:none;width:44px;height:44px;border-radius:50%;border:0;background:transparent;display:grid;place-items:center}
+.x svg{width:20px;height:20px;stroke:currentColor;fill:none;stroke-width:2.2;stroke-linecap:round}
+.card h2{margin:2px 0 0;font:900 28px/1.05 var(--disp);letter-spacing:-.01em}
+.zoneline{margin:6px 0 0;font:500 12px/1.3 var(--mono);letter-spacing:.06em;text-transform:uppercase;color:var(--or)}
+.roads{margin:10px 0 0;font-size:15px;color:var(--dim)}
+.roads b{color:var(--cr);font-weight:600}
+.split{margin:12px 0 0;padding:2px 0 2px 12px;border-left:3px dashed var(--or)}
+.split strong{display:block;font-weight:600;font-size:15px}
+.split span{display:block;margin-top:2px;color:var(--dim);font-size:14px}
+.k{margin:14px 0 6px;font:500 10.5px/1 var(--mono);letter-spacing:.08em;text-transform:uppercase;color:var(--dim)}
+.chips{display:flex;flex-wrap:wrap;gap:6px;margin:0;padding:0;list-style:none}
+.chips li{padding:5px 10px;border-radius:99px;background:var(--ni3);border:1px solid var(--hair);font-size:13px}
+.areas{margin:10px 0 0;font-size:14px;color:var(--dim)}
+.areas b{color:var(--cr);font-weight:600}
+.check{margin:12px 0 0;padding-top:10px;border-top:1px solid var(--hair);font-size:13px;color:var(--dim)}
+.check em{display:block;margin-bottom:2px;font:500 10.5px/1.2 var(--mono);font-style:normal;letter-spacing:.08em;text-transform:uppercase;color:var(--or)}
+.foot{margin:12px 0 0;font-size:13px;color:var(--dim)}
+
+@media (max-height:720px){
+  .card{max-height:30vh;max-height:30dvh}
+  .count-sub{display:none}
+}
+@media (max-width:360px){
+  .brand-tag{display:none}
+  .btn.primary{font-size:15px}
+  .tog{font-size:12px}
+}
+@media (prefers-reduced-motion:reduce){
+  .card{animation:none}
+  .sw,.sw i{transition:none}
+}
+</style>
+</head>
+<body>
+<div id="map" aria-label="Map of the Lagos hotspot zones"></div>
+
+<header class="top" id="top">
+  <div class="top-row">
+    <div class="brand"><img class="wm" src="__WORDMARK__" alt="Hoppaz"><span class="brand-tag">Hotspots</span></div>
+    <button class="pill" id="reset" type="button" aria-label="Show all of Lagos">
+      <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 9V4h5M20 9V4h-5M4 15v5h5M20 15v5h-5"/></svg>All Lagos
+    </button>
+  </div>
+  <div class="count" id="count" role="status">
+    <div class="count-main"><b id="countN">13</b><span id="countT">hotspots across Lagos</span></div>
+    <div class="count-sub">One room per zone. Tap a pin or a zone.</div>
+  </div>
+  <div class="found" id="found" hidden role="status" aria-live="polite">
+    <svg class="found-ico" viewBox="0 0 30 40" aria-hidden="true"><path d="M15 38C15 38 2 25 2 15a13 13 0 0 1 26 0c0 10-13 23-13 23Z" fill="#0E0B0A"/><circle cx="15" cy="15" r="6" fill="#FF4D00"/></svg>
+    <div class="found-txt"><div class="found-main" id="foundMain"></div><div class="found-sub" id="foundSub"></div></div>
+    <button class="x" id="foundX" type="button" aria-label="Dismiss"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"/></svg></button>
+  </div>
+</header>
+
+<div class="dock" id="dock">
+  <section class="card" id="card" hidden aria-label="Hotspot"></section>
+  <div class="actions">
+    <button class="btn primary" id="where" type="button">
+      <svg viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><circle cx="12" cy="12" r="4"/><path d="M12 2v4M12 18v4M2 12h4M18 12h4"/></svg>
+      <span id="whereTxt">Where am I</span>
+    </button>
+    <button class="btn tog" id="splits" type="button" role="switch" aria-checked="false">
+      <span class="sw"><i></i></span><span>Show future splits</span>
+    </button>
+  </div>
+  <p class="legend" id="legend" hidden>Dashed line: where a busy zone splits first. Hollow dots: the new rooms.</p>
+  <p class="credit" id="credit">Map © CARTO, © OpenStreetMap. A mock, not live.</p>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/maplibre-gl@5.9.0/dist/maplibre-gl.js" integrity="sha384-81ppUWZZO+pveTPk4qU9cZuScEFULHfuOMHVJHFZ7xVBlWQTG1zsPrVIMGAl1WMb" crossorigin="anonymous"></script>
+<script>
+(() => {
+"use strict";
+const DATA = /*__DATA__*/null;
+
+const OR = "#FF4D00", NI = "#0E0B0A", CR = "#F5EBDD";
+const STYLE_URL = "https://basemaps.cartocdn.com/gl/dark-matter-gl-style/style.json"; // the tile source NightMap uses
+const $ = (id) => document.getElementById(id);
+const esc = (s) => String(s).replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+const reduced = matchMedia("(prefers-reduced-motion: reduce)").matches;
+const ms = (n) => (reduced ? 0 : n);
+
+// ------------------------------------------------------------------ data
+const spots = new Map(DATA.hotspots.features.map((f) => [f.properties.slug, { ...f.properties, lng: f.geometry.coordinates[0], lat: f.geometry.coordinates[1] }]));
+$("countN").textContent = String(spots.size);
+
+// Zone shapes for the point-in-polygon test. The phone works out its own zone; nothing is sent anywhere.
+const zoneIndex = DATA.zones.features.map((f) => {
+  const b = [Infinity, Infinity, -Infinity, -Infinity];
+  for (const poly of f.geometry.coordinates) for (const [x, y] of poly[0]) { b[0] = Math.min(b[0], x); b[1] = Math.min(b[1], y); b[2] = Math.max(b[2], x); b[3] = Math.max(b[3], y); }
+  return { slug: f.properties.slug, polys: f.geometry.coordinates, bbox: b };
+});
+const inRing = (x, y, r) => {
+  let c = false;
+  for (let i = 0, j = r.length - 1; i < r.length; j = i++) {
+    const xi = r[i][0], yi = r[i][1], xj = r[j][0], yj = r[j][1];
+    if (yi > y !== yj > y && x < ((xj - xi) * (y - yi)) / (yj - yi) + xi) c = !c;
+  }
+  return c;
+};
+const inPoly = (x, y, p) => {
+  if (!inRing(x, y, p[0])) return false;
+  for (let k = 1; k < p.length; k++) if (inRing(x, y, p[k])) return false;
+  return true;
+};
+function zoneAt(lng, lat) {
+  for (const z of zoneIndex) {
+    const b = z.bbox;
+    if (lng < b[0] || lng > b[2] || lat < b[1] || lat > b[3]) continue;
+    for (const p of z.polys) if (inPoly(lng, lat, p)) return z.slug;
+  }
+  return null;
+}
+// Over the line (Ogun State, say): the nearest zone is yours.
+function nearestZone(lng, lat) {
+  const k = Math.cos((lat * Math.PI) / 180);
+  let best = null, bd = Infinity;
+  for (const z of zoneIndex) {
+    for (const p of z.polys) for (const r of p) {
+      for (let i = 0, j = r.length - 1; i < r.length; j = i++) {
+        const x1 = r[j][0] * k, y1 = r[j][1], x2 = r[i][0] * k, y2 = r[i][1];
+        const dx = x2 - x1, dy = y2 - y1, px = lng * k, py = lat;
+        const t = Math.max(0, Math.min(1, ((px - x1) * dx + (py - y1) * dy) / (dx * dx + dy * dy || 1)));
+        const d = (x1 + t * dx - px) ** 2 + (y1 + t * dy - py) ** 2;
+        if (d < bd) { bd = d; best = z.slug; }
+      }
+    }
+  }
+  return best;
+}
+const zoneBounds = (slug) => { const b = zoneIndex.find((z) => z.slug === slug).bbox; return [[b[0], b[1]], [b[2], b[3]]]; };
+
+// ------------------------------------------------------------------ the basemap: the app's night paint on CARTO dark-matter
+function repaintNight(style) {
+  const layers = style.layers.map((layer) => {
+    const id = layer.id.toLowerCase(), sl = String(layer["source-layer"] || "").toLowerCase();
+    const l = { ...layer, paint: { ...(layer.paint || {}) } };
+    const paint = l.paint, has = (...w) => w.some((x) => id.includes(x));
+    if (l.type === "background") { paint["background-color"] = NI; return l; }
+    if (l.type === "fill-extrusion" && (has("building") || sl === "building")) { l.layout = { ...(l.layout || {}), visibility: "none" }; return l; }
+    if (has("water", "ocean", "bay")) { if (l.type === "fill") paint["fill-color"] = "#1D2B32"; if (l.type === "line") paint["line-color"] = "#455963"; return l; }
+    if (has("park", "wood", "landcover", "landuse")) { if (l.type === "fill") { paint["fill-color"] = has("park", "wood") ? "#29352B" : "#34322B"; paint["fill-opacity"] = 0.9; } return l; }
+    if (has("building")) { if (l.type === "fill") { paint["fill-color"] = "#3A2B23"; paint["fill-opacity"] = 0.95; } return l; }
+    if (has("boundary", "admin")) { if (l.type === "line") { paint["line-color"] = "#59453A"; paint["line-opacity"] = 0.72; } return l; }
+    // the app's night colours, with the roads turned down so the zone outlines and pins read first
+    if (has("bridge")) { if (l.type === "line") { paint["line-color"] = "#C85E28"; paint["line-opacity"] = 0.5; } return l; }
+    if (has("motorway", "trunk", "primary")) { if (l.type === "line") { paint["line-color"] = "#D88A4E"; paint["line-opacity"] = 0.5; } if (l.type === "fill") paint["fill-color"] = "#78513A"; return l; }
+    if (has("road", "street", "tunnel", "transit")) { if (l.type === "line") { paint["line-color"] = "#896B56"; paint["line-opacity"] = 0.42; } if (l.type === "fill") paint["fill-color"] = "#57473B"; return l; }
+    if (l.type === "symbol") {
+      paint["text-color"] = has("place", "city") ? "#D0B6A3" : "#A38B79";
+      paint["text-halo-color"] = NI; paint["text-halo-width"] = 1.2;
+      if (has("poi", "housenum", "state", "country", "continent")) l.layout = { ...(l.layout || {}), visibility: "none" };
+      return l;
+    }
+    return l;
+  });
+  return { ...style, layers };
+}
+let baseOk = true;
+async function loadStyle() {
+  try {
+    const r = await fetch(STYLE_URL);
+    if (!r.ok) throw new Error(String(r.status));
+    return repaintNight(await r.json());
+  } catch (e) {
+    baseOk = false; // tiles unreachable: zones and pins are our own data, so the page still works
+    return { version: 8, glyphs: "https://demotiles.maplibre.org/font/{fontstack}/{range}.pbf", sources: {}, layers: [{ id: "bg", type: "background", paint: { "background-color": NI } }] };
+  }
+}
+
+// ------------------------------------------------------------------ the pin: orange teardrop, Night Black disc, cream crossroads
+function pinImage() {
+  const S = 3, W = 32, H = 42, c = document.createElement("canvas");
+  c.width = W * S; c.height = H * S;
+  const g = c.getContext("2d");
+  g.scale(S, S); g.translate(1, 1);
+  g.beginPath();
+  g.moveTo(15, 39);
+  g.bezierCurveTo(15, 39, 1.5, 25.5, 1.5, 15);
+  g.arc(15, 15, 13.5, Math.PI, 0, false);
+  g.bezierCurveTo(28.5, 25.5, 15, 39, 15, 39);
+  g.closePath();
+  g.fillStyle = OR; g.fill();
+  g.lineWidth = 1.6; g.strokeStyle = NI; g.stroke();
+  g.beginPath(); g.arc(15, 15, 8.4, 0, Math.PI * 2); g.fillStyle = NI; g.fill();
+  g.strokeStyle = CR; g.lineWidth = 2.3; g.lineCap = "round";
+  g.beginPath(); g.moveTo(15, 9.6); g.lineTo(15, 20.4); g.moveTo(9.6, 15); g.lineTo(20.4, 15); g.stroke();
+  return { image: g.getImageData(0, 0, W * S, H * S), ratio: S };
+}
+
+// ------------------------------------------------------------------ the map
+let map, sel = null, mine = null, fontStack = ["Montserrat Medium", "Open Sans Bold", "Noto Sans Regular"];
+const allBounds = new maplibregl.LngLatBounds();
+spots.forEach((s) => allBounds.extend([s.lng, s.lat]));
+
+function pad() {
+  const h = innerHeight;
+  const top = Math.round($("top").getBoundingClientRect().bottom + 14);
+  let bottom = Math.round($("dock").getBoundingClientRect().height + 14);
+  if (h - top - bottom < 140) bottom = Math.max(14, h - top - 140);
+  return { top, bottom, left: 48, right: 40 };
+}
+const fitAll = (animate = true) => map.fitBounds(allBounds, { padding: pad(), maxZoom: 10.6, duration: animate ? ms(700) : 0 });
+
+function fitZone(slug) {
+  const b = zoneBounds(slug);
+  const bounds = new maplibregl.LngLatBounds(b[0], b[1]);
+  if (mine && mine.over) bounds.extend([mine.lng, mine.lat]);
+  map.fitBounds(bounds, { padding: pad(), maxZoom: 13, duration: ms(700) });
+}
+
+// the selected hotspot and your own are named first; then wave 1, 2, 3, 4
+const nameKey = () => ["case", ["==", ["get", "slug"], sel || ""], -2, ["==", ["get", "slug"], mine ? mine.slug : ""], -1, ["get", "wave"]];
+const pinSize = (slug) => ["interpolate", ["linear"], ["zoom"], 9, ["case", ["==", ["get", "slug"], slug], 0.88, 0.7], 12.5, ["case", ["==", ["get", "slug"], slug], 1.22, 1]];
+
+function addLayers() {
+  const layers = map.getStyle().layers;
+  const beforeRoads = (layers.find((l) => /^(tunnel|road|bridge)_/.test(l.id)) || {}).id;
+  const beforeLabels = (layers.find((l) => l.type === "symbol") || {}).id;
+  const img = pinImage();
+  map.addImage("pin", img.image, { pixelRatio: img.ratio });
+  for (const [id, key] of [["zones", "zones"], ["splits", "splits"], ["kids", "kids"], ["spots", "hotspots"], ["labels", "labels"]]) map.addSource(id, { type: "geojson", data: DATA[key] });
+  map.addSource("you", { type: "geojson", data: { type: "FeatureCollection", features: [] } });
+  const none = ["==", ["get", "slug"], ""];
+
+  map.addLayer({ id: "zone-fill", type: "fill", source: "zones", paint: { "fill-color": OR, "fill-opacity": 0.12 } }, beforeRoads);
+  map.addLayer({ id: "zone-sel-fill", type: "fill", source: "zones", filter: none, paint: { "fill-color": OR, "fill-opacity": 0.24 } }, beforeRoads);
+  map.addLayer({ id: "zone-case", type: "line", source: "zones", layout: { "line-join": "round" },
+    paint: { "line-color": NI, "line-opacity": 0.55, "line-width": ["interpolate", ["linear"], ["zoom"], 8, 3.4, 13, 5.2] } }, beforeLabels);
+  map.addLayer({ id: "zone-line", type: "line", source: "zones", layout: { "line-join": "round" },
+    paint: { "line-color": CR, "line-opacity": 0.85, "line-width": ["interpolate", ["linear"], ["zoom"], 8, 1.4, 13, 2.4] } }, beforeLabels);
+  map.addLayer({ id: "zone-sel-line", type: "line", source: "zones", filter: none, layout: { "line-join": "round" },
+    paint: { "line-color": OR, "line-width": ["interpolate", ["linear"], ["zoom"], 8, 2.4, 13, 4] } }, beforeLabels);
+
+  const off = { visibility: "none" };
+  map.addLayer({ id: "split-case", type: "line", source: "splits", layout: { ...off, "line-cap": "round" }, paint: { "line-color": NI, "line-opacity": 0.75, "line-width": 5.5 } }, beforeLabels);
+  map.addLayer({ id: "split-line", type: "line", source: "splits", layout: { ...off, "line-cap": "butt" }, paint: { "line-color": CR, "line-width": 2.4, "line-dasharray": [2.2, 1.6] } }, beforeLabels);
+  map.addLayer({ id: "kids", type: "circle", source: "kids", layout: off, paint: { "circle-radius": 6.5, "circle-color": NI, "circle-stroke-color": CR, "circle-stroke-width": 2.2 } });
+  map.addLayer({ id: "kid-names", type: "symbol", source: "kids", minzoom: 10.8,
+    layout: { visibility: "none", "text-field": ["get", "name"], "text-font": fontStack, "text-size": 11, "text-variable-anchor": ["left", "right"], "text-radial-offset": 0.9, "text-optional": true },
+    paint: { "text-color": CR, "text-halo-color": NI, "text-halo-width": 1.8 } });
+
+  // Placement runs top layer first: pin icons, then zone names, then pin names. A zone name that
+  // would sit on a pin slides to a free anchor; a pin name with no room is dropped (the icon stays).
+  map.addLayer({ id: "pin-names", type: "symbol", source: "spots",
+    layout: { "text-field": ["get", "short"], "text-font": fontStack, "text-transform": "uppercase", "text-letter-spacing": 0.05, "text-max-width": 20, "text-justify": "auto",
+      "text-size": ["interpolate", ["linear"], ["zoom"], 9, 10, 13, 13], "text-variable-anchor": ["left", "right", "top", "bottom"], "text-radial-offset": 1.35,
+      "symbol-sort-key": nameKey() },
+    paint: { "text-color": CR, "text-halo-color": NI, "text-halo-width": 2.2 } });
+  map.addLayer({ id: "zone-names", type: "symbol", source: "labels", maxzoom: 12.6,
+    layout: { "text-field": ["get", "name"], "text-font": fontStack, "text-size": ["interpolate", ["linear"], ["zoom"], 8, 9, 12, 12.5], "text-transform": "uppercase", "text-letter-spacing": 0.1,
+      "text-max-width": 8, "text-variable-anchor": ["center", "top", "bottom", "left", "right"], "text-radial-offset": 1.6, "symbol-sort-key": ["-", 0, ["get", "area"]] },
+    paint: { "text-color": "#BDB0A3", "text-halo-color": NI, "text-halo-width": 1.8 } });
+  map.addLayer({ id: "pin-halo", type: "circle", source: "spots", filter: none,
+    paint: { "circle-radius": 21, "circle-color": OR, "circle-opacity": 0.32, "circle-stroke-color": OR, "circle-stroke-width": 1.5, "circle-translate": [0, -17] } });
+  map.addLayer({ id: "pins", type: "symbol", source: "spots",
+    layout: { "icon-image": "pin", "icon-anchor": "bottom", "icon-allow-overlap": true, "icon-size": pinSize("") } });
+  map.addLayer({ id: "you-halo", type: "circle", source: "you", paint: { "circle-radius": 15, "circle-color": CR, "circle-opacity": 0.2 } });
+  map.addLayer({ id: "you-dot", type: "circle", source: "you", paint: { "circle-radius": 6.5, "circle-color": CR, "circle-stroke-color": OR, "circle-stroke-width": 3 } });
+}
+
+// Placement runs top layer first. Far out the zone names win the room; close in the pin names do.
+let pinsFirst = false;
+function orderNames() {
+  const want = map.getZoom() >= 10.4;
+  if (want === pinsFirst) return;
+  pinsFirst = want;
+  if (want) map.moveLayer("zone-names", "pin-names"); else map.moveLayer("pin-names", "zone-names");
+}
+
+// ------------------------------------------------------------------ the card
+function renderCard(slug) {
+  const s = spots.get(slug);
+  const you = slug === mine?.slug;
+  const areas = s.hoppazAreas.length
+    ? `<p class="areas">Hoppaz areas here: <b>${s.hoppazAreas.map(esc).join(", ")}</b>.</p>`
+    : `<p class="areas">No Hoppaz area sits in this zone yet.</p>`;
+  $("card").innerHTML = `
+    <div class="card-head">
+      <div class="tags">${you ? '<span class="tag you">Your hotspot</span>' : ""}<span class="tag">Always open</span><span class="tag">Wave ${esc(s.wave)}</span></div>
+      <button class="x" id="cardX" type="button" aria-label="Close"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"/></svg></button>
+    </div>
+    <h2>${esc(s.short)}</h2>
+    <p class="zoneline">${esc(s.zone)} zone</p>
+    <p class="roads"><b>${esc(s.roadA)}</b> meets <b>${esc(s.roadB)}</b>.</p>
+    <div class="split"><strong>When it gets busy, splits at ${esc(s.splitAt)}.</strong>${s.nextRooms ? `<span>${esc(s.nextRooms)}</span>` : ""}</div>
+    <p class="k">In this zone</p>
+    <ul class="chips">${s.places.map((p) => `<li>${esc(p)}</li>`).join("")}</ul>
+    ${areas}
+    ${s.check ? `<p class="check"><em>${s.checkKind === "name" ? "Check this name" : "Worth knowing"}</em>${esc(s.check)}</p>` : ""}
+    <p class="foot">Stand in this zone and it is your room. Anyone can visit any hotspot.</p>`;
+  $("card").scrollTop = 0;
+  $("cardX").addEventListener("click", deselect);
+}
+
+function setSelection(slug) {
+  const f = ["==", ["get", "slug"], slug || ""];
+  map.setFilter("zone-sel-fill", f);
+  map.setFilter("zone-sel-line", f);
+  map.setLayoutProperty("pins", "icon-size", pinSize(slug || ""));
+  map.setLayoutProperty("pin-names", "symbol-sort-key", nameKey());
+}
+function select(slug, fit = true) {
+  sel = slug;
+  setSelection(slug);
+  renderCard(slug);
+  $("card").hidden = false;
+  if (fit) requestAnimationFrame(() => fitZone(slug));
+}
+function deselect() {
+  sel = null;
+  setSelection("");
+  $("card").hidden = true;
+}
+
+// ------------------------------------------------------------------ Where am I (on the phone only)
+function say(kind, main, sub) {
+  const el = $("found");
+  el.className = "found" + (kind === "err" ? " err" : "");
+  $("foundMain").innerHTML = main;
+  $("foundSub").textContent = sub;
+  el.hidden = false;
+  $("top").classList.add("has-found");
+}
+function clearMine() {
+  mine = null;
+  $("found").hidden = true;
+  $("top").classList.remove("has-found");
+  map.getSource("you").setData({ type: "FeatureCollection", features: [] });
+  map.setFilter("pin-halo", ["==", ["get", "slug"], ""]);
+  map.setLayoutProperty("pin-names", "symbol-sort-key", nameKey());
+  if (sel) renderCard(sel);
+}
+function locateAt(lat, lng) {
+  let slug = zoneAt(lng, lat), over = false;
+  if (!slug) { slug = nearestZone(lng, lat); over = true; }
+  mine = { slug, lat, lng, over };
+  map.getSource("you").setData({ type: "Feature", properties: {}, geometry: { type: "Point", coordinates: [lng, lat] } });
+  map.setFilter("pin-halo", ["==", ["get", "slug"], slug]);
+  $("top").classList.add("has-found");
+  const name = spots.get(slug).short;
+  say("ok", `Your hotspot: <b>${esc(name)}</b>`, over ? "Over the line, so the nearest zone is yours. Worked out on this phone." : "Worked out on this phone. Never sent.");
+  select(slug);
+  return slug;
+}
+function where() {
+  const btn = $("where"), txt = $("whereTxt");
+  if (!("geolocation" in navigator)) { say("err", "No location on this phone.", "Tap your zone on the map instead."); return; }
+  btn.setAttribute("aria-busy", "true"); txt.textContent = "Finding you";
+  const done = () => { btn.removeAttribute("aria-busy"); txt.textContent = "Where am I"; };
+  navigator.geolocation.getCurrentPosition(
+    (pos) => { done(); locateAt(pos.coords.latitude, pos.coords.longitude); },
+    (err) => {
+      done();
+      if (err.code === 1) say("err", "Location is off for this page.", "Allow it for this page, or tap your zone on the map.");
+      else say("err", "No fix yet.", "Step outside and try again, or tap your zone on the map.");
+    },
+    { enableHighAccuracy: false, timeout: 12000, maximumAge: 0 },
+  );
+}
+
+// ------------------------------------------------------------------ future splits
+function setSplits(on) {
+  const v = on ? "visible" : "none";
+  for (const id of ["split-case", "split-line", "kids", "kid-names"]) map.setLayoutProperty(id, "visibility", v);
+  $("splits").setAttribute("aria-checked", String(on));
+  $("legend").hidden = !on;
+  requestAnimationFrame(() => { if (sel) fitZone(sel); else fitAll(); });
+}
+
+// ------------------------------------------------------------------ start
+(async function start() {
+  const style = await loadStyle();
+  if (!baseOk) { fontStack = ["Open Sans Regular"]; $("credit").textContent = "Basemap tiles did not load. Zones and pins still work. A mock, not live."; }
+  map = new maplibregl.Map({
+    container: "map", style, attributionControl: false, dragRotate: false, pitchWithRotate: false, maxPitch: 0, minZoom: 7, maxZoom: 17,
+    center: [3.38, 6.52], zoom: 10, fadeDuration: 0,
+  });
+  map.touchZoomRotate.disableRotation();
+  map.on("error", (e) => console.warn("map:", e && e.error ? e.error.message : e));
+  map.on("load", () => {
+    addLayers();
+    fitAll(false);
+
+    map.on("click", (e) => {
+      // a pin first (a generous box around the head and the tip), then the zone under the finger
+      const box = [[e.point.x - 20, e.point.y - 46], [e.point.x + 20, e.point.y + 12]];
+      const hits = map.queryRenderedFeatures(box, { layers: ["pins"] });
+      if (hits.length) {
+        const best = hits.map((h) => ({ slug: h.properties.slug, p: map.project(h.geometry.coordinates) }))
+          .sort((a, b) => Math.hypot(a.p.x - e.point.x, a.p.y - 18 - e.point.y) - Math.hypot(b.p.x - e.point.x, b.p.y - 18 - e.point.y))[0];
+        select(best.slug);
+        return;
+      }
+      const z = zoneAt(e.lngLat.lng, e.lngLat.lat);
+      if (z) select(z); else deselect();
+    });
+    map.on("mousemove", (e) => {
+      const over = map.queryRenderedFeatures([[e.point.x - 16, e.point.y - 40], [e.point.x + 16, e.point.y + 8]], { layers: ["pins"] }).length || zoneAt(e.lngLat.lng, e.lngLat.lat);
+      map.getCanvas().style.cursor = over ? "pointer" : "";
+    });
+
+    map.on("zoomend", orderNames);
+    orderNames();
+    $("where").addEventListener("click", where);
+    $("foundX").addEventListener("click", clearMine);
+    $("reset").addEventListener("click", () => { deselect(); fitAll(); });
+    $("splits").addEventListener("click", () => setSplits($("splits").getAttribute("aria-checked") !== "true"));
+    addEventListener("keydown", (e) => { if (e.key === "Escape") deselect(); });
+    addEventListener("resize", () => map.resize());
+
+    map.once("idle", () => {
+      // a read-only handle so the headless check can drive the real button and read the answers
+      window.__hz = { map, zoneAt, nearestZone, spots, get selected() { return sel; }, get mine() { return mine; }, ready: true };
+    });
+  });
+})();
+})();
+</script>
+</body>
+</html>

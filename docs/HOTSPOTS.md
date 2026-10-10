@@ -1,14 +1,16 @@
 # Hoppaz Hotspots
 
-Status: plan only, 9 Oct 2026. Nothing below is built. It sits on top of Play mode ([PLAY-MODE.md](PLAY-MODE.md)) and Ola's chat system (`supabase/chat_accounts.sql`). Jae's rows in [DECISIONS.md](DECISIONS.md) win over any number here.
+Status: plan, 9 Oct 2026, updated 10 Oct 2026. Jae's zone decision of 9 Oct replaces the size classes (section 4): Lagos is cut into 13 zones with one hotspot each, and the zones, junctions and split hints are built as data (`supabase/hotspot_zones.sql`, made by `scripts/hotspots/zones.mjs`, tested by `supabase/tests/hotspot_zones_test.sql`). The Play screens, rooms and chat are not built. It sits on top of Play mode ([PLAY-MODE.md](PLAY-MODE.md)) and Ola's chat system (`supabase/chat_accounts.sql`). Jae's rows in [DECISIONS.md](DECISIONS.md) win over any number here.
 
 Jae's words, tidied from his voice note: "Three spots in Yaba that are always open 24/7, a general group that people in Yaba can enter and have conversations and vibe. Anyone anywhere can enter, but it should be closer to the people in that region. When you click Play you see the hotspots near you on the map, you move your avatar there, you enter the conversation and enjoy yourself or interact with people from the same community. Start with three in Yaba, then scale: Phase 1 maybe two, very large areas several. Call them HOTSPOTS. They should always be at junctions."
+
+Then, 9 Oct, replacing the scale idea: "Segment Lagos into zones. Just segment the zones that are very large, and each zone has one room (one hotspot). Then over time, as more people come, we break down the rooms. Keep it simple." Lekki is one zone, from Phase 1 along Lekki down to one side, then cut; Ikoyi has its own zone.
 
 ## 1. In three sentences
 
 1. A hotspot is a fixed meeting place for avatars at a real road junction, open 24 hours a day, with a group chat and a crowd of heads.
-2. Open Play and you see the hotspots near you; tap one, your avatar runs there, and you are in the room with whoever else is there. Anyone, from anywhere, can enter.
-3. Each area gets a few (three in Yaba, two in Lekki Phase 1), so a Hopper has a home hangout, and nobody's real position is ever shown or sent.
+2. Open Play and you see your zone's hotspot and the ones near you; tap one, your avatar runs there, and you are in the room with whoever else is there. Anyone, from anywhere, can enter.
+3. Lagos is cut into 13 big zones with one room each. The zone a Hopper is in is their home hangout (the phone works it out; the server never learns where they are), anyone can visit any room, and nobody's real position is ever shown or sent.
 
 If a feature does not fit in those three sentences, it is not in v1.
 
@@ -56,54 +58,169 @@ How hotspots answer each one (this is the design, and the question for Ola in se
 | Open room of strangers, nothing to anchor it | An account is needed to enter and to post. Alias only, never the handle. Text only. Rate limits, a link and phone-number filter, block, report, staff mute and ban, and a pause switch per hotspot. |
 | Keeping messages | 24 hours visible, deleted after 7 days. Reports keep their own excerpt, so deleting does not erase evidence. |
 
-## 4. How many hotspots, by scale
+## 4. Zones: one room per big zone
 
-The `areas` table has only a centre point for each of the 16 areas, no outline, so the area's size cannot be measured from the database. I tried a "walkable land within 3 km, minus water and no-spawn zones" measure; the 3 km cap made Lekki Phase 1 look as big as Surulere, so it does not match Jae's own judgement and I dropped it. The rule is therefore plain and set by Jae.
+Jae, 9 Oct 2026, replacing the size-class rule that stood here: "Segment Lagos into zones. Just segment the zones that are very large, and each zone has one room (one hotspot). Then over time, as more people come, we break down the rooms. Keep it simple." His examples: Lekki is one zone, from Phase 1 along Lekki down to one side, then cut; Ikoyi has its own zone. The zone you are standing in is your hotspot; anyone can still visit any hotspot.
 
-**Rule.** Each area gets a size class. The class sets the starting number. Data then moves it.
+So there is no "3 in Yaba, 2 in Lekki Phase 1" any more, no size classes and no 30 hotspots. There are **13 zones and 13 hotspots**, built as data (`supabase/hotspot_zones.sql`, made by `scripts/hotspots/zones.mjs` from OpenStreetMap, tested by `supabase/tests/hotspot_zones_test.sql`). More rooms come later by breaking a busy zone in two (below), not by planning them now.
 
-| Class | Meaning | Hotspots at start |
+### How the zones are cut
+
+- **Real boundaries.** Lagos State (OpenStreetMap `admin_level` 4) and its 20 LGAs (`admin_level` 6). OpenStreetMap has no LCDA or ward shapes for Lagos, so the LGA line is the finest real boundary there is. Zones are groups of whole LGAs, with one exception: Eti Osa (Ikoyi, Victoria Island and all of Lekki) is cut along Admiralty Way (west leg, then Akiogun Road) and Chevron Drive.
+- **The lagoon and the creeks are the edge.** A zone never holds land on both sides of the lagoon or a creek: every zone is `mainland` or `island`, and Five Cowries Creek keeps Victoria Island apart from Ikoyi and Lagos Island.
+- **Water margin.** Each zone reaches 300 m into the water or sea around it, so a position that drifts on a shoreline is still inside.
+- **A hotspot is never on an edge.** LGA lines often run along a major road, so a junction on that road can sit on the line (Jibowu, Ojota and Obalende do). The 150 m around each hotspot belongs to its zone.
+- **Nothing left out.** All 2,856 km2 of land in the state is in a zone (about 31,500 m2 of slivers on the state border are not); no two zones overlap (400 m2 of rounding, 1 m2 of it on land); the 16 area centres are each in exactly one zone, on their own side; and all 666 spawn points inside the state are in a zone. 47 spawn points the importer caught on or over the line in Ogun State (Ota, Sango, Ogijo, Agbara) are not, so a phone that is inside no zone treats the nearest zone as its own.
+- **Checked again from the database.** The build checks its own shapes; on 10 Oct I read the shapes back out of the `hotspots` table and checked them against the land (`scripts/hotspots/check-land.mjs`, land is the state minus the sea minus the lagoon, from OpenStreetMap). Land in no zone: 31,503 m2 in 131 pieces, every piece within 30 m of the state line, so no gap between two neighbouring zones. Overlap: 398 m2 in all, 1 m2 on land. No zone holds land on both sides of the lagoon, and each is on the side it says. Each hotspot is 148 m or more from its zone edge (the 150 m rule, less the simplification), 177 m or more from water (Ikoyi is the closest) and 537 m or more from a military, prison, port or airport zone (Lagos Island is the closest). The SQL test `supabase/tests/hotspot_zones_test.sql` checks overlap, the lagoon, the no-spawn rules, the area centres and the spawn points inside the database itself, and passes.
+- **The phone finds its zone.** The zone shapes are public (the `hotspots` table, about 120 KB of shapes in all). The phone does a point-in-polygon test with its own fix, so the server never learns where anyone is. Hotspots are never worked out from a stored position.
+
+### The 13 zones
+
+Shape km2 includes the water margin; land km2 is land only. "Holds" is which of the 16 areas of the `areas` table have their centre in the zone. Waves are the roll-out order of section 11 (wave 1 is where Hoppaz events are).
+
+See them on a phone: open `/mocks/hotspots` on the phone proxy (`localdb/phone-https/mocks/hotspots.html`). It draws the 13 zones and 13 pins on the app's night map, opens a card per hotspot (name, zone, the two roads, the places in the zone, the first split line, and a short "Check this name" or "Worth knowing" note where section 4 has one), has a "Where am I" button that works out your zone on the phone only, and a toggle that draws each zone's first split line dashed. It is built from the `hotspots` table by `scripts/hotspots/build-map-mock.mjs` (page in `scripts/hotspots/hotspots-map.template.html`); run it again after any change to the zones, with `--deps=<the scratch install and Overpass cache that zones.mjs uses>`. `scripts/hotspots/check-map.mjs` drives the page in one headless Chrome at 390x844 and 375x667 (51 checks: it renders, the tap cards and notes, Where am I for five test points compared with PostGIS, the splits toggle, no location sent anywhere) and kills that Chrome when it ends; run it alone, never twice at once.
+
+| Zone | Side | Wave | Hotspot | Two roads (OpenStreetMap, class) | km2 shape / land | Holds |
+|---|---|---|---|---|---|---|
+| Yaba | mainland | 1 | Jibowu | Herbert Macaulay Street (trunk) x Murtala Muhammed Way (primary) | 29.6 / 25.6 | Yaba, Shomolu |
+| Lekki | island | 1 | Lekki Phase 1 (Admiralty Way) | Admiralty Way (primary) x Fatai Idowu Arobieke Street (tertiary) | 51.8 / 39.9 | Lekki Phase 1 |
+| Victoria Island | island | 1 | Adeola Odeku | Akin Adesola Street (primary) x Adeola Odeku Street (secondary) | 24.9 / 19.8 | Victoria Island |
+| Ikeja | mainland | 1 | Allen Roundabout | Obafemi Awolowo Way (primary) x Allen Avenue (secondary) | 86.5 / 86.5 | Ikeja, Maryland |
+| Surulere, Mushin and Oshodi | mainland | 2 | Ojuelegba | Western Avenue (primary) x Ojuelegba Road (primary) | 83.0 / 82.6 | Surulere, Mushin |
+| Ikoyi | island | 2 | Bourdillon (Alexander Avenue) | Bourdillon Road (primary) x Alexander Avenue (primary) | 19.7 / 14.9 | Ikoyi |
+| Lagos Island | island | 2 | Obalende | Obalende Road (secondary) x Massey Bamgboshe Street (secondary) | 8.9 / 6.0 | Lagos Island |
+| Ojota and Gbagada | mainland | 3 | Ojota | Ikorodu Road (primary) x Ogudu Road (secondary) | 76.0 / 69.9 | Gbagada, Ogudu, Magodo |
+| Festac and Apapa | mainland | 3 | Mile 2 | 1st Avenue (primary) x Lagos-Badagry Expressway (primary) | 172.3 / 135.3 | Festac, Apapa |
+| Ajah and beyond | island | 3 | Ajah (Mobil Road) | Lekki-Epe Expressway (trunk) x Mobil Estate Road (tertiary) | 1,051.2 / 933.0 | Ajah |
+| Alimosho | mainland | 4 | Ikotun | Idimu - Ikotun Road (primary) x Egbe Road (primary) | 178.9 / 178.8 | none |
+| Ojo and Badagry | mainland | 4 | Iyana Iba | Lasu-Isheri Road (primary) x Lagos-Badagry Expressway (primary) | 583.9 / 518.3 | none |
+| Ikorodu and Epe | mainland | 4 | Ikorodu (Ayangburen Road) | Ayangburen Road (primary) x Beach Road (primary) | 774.8 / 745.1 | none |
+
+The places in each zone (`zone_label` in the table):
+
+| Zone | Places |
+|---|---|
+| Yaba | Yaba, Jibowu, Ebute Metta, Akoka, Shomolu, Bariga, Makoko (Lagos Mainland and Shomolu LGAs) |
+| Lekki | Lekki Phase 1 to Chevron and Jakande, Ikate, Osapa, Ikota |
+| Victoria Island | Victoria Island, Oniru, Maroko, Eko Atlantic |
+| Ikeja | Ikeja, Alausa, Opebi, Maryland, Ogba, Ojodu, Agege (Ikeja, Agege and Ifako-Ijaiye LGAs) |
+| Surulere, Mushin and Oshodi | Surulere, Mushin, Ojuelegba, Ilupeju, Isolo, Oshodi, Okota (Surulere, Mushin and Oshodi-Isolo LGAs) |
+| Ikoyi | Ikoyi, Falomo, Banana Island, Parkview |
+| Lagos Island | Marina, CMS, Obalende, Idumota, Onikan |
+| Ojota and Gbagada | Ojota, Ketu, Ogudu, Magodo, Gbagada, Anthony, Oworonshoki, Mile 12 (Kosofe LGA) |
+| Festac and Apapa | Festac, Mile 2, Amuwo Odofin, Apapa, Ajegunle (Amuwo Odofin, Apapa and Ajeromi-Ifelodun LGAs) |
+| Ajah and beyond | Ajah, Sangotedo, Awoyaya, Ibeju-Lekki (east of Chevron Drive, south of the lagoon) |
+| Alimosho | Egbeda, Ikotun, Igando, Idimu, Ipaja, Iyana Ipaja (Alimosho LGA) |
+| Ojo and Badagry | Ojo, Alaba, Okokomaiko, Iba, Badagry (Ojo and Badagry LGAs) |
+| Ikorodu and Epe | Ikorodu, Itoikin, Epe (Ikorodu LGA, and Epe north of the lagoon) |
+
+### Names, checked against OpenStreetMap
+
+Names are as OpenStreetMap spells them, except "Murtula Muhammed Way", which OpenStreetMap misspells and the tables show as Murtala Muhammed Way. The local names (Jibowu, Obalende, Mile 2...) are my reading of the coordinates, so on 10 Oct I checked all 26 junctions (the 13 hotspots and the 13 more in the split hints) against OpenStreetMap with `scripts/hotspots/check-names.mjs`. It prints the evidence for each one.
+
+- **The roads.** For all 26 junctions the two roads meet at a shared node in OpenStreetMap (the furthest is 29 m from the point, most are under 15 m), and both road names are OpenStreetMap's.
+- **The local name.** A name is **backed** when the road at the junction carries it as its own name, or OpenStreetMap has a place of that name within 1 km or a named feature of that name within 500 m. Every word of the name counts. A road named for the two places it runs between (Lekki-Epe Expressway, Ojo - Igbede Road) does not back either place. A name that is not backed is **unsure**.
+- **Confirmed.** Backed is not confirmed: `name_confirmed` stays false for all of them until Jae has looked.
+
+The 13 hotspots:
+
+| Hotspot | What OpenStreetMap has nearby | Name |
 |---|---|---|
-| L (large) | A district many people live in or travel to, or a nightlife hub | 3 |
-| M (medium) | Known, smaller | 2 |
-| S (small) | Quiet, mostly homes or industry | 1 |
+| Jibowu (Yaba) | Jibowu (suburb) 229 m | Backed |
+| Lekki Phase 1 (Admiralty Way) | Lekki Phase I (town) 720 m; Admiralty Way is one of the roads | Backed |
+| Adeola Odeku (Victoria Island) | Victoria Island (town) 246 m; the traffic signals here are named for Akin Adesola and Adeola Odeku, 7 m | Backed |
+| Allen Roundabout (Ikeja) | Ikeja (city) 671 m; signals named Obafemi Awolowo/Allen, 26 m | Backed |
+| Ojuelegba (Surulere, Mushin and Oshodi) | Ojuelegba (suburb) 125 m | Backed |
+| Bourdillon (Ikoyi) | No place within 1.8 km; Bourdillon Road is one of the roads | Backed by the road |
+| Obalende (Lagos Island) | Obalende (suburb) 111 m; Obalende Motor Park 46 m | Backed |
+| Ajah (Mobil Road) | Ajah (town) 436 m; the Lekki-Ajah Flyover meets the expressway 33 m from the point | Backed |
+| **Mile 2 (Festac and Apapa)** | **Mile 2 (town) is 1.36 km east of the point; Festac (town) is 2.1 km west** | **Unsure** |
+| Ojota | Ojota (suburb) 168 m | Backed |
+| Ikotun (Alimosho) | Ikotun (town) 468 m; Ikotun Terminal bus station 14 m | Backed |
+| Iyana Iba (Ojo and Badagry) | Iyana-Iba Market 37 m | Backed |
+| Ikorodu (Ayangburen Road) | Ikorodu (city) 773 m | Backed |
 
-Moving it, from the hotspot's own numbers:
+**Mile 2 is the one unsure hotspot.** This is the Festac 1st Avenue crossing on the Lagos-Badagry Expressway, which I read as Mile 2, but OpenStreetMap puts Mile 2 1.4 km east of it. The named crossing nearest OpenStreetMap's Mile 2 is the Expressway with Jakande Estate Road (6.46019, 3.30985): 960 m east of this one, in the same zone, outside every no-spawn zone, 240 m from water and 700 m from the nearest military zone. Two ways out for Jae: swap to that crossing and keep the name Mile 2, or keep this crossing and call it Festac 1st Avenue.
 
-- Add one when the busiest hotspot in the area has 25 or more avatars at once in its peak hour on average, for 14 days. At most 4 in an area in v1.
-- Pause one when its peak hour has fewer than 3 avatars at once, for 14 days. Pausing is `active = false`; nothing is deleted.
-- Hotspots are at least 800 m apart in one area, and at least 500 m from one in the next area, so two rooms never split the same crowd.
-- Never fake a crowd. Empty rooms are honest ("quiet right now"). A quiet hotspot is the biggest risk to this feature (section 7), so we do not open them all at once.
+The 13 junctions that appear only in a split hint (below): 7 are backed and 6 are unsure.
 
-**Starting list (proposal, Jae to change any class).** Yaba 3 and Lekki Phase 1 2 are Jae's. The rest follow his scale idea ("very large areas several").
+| Split junction | What OpenStreetMap has nearby | Name |
+|---|---|---|
+| Oshodi | Oshodi (town) 206 m | Backed |
+| Sangotedo | Sangotedo (town) 497 m | Backed |
+| Shasha | Shasha Road is one of the roads | Backed |
+| Liverpool (Apapa) | Liverpool Road and Liverpool Roundabout are the roads | Backed |
+| Ikoyi (Mobolaji Johnson Road) | Ikoyi (town) 386 m | Backed |
+| Balogun (Broad Street) | Balogun Street is one of the roads | Backed |
+| Gbagada (Diya Street) | Gbagada (town) 605 m; OpenStreetMap names few Gbagada junctions | Backed |
+| **Oniru** | Nothing called Oniru within 1 km (Itirin 1.1 km, Maroko 1.6 km) | **Unsure** |
+| **Ikate (Lekki Beach Road)** | The nearest place is Jakande, 255 m away; Ikate is not within 1.6 km | **Unsure** |
+| **Agege (Pen Cinema)** | Agege (suburb) is 554 m away, but nothing is mapped as Pen Cinema | **Unsure** |
+| **Yaba Market (Commercial Avenue)** | Yaba (suburb) is 264 m away, but no market is mapped | **Unsure** |
+| **Epe (Old Lagos Road)** | Epe (city) is 2.7 km away | **Unsure** |
+| **Ojo (Igbede Road)** | Ojo (town) is 2.2 km east; the nearest places are Sabo Oniba 727 m and Igbede 1.5 km | **Unsure** |
 
-| Area | Side | Class | Hotspots | Wave |
-|---|---|---|---|---|
-| Yaba | mainland | L | 3 | 1 |
-| Lekki Phase 1 | island | M | 2 | 1 |
-| Victoria Island | island | L | 3 | 1 |
-| Ikeja | mainland | L | 3 | 1 |
-| Surulere | mainland | L | 3 | 2 |
-| Ikoyi | island | M | 2 | 2 |
-| Lagos Island | island | M | 2 | 2 |
-| Mushin | mainland | M | 2 | 3 |
-| Festac | mainland | M | 2 | 3 |
-| Ajah | island | M | 2 | 3 |
-| Magodo | mainland | S | 1 | 3 |
-| Maryland | mainland | S | 1 | 3 |
-| Gbagada | mainland | S | 1 | 3 |
-| Ogudu | mainland | S | 1 | 3 |
-| Shomolu | mainland | S | 1 | 3 |
-| Apapa | mainland | S | 1 | 3 |
-| Total | | | 30 | |
+Backed names that are still worth a look (the name is fine, something else may not be):
 
-Waves: wave 1 (Yaba, Lekki Phase 1, Victoria Island, Ikeja) is 11 hotspots and where Hoppaz events are. Wave 2 and 3 open when wave 1's rooms are alive. Launch with Yaba alone if Jae prefers: three busy rooms beat thirty empty ones.
+| Hotspot | Why |
+|---|---|
+| Bourdillon (Ikoyi) | Falomo Roundabout is the better-known crossing, but it sits 51 m from the Giwa defence headquarters (a military no-spawn zone), so the 100 m rule of section 5 keeps it out. Jae can lift the rule for this one place. OpenStreetMap's Alexander Roundabout is 510 m north of this crossing. |
+| Jibowu (Yaba) | OpenStreetMap puts the LGA line through the junction itself (Jibowu is Shomolu LGA; the other side is Mushin LGA), so the 150 m around it is given to Yaba. |
+| Ojota (Ojota and Gbagada) | The junction is Ikorodu Road with Ogudu Road, on the line between the Ikeja and Kosofe LGAs; the 150 m around it is given to this zone. Ketu (Ikosi Road x Ikorodu Road) is the alternative. |
+| Obalende (Lagos Island) | On the line with Ikoyi; the 150 m around it is given to Lagos Island. |
+| Adeola Odeku (Victoria Island) | The nightlife strip is Adeola Odeku Street; the crossing named is with Akin Adesola Street. |
+| Ikotun (Alimosho) | OpenStreetMap names few Alimosho junctions. Ikotun is the clearest; Iyana Ipaja and Egbeda are the other big ones. |
+| Ikorodu (Ayangburen Road) | I could not tell which crossing people call Ikorodu Garage, and OpenStreetMap maps no garage. This is Ayangburen Road with Beach Road. |
 
-I could not use the number of Hoppers per area: the local database has none with an area set, and I do not have production counts.
+I am sure of Allen Roundabout, Ojuelegba and Lekki Phase 1 on Admiralty Way as crossings as well as names. One correction from the check: an earlier flag said the Ajah roundabout and flyover were a few hundred metres east of the Ajah pick. OpenStreetMap has the Lekki-Ajah Flyover 33 m from it, so that flag was wrong and is gone.
+
+### Breaking a zone down later (the split rule, written as data)
+
+Each zone row has `parent_id` (null for these first zones) and a `split_hint` (jsonb) holding the first cut and the two junctions that would become the new hotspots.
+
+- **When.** The zone's room is busy for a week: 60 or more people at its daily peak, 7 days in a row (`trigger: {"peak_people": 60, "days": 7}` in the hint). The numbers are mine, not Jae's (he said only "as more people come"); they are an open question in section 12. A quiet zone is never paused or merged: it stays the home room of its Hoppers and reads "quiet right now".
+- **How.** Staff split it in the admin desk. Two child rows are inserted with `parent_id` set to the parent, the shapes are the two halves of the parent (the union of the named LGAs, or the parent cut by the straight line), and each takes the junction written in the hint. The parent's status becomes `split`: it stays as history and is no longer shown (the app reads only `active` and `planned` rows). The phone finds its zone from the public shapes, so nobody has to be moved.
+- **Which cut.** The road or boundary it would be cut along first. Where a zone is several LGAs, the cut is an LGA line (`cut_kind: "lga"`, both halves named). Where it is one LGA, it is a straight line along a named road (`cut_kind: "line"`, `axis` `ns` or `ew`, and `at` the longitude or latitude of the line).
+- **Children inherit nothing.** Each child is a new room that starts empty: no messages, no head count, no per-room mutes. The chat history stays with the parent, which is no longer shown and is deleted on the normal 7-day clock (section 7). Nobody is moved or asked anything: the phone works out the zone each time from the public shapes, so a Hopper simply lands in the child whose half they are standing in.
+- **Rooms stay 800 m apart.** The two child junctions are at least 800 m apart and each is at least 100 m from a straight cut. A child keeps the parent's junction when it lies in that child's half (a new room at the same crossing, still with no history).
+
+| Zone | First cut | Child 1 and its hotspot | Child 2 and its hotspot |
+|---|---|---|---|
+| Yaba | Lagos Mainland LGA and Shomolu LGA line | Yaba and Ebute Metta: Yaba Market (Murtala Muhammed Way x Commercial Avenue) | Shomolu and Bariga: Jibowu |
+| Lekki | Platinum Way (line, north-south, 3.5024 E) | Lekki Phase 1 (west): Admiralty Way, as the parent | Ikate and Chevron (east): Ikate (Lekki-Epe Expressway x Lekki Beach Road) |
+| Victoria Island | Adetokunbo Ademola Street (line, north-south, 3.4304 E) | Victoria Island (west): Adeola Odeku, as the parent | Oniru and Maroko (east): Oniru (Maroko Road x Lekki-Epe Expressway) |
+| Ikeja | Ikeja LGA boundary | Ikeja LGA: Allen Roundabout, as the parent | Agege and Ifako-Ijaiye LGAs: Agege (Pen Cinema) (Capitol Road x Alfa Nla Road) |
+| Surulere, Mushin and Oshodi | Oshodi-Isolo LGA line | Surulere and Mushin LGAs: Ojuelegba, as the parent | Oshodi and Isolo: Oshodi (Agege Motor Road x Apapa-Oworonshoki Expressway) |
+| Ikoyi | MacPherson Avenue (line, north-south, 3.4428 E) | Old Ikoyi (west): Ikoyi (Mobolaji Johnson Road x Murtala Muhammed Drive) | Parkview and Banana Island (east): Bourdillon, as the parent |
+| Lagos Island | Nnamdi Azikiwe Street (line, north-south, 3.388 E) | Idumota and Marina (west): Balogun (Broad Street x Balogun Street) | Obalende and Onikan (east): Obalende, as the parent |
+| Ojota and Gbagada | Ogudu Road, carried east-west (line, 6.572 N) | Ojota, Ketu and Magodo (north): Ojota, as the parent | Gbagada and Oworonshoki (south): Gbagada (Diya Street x Ajayi Aina Street) |
+| Festac and Apapa | Amuwo Odofin LGA line | Festac and Amuwo Odofin: Mile 2, as the parent | Apapa and Ajegunle (Apapa and Ajeromi-Ifelodun LGAs): Liverpool (Liverpool Road x Liverpool Roundabout) |
+| Ajah and beyond | Addo Road (line, north-south, 3.5655 E) | Ajah (west): Ajah (Mobil Road), as the parent | Sangotedo and beyond (east): Sangotedo (Lekki-Epe Expressway x Cardinal Okogie Road) |
+| Alimosho | Egbeda-Idimu Road, carried south to Egbe Road (line, north-south, 3.285 E) | Ikotun and Igando (west): Ikotun, as the parent | Egbeda and Idimu (east): Shasha (Ejigbo Road x Shasha Road) |
+| Ojo and Badagry | A line between Ojo and Iba (north-south, 3.185 E; no named road follows it) | Ojo and Badagry (west): Ojo (Ilogbo Road x Ojo - Igbede Road) | Alaba and Iba (east): Iyana Iba, as the parent |
+| Ikorodu and Epe | Ikorodu LGA line | Ikorodu: Ikorodu (Ayangburen Road), as the parent | Epe: Epe (Lekki-Epe Expressway x Old Lagos Road) |
+
+Badagry town has no crossing of two named roads in OpenStreetMap, so Ojo and Badagry is first cut between Ojo and Iba, not at the Badagry LGA line.
+
+### What changed from the starting proposal, and why
+
+The starting proposal was a list of places; the LGA lines say where each place really falls. Changes:
+
+1. **Gbagada and Anthony go with Ojota** (Kosofe LGA), not with Shomolu. The Kosofe and Shomolu LGA line runs between them. Shomolu and Bariga join Yaba (Lagos Mainland and Shomolu LGAs) instead.
+2. **Maryland goes with Ikeja** (Ikeja LGA), not with Ojota. The Ojota interchange is on the line, and the 150 m rule gives it to the Ojota zone.
+3. **Ilupeju goes with Surulere and Mushin** (Mushin LGA), not with Gbagada and Shomolu.
+4. **Surulere and Mushin also holds Oshodi-Isolo LGA** (Oshodi, Isolo, Okota). Without it the proposal left the Oshodi and Isolo land in no zone. The zone is named for the three.
+5. **Ikorodu also holds Epe north of the lagoon** ("Ikorodu and Epe"), and **Ajah also holds Ibeju-Lekki and the Epe land south of the lagoon** ("Ajah and beyond"), because the proposal said "Ibeju-Lekki, Epe as one outer zone if needed" and the lagoon is the edge between them.
+6. **Jibowu is Yaba's hotspot and Ojuelegba is Surulere's.** Jae's example said "Ojuelegba or Jibowu for Yaba". The OpenStreetMap LGA line puts Ojuelegba in Mushin LGA, so it is in the Surulere zone; Jibowu is in the Yaba zone (the line runs through it). Both are used, in neighbouring zones, 950 m apart.
+7. **Ikoyi's hotspot is Bourdillon and Alexander, not Falomo,** because of the 100 m military rule (see the flags). Jae can lift the rule for one place.
+8. **Oniru is in Victoria Island's zone and Phase 1 starts the Lekki zone,** because Eti Osa is cut along Admiralty Way (west leg) and Akiogun Road, and Lekki runs from there to Chevron Drive and Jakande, as Jae said.
+9. **13 zones, within the 10 to 14 asked for.** Waves: 1 Yaba, Lekki, Victoria Island, Ikeja; 2 Surulere and Mushin, Ikoyi, Lagos Island; 3 Ojota and Gbagada, Festac and Apapa, Ajah and beyond; 4 Alimosho, Ojo and Badagry, Ikorodu and Epe (the outer zones exist so nobody is left out).
+
+Dropped from the old section 4: the size classes (L, M, S), "add a hotspot at 25 avatars, pause one at fewer than 3", and the starting list of 30. A busy zone is split instead; a quiet one stays.
 
 ## 5. Where they go: junctions
 
-**A hotspot sits at a real junction of two named roads.** Not a park, not a market, not a bus stop. Picked once by staff from a short list and never moved. Hotspots are online: nobody has to stand at the junction, and the app never asks them to (junctions are not safe places to wait).
+**A hotspot sits at a real junction of two named roads.** Not a park, not a market, not a bus stop. One per zone (section 4), picked once by staff and never moved. Hotspots are online: nobody has to stand at the junction, and the app never asks them to (junctions are not safe places to wait).
 
 ### Rules for a junction
 
@@ -111,10 +228,12 @@ I could not use the number of Hoppers per area: the local database has none with
 |---|---|
 | Roads | Two roads with different names meeting at one node. Classes motorway, trunk, primary, secondary, tertiary (see the finding below) |
 | Merge | Junction nodes within 60 m of each other count once (dual carriageways, slip roads) |
-| Inside its area | `lagos_area_for(point)` equals the area (nearest centre within 5 km) |
+| Inside its zone | The point is inside the zone shape. A junction on a zone line is allowed: the 150 m around a hotspot goes to its zone (section 4) |
 | Avoid | Inside any active `no_spawn_zones` zone; within 60 m of a water zone; within 100 m of a military, prison, port or airport zone; a node that is only on a bridge or tunnel |
 | Prefer busy public junctions | Score: road class of the top two roads (motorway or trunk 4, primary 3, secondary 2, tertiary 1) + 1 for each extra road (up to 2) + 3 if traffic signals within 60 m + 2 for a roundabout + 0.4 per public place within 150 m (bus stop, market, fuel, bank, food, school, worship, clinic; up to 20) |
-| Spread | Keep the best first, drop any other within 250 m of one kept; pick hotspots at least 800 m apart |
+| Spread | Hotspots are at least 800 m apart (the closest pair of the 13 is Jibowu and Ojuelegba, 950 m); the two child junctions of a split are at least 800 m apart too |
+
+In the zone picks the two roads are named by hand (the best-known crossing) and the score only chooses between nodes of those roads, because OpenStreetMap has few signals and places mapped in Lagos. `scripts/hotspots/zones.mjs` does this, and `--discover` prints the best-scoring junctions around any place.
 
 **Finding: the first ask (named primary, secondary, tertiary) misses the big roads.** In Lagos OpenStreetMap tags Herbert Macaulay Way and Street (trunk), Agege Motor Road (trunk), Lekki-Epe Expressway (trunk), Ikorodu Road and Western Avenue (partly motorway). With only the three classes the first run found no Herbert Macaulay junction in Yaba at all. I added motorway and trunk. OpenStreetMap also misspells some names ("Murtula Muhammed Way" is Murtala Muhammed Way); the matcher allows a small typo so a road is not counted as meeting itself.
 
@@ -143,9 +262,11 @@ Public places and signals, used for the score:
 out body;
 ```
 
-Overpass cannot easily say "nodes shared by two differently named ways", so a short script does the rest: put every node of every way in a map, keep nodes on two or more ways with different names, merge within 60 m, then apply the rules above, with the zone checks run against the local database (`no_spawn_zones`, `lagos_area_for`). The script is not in the repo yet (this task writes docs only); build step 0 adds it as `scripts/hotspots/find-junctions.mjs` next to the spawn-points importer.
+Overpass cannot easily say "nodes shared by two differently named ways", so a short script does the rest: put every node of every way in a map, keep nodes on two or more ways with different names, merge within 60 m, then apply the rules above, with the zone checks run against the local database (`no_spawn_zones` and the zone shapes). That script is `scripts/hotspots/zones.mjs` (build step 0, done). Two more scripts re-check its work from the database and from OpenStreetMap: `scripts/hotspots/check-land.mjs` (gaps, overlap and the lagoon) and `scripts/hotspots/check-names.mjs` (the two roads and the nearest places of every junction). Both take `--deps=<the scratch install and Overpass cache that zones.mjs uses>`.
 
-### What the query found (Yaba and Lekki Phase 1)
+### What the first query found (Yaba and Lekki Phase 1, before the zones)
+
+Kept as the first shortlist and as a source for later splits. Jibowu, Ojuelegba and Admiralty Way from it are now zone hotspots (Yaba, Surulere and Lekki), and the Yaba market side is the first split child of Yaba (section 4). The rest are alternates.
 
 | Area | Raw junction nodes | After merging | In the area, clean, 250 m apart |
 |---|---|---|---|
@@ -182,28 +303,7 @@ Proposed three: Jibowu, Ojuelegba, Yaba market side. Distances: Jibowu to Ojuele
 
 Proposed two: Admiralty Way at Fatai Idowu Arobieke Street (the Phase 1 spine, 760 m north of the area centre) and the Expressway at Freedom Way (the busiest signalled junction, 1.6 km south-east). They are 2.1 km apart. Rank 2 and the ones east of Freedom Way (longitude 3.49) look like Lekki Phase 2 and were not proposed.
 
-**Does every area have enough junctions?** I ran the road query and the same rules for the other 14 areas too (no places or signals, so no ranking, only counts). "Spaced" is how many junctions fit when hotspots must be 800 m apart. Every area has at least as many as section 4 plans. The ranked shortlists for them (with signals and places) are not made yet (build step 0).
-
-| Area | Planned | Clean junctions (250 m apart) | Spaced at 800 m |
-|---|---|---|---|
-| Yaba | 3 | 18 | 7 |
-| Lekki Phase 1 | 2 | 23 | 13 |
-| Victoria Island | 3 | 29 | 8 |
-| Ikeja | 3 | 23 | 13 |
-| Surulere | 3 | 19 | 11 |
-| Ikoyi | 2 | 27 | 10 |
-| Lagos Island | 2 | 14 | 6 |
-| Mushin | 2 | 30 | 14 |
-| Festac | 2 | 8 | 6 |
-| Ajah | 2 | 6 | 5 |
-| Magodo | 1 | 14 | 9 |
-| Maryland | 1 | 19 | 10 |
-| Gbagada | 1 | 4 | 3 |
-| Ogudu | 1 | 9 | 5 |
-| Shomolu | 1 | 12 | 7 |
-| Apapa | 1 | 10 | 7 |
-
-Gbagada and Ajah have the fewest named junctions in OpenStreetMap, so staff may need to add one by hand.
+**Does every zone have junctions?** Yes. The 13 picks and the 13 other junctions of the split hints are in section 4 and in `supabase/hotspot_zones.sql`, found by the rules above and all outside every active no-spawn zone (`supabase/tests/hotspot_zones_test.sql` checks this against the local database). OpenStreetMap names few junctions in the outer zones (Alimosho, Ojo and Badagry, Ikorodu and Epe) and in Gbagada, and none in Badagry town, so those picks are flagged in section 4 and staff may add one by hand.
 
 Every candidate above is outside every active no-spawn zone (checked against the 119 zones in the local database). Two junctions near Five Cowries Creek (72 m and 87 m away) passed the 60 m water rule and are in the list, but are not proposed.
 
@@ -215,15 +315,15 @@ The coordinates are OpenStreetMap node positions, which sit on the road centre l
 
 ### Near you, on the map
 
-1. **Open Play.** The map already centres on the Hopper. Hotspots within 10 km appear as markers; if none are that close, the nearest two appear and the camera stays on the Hopper.
+1. **Open Play.** The map already centres on the Hopper. The phone finds the Hopper's zone from the public zone shapes (section 4) and marks that zone's hotspot as "Your hotspot"; the other hotspots within 10 km appear as markers too, and if none are that close, the nearest two do and the camera stays on the Hopper. A Hopper inside no zone (over the line in Ogun State, for example) gets the nearest zone as theirs.
 2. **The marker is its own thing.** Not a crate (cream, violet, pink, gold) and not a spot ring. A hotspot is a dark disc with a cream crossroads glyph inside an orange ring (`BRAND.orange`), its name under it in the display font ("JIBOWU"), and a small count badge. The ring pulses when 3 or more avatars are there. No emoji.
-3. **A "Hotspots near you" row in the tray.** The three nearest, with a distance only the Hopper sees ("1.2 km") and the count band. Tap one and the camera flies to it. "More hotspots" opens the full list grouped by area. The sort and the distance are worked out on the phone from the Hopper's own fix. The hotspot list is public and fixed, so the server never needs the Hopper's position for this.
-4. **Hopper not in Lagos, or location off.** Today Play answers "Play is Lagos only for now" and shows nothing. For hotspots it should instead show the full list, Yaba first, with the map on Lagos, because entering needs no position. Boxes stay Lagos only.
+3. **A "Hotspots near you" row in the tray.** Your hotspot first, then the two nearest others, with a distance only the Hopper sees ("1.2 km") and the count band. Tap one and the camera flies to it. "More hotspots" opens the full list of 13, grouped by island and mainland. The sort and the distance are worked out on the phone from the Hopper's own fix. The hotspot list is public and fixed, so the server never needs the Hopper's position for this.
+4. **Hopper not in Lagos, or location off.** Today Play answers "Play is Lagos only for now" and shows nothing. For hotspots it should instead show the 13 hotspots, wave 1 first (Yaba on top), with the map on Lagos, because entering needs no position. Boxes stay Lagos only.
 5. **The main events map.** Jae: "maybe they'll be showing on the icon map." Recommended: yes, one small hotspot icon at each junction on the events map; tapping it opens Play at that hotspot's sheet. Boxes still never show there (decision of 9 Oct). Jae to confirm.
 
 ### The sheet and entering
 
-1. Tap a marker. A sheet opens: name, area, the two road names, "Always open", the count band, ENTER.
+1. Tap a marker. A sheet opens: name, the places in the zone, the two road names, "Always open", the count band, ENTER.
 2. Guest: ENTER opens the sign-up sheet in place (Ola's `requireAccount`); an account is needed to enter. After Play mode Phase 6 it means a verified account.
 3. ENTER sends the avatar. It runs from where it is on the map to the junction. The run is animated on the phone only: 4 to 25 s by distance, with a skip button after the first time. Nothing about the run, the start or the distance goes to the server. This is the relaxation of the 3 km rule: the rule existed so spot prizes could not be farmed from far away, and hotspots have no prizes, so there is nothing to protect and no limit. Steering with the arrows works as in spots, optional.
 4. On arrival the phone calls `enter_hotspot(id)`. The room opens as a sheet over the map (Play never navigates away): faces strip, the chat, the composer. On the map the avatar stands at the junction with up to 10 heads around it (6 on low-tier phones).
@@ -231,7 +331,7 @@ The coordinates are OpenStreetMap node positions, which sit on the road centre l
 
 ### Deep link
 
-`/?hotspot=yaba-jibowu` opens Play with that sheet. Handy for the WhatsApp Community: "Yaba is on at Jibowu. Come in." Cheap; part of step 2.
+`/?hotspot=yaba` (the zone's slug) opens Play with that sheet. Handy for the WhatsApp Community: "Yaba is on at Jibowu. Come in." Cheap; part of step 2.
 
 ## 7. The room
 
@@ -258,7 +358,7 @@ The room is Ola's chat system with one new channel kind, `hotspot:<id>`. Nothing
 | Visible | The last 24 hours, only while your avatar is in the room |
 | Kept | 7 days, then deleted. Reports keep a 400 character excerpt of the message they name |
 | Delivery | Ola's Realtime on `messages` for v1, because a room is capped (below) and it reuses `useRoom`. If load asks, switch to a cursor poll like the spot pulse |
-| Size | A soft limit of 60 avatars in a room. At 60, ENTER offers the nearest other hotspot. Lobbies of 50 for one hotspot ("Jibowu 2") come later if the data asks |
+| Size | A soft limit of 100 avatars in a room. At 100, ENTER offers the nearest other hotspot. The limit sits above the split trigger (60 at the daily peak for a week, section 4) so the cap never hides the demand; a room that stays busy is split into two zones, not given lobbies |
 
 ### Heads: Wave, Link up, Vibe
 
@@ -273,7 +373,7 @@ A 24/7 room with no staff awake needs rules that run by themselves.
 | Report | The existing `report('room', message)` and `report('person', key)`. Three different people reporting one alias in 24 hours mutes it in that hotspot for an hour. Six hides it from all hotspots until staff look. Nothing is deleted by the machine |
 | Block | The existing both-way block. A blocked person's messages and head disappear for you |
 | Staff, in the admin desk | A Hotspots section next to the spawner: pause a hotspot (instant), set its slow mode, clear the last N minutes, mute an alias for N hours, ban an account from hotspots, see the open reports for hotspot messages |
-| Pause switch | `active = false` hides the hotspot everywhere and closes its room |
+| Pause switch | `status = 'paused'` hides the hotspot everywhere and closes its room |
 | Room rules | A fixed line at the top of every room: "Be kind. No numbers or links. Report anything that feels off." It is not a message in the table |
 | Not a meet-up | A line in the sheet: "Hotspots are online. You do not need to be at this junction." |
 
@@ -310,15 +410,15 @@ Smallest change: one new table of places, one for who is there, one for the dail
 
 | New | What |
 |---|---|
-| `hotspots` | `id, slug, name, area (references areas), geog, road_a, road_b, osm_ref, active, slow_seconds, created_at`. Public read of active rows (the list is public); writes service role only |
+| `hotspots` | Built (`supabase/hotspot_zones.sql`): one row per zone with its hotspot. `id, slug, name, zone_label, side, junction, road_a, road_b, lat, lng, geom, zone_geom, area_km2, land_km2, parent_id, split_hint, status, wave, name_confirmed, created_at`. `status` is planned, active, paused or split. Public read of active and planned rows (the list and the shapes are public); writes service role only; the app never writes a position. `slow_seconds` is added with the chat (step 4) |
 | `hotspot_visits` | `user_id (primary key, one place at a time), hotspot_id, key (from identity_for), entered_at, last_seen`. RLS on, no policy, nothing granted; only the functions below read it. No coordinates |
 | `hotspot_days` | `user_id, play_day, hotspot_id`, primary key `(user_id, play_day, hotspot_id)`. Same lockdown |
 | `hotspot_mutes` (step 4) | `hotspot_id, user_id, until` |
-| `hotspot_candidates` | Data only, in `supabase/hotspot_candidates.sql`. Staff turn a candidate into a `hotspots` row |
+| `hotspot_candidates` | Data only, in `supabase/hotspot_candidates.sql`: the Yaba and Lekki Phase 1 shortlist from before the zones. Kept as a source for splits; nothing reads it |
 
 | New function | What |
 |---|---|
-| `hotspot_list()` | Active hotspots with id, name, area, roads, lat, lng and the count band (never an exact number under 3) |
+| `hotspot_list()` | Active hotspots with id, slug, name, zone_label, roads, lat, lng, the zone shape and the count band (never an exact number under 3) |
 | `enter_hotspot(id)` | Needs an account. Creates or refreshes the visit, clears any spot visit, returns the key and alias. Rate limited: 30 entries a day |
 | `leave_hotspot()` | Deletes the visit |
 | `hotspot_pulse(id, cursor)` | Every 10 s while the room is open: heads (key, alias, look, ordered linked and waved first, then by a hash of the key), count band, vibes since the cursor; also refreshes `last_seen`. No times, no arrival order |
@@ -334,7 +434,7 @@ Smallest change: one new table of places, one for who is there, one for the dail
 | `chat_accounts.sql` `send_wave`, `my_waves`, and the Phase 5 link-up and vibe functions: treat `hotspot:` like `spot:` | Step 5 |
 | Client `src/lib/chat.ts`: a `hotspot` kind in `PeopleOf` and `usePeople`; `RoomView` reused with new copy | Step 3 |
 
-Unchanged: `play_tick` and `play_fix` (hotspots do not use them), `game_drops`, `spawn_points`, `no_spawn_zones`, `spawn_rules`, claims and the 150 XP ceiling. `lagos_area_for` is used when picking a junction's area.
+Unchanged: `play_tick` and `play_fix` (hotspots do not use them), `game_drops`, `spawn_points`, `no_spawn_zones`, `spawn_rules`, claims and the 150 XP ceiling. A junction's zone is the zone shape it is inside (`lagos_area_for` is not used for hotspots any more).
 
 Demo mode keeps working: the hotspot layer reads fixtures from `src/lib/demoData.ts` when there is no Supabase, with made-up counts and a local-only room, like the chat demo does today.
 
@@ -344,15 +444,15 @@ Each step ends with the app playable and tests passing (`supabase/tests/hotspots
 
 | Step | What | Size | Jae can try |
 |---|---|---|---|
-| 0 | Jae answers section 12. Add `scripts/hotspots/find-junctions.mjs`, run the full ranking for the other 14 areas, load `hotspot_candidates.sql` | S | Pick the hotspots from the shortlist |
-| 1 | `supabase/hotspots.sql`: table, RLS, `hotspot_list()`, seed with the picks (Yaba 3 and Lekki Phase 1 2 first). Tests: no pick inside a no-spawn zone, anon reads active rows only | S | The list in the database |
-| 2 | Map layer: marker, near-you row in the tray, sheet (no entering yet), deep link, demo fixtures, the Lagos-only refusal replaced by the full list. Files: `src/components/play/HotspotMarker.tsx`, `HotspotSheet.tsx`, a `useHotspots` hook; edits in `PlayLayer.tsx` and `Tray.tsx` | M | See hotspots near you and tap one |
+| 0 | Done (10 Oct): `scripts/hotspots/zones.mjs` made the 13 zones, their hotspots and split hints; `check-land.mjs` and `check-names.mjs` re-check them from the database and OpenStreetMap (all pass; 7 of the 26 local names are not backed by OpenStreetMap and are marked unsure). Jae answers section 12 and confirms the local names | S | Look at the 13 zones and junctions on the phone map (`/mocks/hotspots`) |
+| 1 | Table, RLS and the 13 rows are done (`supabase/hotspot_zones.sql`, tested by `supabase/tests/hotspot_zones_test.sql`: no overlap, every hotspot in its own zone and clear of no-spawn zones, no zone across the lagoon, all area centres covered, anon reads active and planned rows only). Still to do: `hotspot_list()` and the staff switch that flips a zone from planned to active (wave 1 first) | S | The list in the database |
+| 2 | Map layer: marker, near-you row in the tray, sheet (no entering yet), deep link, finding the Hopper's zone on the phone from the public shapes, demo fixtures, the Lagos-only refusal replaced by the full list. Files: `src/components/play/HotspotMarker.tsx`, `HotspotSheet.tsx`, a `useHotspots` hook; edits in `PlayLayer.tsx` and `Tray.tsx` | M | See hotspots near you and tap one |
 | 3 | Presence: `hotspot_visits`, `enter_hotspot`, `leave_hotspot`, `hotspot_pulse`, `in_room` branch, the run animation, heads around the junction, Bring avatar home, one avatar one place. Needs the sign-up sheet, not Phase 4 | M | Two phones in one room as heads |
 | 4 | Chat: `stamp_message`, `message_visible`, purge edits (Ola reviews), the filter, limits, slow mode, mutes, `RoomView` reuse, the admin Hotspots section, the privacy page line. Tests for every rule | L | Chat in Jibowu from two phones; try to break it |
 | 5 | Heads actions: Wave, Link up, Vibe (rides on Play mode Phase 5; only adds the `hotspot:` prefix) | S | Tap a head |
 | 6 | Daily reward and Regular badge | S | 10 XP after 5 minutes |
-| 7 | Roll out: Yaba alone for a week, then Lekki Phase 1, then wave 1; watch peak avatars, messages, reports per 100 messages | | Real people |
-| Later | Lobbies of 50, the area chip, hotspot nights, an opt-in alert when a hotspot lights up, Paz prompts | | |
+| 7 | Roll out: Yaba alone for a week, then Lekki, then the rest of wave 1 (Victoria Island, Ikeja); watch peak avatars, messages, reports per 100 messages. When a room hits the split trigger (60 at its daily peak, 7 days), split it with its hint | | Real people |
+| Later | The zone chip (opt-in, off by default), splitting zones as they fill, hotspot nights, an opt-in alert when a hotspot lights up, Paz prompts | | |
 
 Order matters for safety: do not open step 4's chat to real Hoppers before the filter, limits, report handling, mute and pause switch all exist.
 
@@ -361,8 +461,8 @@ Order matters for safety: do not open step 4's chat to real Hoppers before the f
 ### For Jae
 
 1. **Chat reverses a Play rule.** Play mode section 7 says "No spot chat, ever. Wave, then DM." Hotspots have a group chat. Spot rooms stay chat-free (a 90 minute prize race with heads from within 3 km); hotspots have no prize and no location link, so chat is safe. OK to change that one line when you approve this?
-2. **The starting list.** Is Yaba 3, Lekki Phase 1 2 and the table in section 4 right? Open Yaba alone first, or wave 1?
-3. **The first five junctions.** Jibowu, Ojuelegba, Yaba market side for Yaba; Phase 1 Admiralty Way and Phase 1 Freedom Way for Lekki Phase 1. Please correct the local names and swap any (UNILAG gate for Yaba market side, say).
+2. **The zones.** Are the 13 zones in section 4 right? The borders follow the LGA lines, so Gbagada and Anthony are in Ojota and Gbagada, Ilupeju and Oshodi are in Surulere, Mushin and Oshodi, Maryland is in Ikeja, and Jibowu is in Yaba. Open Yaba alone first, or wave 1 (Yaba, Lekki, Victoria Island, Ikeja)?
+3. **The 13 junctions.** Jibowu (Yaba), Admiralty Way (Lekki), Adeola Odeku (Victoria Island), Allen Roundabout (Ikeja), Ojuelegba (Surulere, Mushin and Oshodi), Bourdillon (Ikoyi), Obalende (Lagos Island), Ojota, Mile 2, Ajah, Ikotun, Iyana Iba, Ikorodu. Please correct the local names and swap any. OpenStreetMap does not back Mile 2 (it maps Mile 2 1.4 km east of that crossing) or six of the split junctions; they are marked unsure in section 4, with the swap for Mile 2. Falomo for Ikoyi needs the 100 m military rule lifted for that one place.
 4. **Anyone anywhere.** Section 6 lets a Hopper outside Lagos, or with location off, see and enter hotspots, with an account. OK?
 5. **The events map.** A small hotspot icon on the main map that opens Play? Boxes still never show there.
 6. **Age.** Is there an age rule (18 and over)? A public chat of strangers needs it.
@@ -370,7 +470,8 @@ Order matters for safety: do not open step 4's chat to real Hoppers before the f
 8. **Night.** Slow mode 00:00 to 05:00 and 24/7 otherwise. Who looks at reports in the morning, and how fast must they be answered?
 9. **Alias.** The same alias every visit to a hotspot (regulars know each other), or a fresh one each day?
 10. **Reward.** 10 XP a day for a 5 minute stay, and a Regular badge at 4 days. Too small, about right?
-11. **Names.** Room named after the place ("Jibowu") or the area ("Yaba 1, 2, 3")?
+11. **Names.** Room named after the zone ("Yaba", "Lekki") or after its junction ("Jibowu", "Admiralty Way")? Zone names are in section 4; when a zone splits, its two children are named for their halves ("Shomolu and Bariga").
+12. **When to split.** I wrote 60 or more people at a zone's daily peak, 7 days in a row, then staff split it along the cut written in section 4; the two new rooms start empty and the chat history stays with the old one. You said only "as more people come". Is that the right size and speed, or should a person decide each time?
 
 ### For Ola
 
