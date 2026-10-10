@@ -18,6 +18,7 @@ import ThemeClock from "@/components/ThemeClock";
 import OfflineLine from "@/components/app/OfflineLine";
 import InstallSheet from "@/components/app/InstallSheet";
 import SoundLane from "@/components/app/SoundLane";
+import MusicHost from "@/components/app/MusicHost";
 import PushAlert from "@/components/app/PushAlert";
 import SignupSheet from "@/components/app/SignupSheet";
 import IntroHost from "@/components/intro/IntroHost";
@@ -72,6 +73,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
       <body className="overflow-hidden">
         <ThemeClock />
         <SoundLane />
+        <MusicHost />
         <PushAlert />
         <div className="fixed inset-0 flex flex-col">
           <OfflineLine />

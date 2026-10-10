@@ -87,7 +87,7 @@ const ready = new Map<string, Sample>();
 let started = false;
 
 /** decodeAudioData in both of its forms: iPhone Safari before 14.1 and webkitAudioContext take callbacks and return nothing. */
-function decode(a: BaseAudioContext, data: ArrayBuffer) {
+export function decode(a: BaseAudioContext, data: ArrayBuffer) {
   return new Promise<AudioBuffer>((ok, no) => {
     const fail = (e: unknown) => no(e instanceof Error ? e : new Error("cannot decode"));
     const p = a.decodeAudioData(data, ok, fail);

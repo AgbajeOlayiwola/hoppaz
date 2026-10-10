@@ -39,6 +39,10 @@
  *    (deviceTier()) skips the shekere and the ehn.
  *  - setMuted(boolean) is persisted in localStorage key "hz-sound" ("off" or
  *    "on"). Default is on.
+ *  - The background music (music.ts) plays on this same context, in a chain of its own that ends at the
+ *    destination (not through the master, low-pass or compressor above). It reads the context with
+ *    context(), holds a lease with acquire() while it plays, and ducks under the voices it hears
+ *    from onVoice(). Nothing in the sound effects changes because of it.
  */
 
 import { deviceTier } from "@/lib/deviceTier";
@@ -103,6 +107,7 @@ let offG: number | undefined;
 let cur: Lane | null = null;
 let mgNow = LEVEL;
 const listeners = new Set<() => void>();
+const voiceListeners = new Set<(l: Lane, t: number, e: number) => void>();
 
 try {
   muted = typeof localStorage !== "undefined" && localStorage.getItem(KEY) === "off";
@@ -251,7 +256,10 @@ function onVisibility() {
     voices.hush();
     const t = AC ? AC.currentTime : 0;
     VO.slice().forEach((v) => v.kill(t));
-    doze(true);
+    // A suspended context freezes its clock, so a fade in flight never runs and the sound cuts off at full level. While a
+    // lease is held (the music is fading out over 0.3 s) the sleep waits for the fade; the hidden page is checked again then.
+    if (leases > 0) setTimeout(() => hidden() && doze(true), 350);
+    else doze(true);
   } else if (AC && !muted && isActive()) wake();
 }
 
@@ -357,6 +365,15 @@ function voice(a: Ctx, t: number, d: number, pr?: number, ln?: Lane): Voice {
     },
   };
   VO.push(v);
+  if (!dead && !offline) {
+    voiceListeners.forEach((f) => {
+      try {
+        f(L, t, e);
+      } catch {
+        /* a listener must never break a sound */
+      }
+    });
+  }
   arm(Math.max(0, e - now) * 1000 + IDLE);
   return v;
 }
@@ -1128,6 +1145,17 @@ const control = {
     leases = Math.max(0, leases - 1);
     if (leases === 0) park();
   },
+  /** The context once a real tap has made it, else null. Music plays on this one; it never makes a second. */
+  context: (): AudioContext | null => (AC && !offline && !isOff(AC) ? (AC as AudioContext) : null),
+  /** Told of every voice that will sound: its lane and its start and end in context seconds. Returns the unsubscribe. */
+  onVoice(fn: (lane: Lane, t: number, e: number) => void) {
+    voiceListeners.add(fn);
+    return () => {
+      voiceListeners.delete(fn);
+    };
+  },
+  /** 23:00 to 07:00 in Lagos right now: the window that halves the master. */
+  quiet,
   /** Resume the context from a gesture handler. Safe to call any time. */
   unlock,
   /** Cuts the shekere. */

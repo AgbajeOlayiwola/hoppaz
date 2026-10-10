@@ -22,6 +22,7 @@ import {
 } from "@/lib/push";
 import { supabaseConfigured } from "@/lib/supabase/client";
 import { sfx } from "@/lib/sound/sfx";
+import { music } from "@/lib/sound/music";
 import { haptics } from "@/lib/haptics";
 import { useSessionStore } from "@/lib/useSession";
 import ReplayTourRow from "@/components/intro/ReplayTourRow";
@@ -73,12 +74,14 @@ function SwitchRow({ label, on, line, onToggle }: { label: string; on: boolean; 
 }
 
 /**
- * Sound and Buzz. Sound is the app's one mute (the speaker in Play and the button on Today are the same
- * switch, saved as hz-sound). Buzz is its own switch for the Android buzz (lib/haptics.ts), on by default.
- * Turning either on answers with a tiny tick or tap, so the tap is felt.
+ * Sound, Music and Buzz. Sound is the app's one mute (the speaker in Play and the button on Today are the same
+ * switch, saved as hz-sound). Music is its own switch for the background loops (lib/sound/music.ts, hz-music), on by
+ * default; Sound off silences it as well. Buzz is its own switch for the Android buzz (lib/haptics.ts), on by default.
+ * Turning Sound or Buzz on answers with a tiny tick or tap, so the tap is felt; Music answers by starting.
  */
 function SoundRows() {
   const muted = useSyncExternalStore(sfx.subscribe, sfx.isMuted, () => false);
+  const tunes = useSyncExternalStore(music.subscribe, music.isOn, () => true);
   const buzz = useSyncExternalStore(haptics.subscribe, haptics.isOn, () => true);
   const [canBuzz, setCanBuzz] = useState(true);
   // Whether the phone can buzz is only known in the browser, so read it after mount.
@@ -93,6 +96,18 @@ function SoundRows() {
           sfx.setMuted(!muted);
           if (muted) sfx.agogo(3);
         }}
+      />
+      <SwitchRow
+        label="MUSIC"
+        on={tunes}
+        line={
+          !tunes
+            ? muted ? "No music, and Sound is off too." : "No music. You still hear the sounds."
+            : muted
+              ? "Music is on, but Sound is off, so you hear none."
+              : "You hear soft music in Play, Today, Crew and Me. Quieter from 11pm to 7am."
+        }
+        onToggle={() => music.setOn(!tunes)}
       />
       <SwitchRow
         label="BUZZ"

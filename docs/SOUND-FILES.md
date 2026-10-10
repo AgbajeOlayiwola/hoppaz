@@ -104,6 +104,10 @@ Not called by any screen yet: `hotspot()`, `vibe()`, `danfoHorn()` (and the horn
 
 The 400 ms rule shapes the wiring. The box open's `rip` makes no buzz, because the burst follows within 120 ms and its pattern (the legendary `[60,30,90]`) would be dropped. A badge batch buzzes once, not once per stamp, because the stamps are 220 ms apart.
 
+## Music
+
+The background music (Play theme, menu loop) is a separate player, `src/lib/sound/music.ts`, documented in [MUSIC.md](MUSIC.md). It plays on the same audio context as these sounds and follows the same rules (made only inside a real tap, nothing while the page is hidden, quiet hours, the Sound mute), but in a chain of its own, so nothing above changes. It ducks 6 dB under Moment and Reward sounds and 3 dB under UI sounds, which it hears through `sfx.onVoice()`, and holds a lease (`acquire()` and `release()`) from the start of a load until it stops so the 15 s idle sleep does not cut it. When the page is hidden and a lease is held, the context suspends 350 ms later instead of at once, so the music's 0.3 s fade-out runs. The Music row in Settings is its switch (`hz-music`); Sound off silences it too.
+
 ## Make the files again
 
 The scripts are in `scripts/sfx/` (details in its `README.md`). The raw takes must live outside the repo.
