@@ -2,6 +2,12 @@
 
 Jae's calls, newest first, so the team (and Ola) build to the same thing.
 
+## 10 Oct 2026
+
+| Topic | Decision |
+|---|---|
+| Hotspots: three names | Mile 2 moves to the real Mile 2: the Lagos-Badagry Expressway crossing with Jakande Estate Road (6.46019, 3.30985), not the Festac 1st Avenue crossing. Ikoyi keeps Bourdillon (Bourdillon Road x Alexander Avenue). Ikorodu Garage is "the one after Agric": coming from Lagos on Ikorodu Road, the Agric bus stops come first and the next big junction is the roundabout where Ikorodu Road ends, with Sagamu Road and Ayangburen Road (6.62045, 3.50345). All three names are confirmed (`name_confirmed` true); the other ten hotspots are unchanged. Evidence and distances in [HOTSPOTS.md](HOTSPOTS.md) section 4. |
+
 ## 9 Oct 2026
 
 | Topic | Decision |

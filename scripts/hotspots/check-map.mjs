@@ -139,8 +139,9 @@ try {
   await tapEl("#cardX"); await sleep(250);
   check("card closes with its X", (await ev("__hz.selected")) === null && (await ev("document.getElementById('card').hidden")) === true);
 
-  // the notes: Mile 2 is the one name OpenStreetMap does not back, Ikoyi has a note, Ajah has none
-  for (const [slug, want] of [["festac", "Check this name"], ["ikoyi", "Worth knowing"], ["ajah", ""]]) {
+  // the notes: since 10 Oct no name is "Check this name" (Mile 2, Bourdillon and Ikorodu Garage are Jae's calls);
+  // Ikoyi and Ikorodu have a "Worth knowing" note, Mile 2 and Ajah have none
+  for (const [slug, want] of [["festac", ""], ["ikoyi", "Worth knowing"], ["ikorodu", "Worth knowing"], ["ajah", ""]]) {
     await ev(`(__hz.map.jumpTo({center:[__hz.spots.get('${slug}').lng,__hz.spots.get('${slug}').lat],zoom:12.5}),0)`);
     await idle();
     const [qx, qy] = await pinXY(slug);

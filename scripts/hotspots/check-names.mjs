@@ -5,8 +5,9 @@
 //   node scripts/hotspots/check-names.mjs --deps=<dir with the Overpass cache>
 //
 // For every junction (the hotspots table, and the children in each split_hint) it prints:
-//   roads   do the two roads really meet? (a shared node within 70 m, in the cached road answers),
-//           with the OSM spelling and class of each
+//   roads   do the two roads really meet? (a shared node within 70 m, in the cached road answers; or both
+//           reach the same unnamed roundabout within 70 m, from the cached rings-*.json answers, as at
+//           Ikorodu Garage), with the OSM spelling and class of each
 //   places  the four nearest OSM place nodes (suburb, town, ...), from ONE Overpass query that is
 //           cached (places-*.json in the cache dir; one query at a time, politely)
 //   named   named features within 400 m (bus stations, markets, signals, banks, ...) from the cached POI answers
@@ -44,13 +45,17 @@ const list = [...pts.values()];
 console.log(`${list.length} junctions (${list.filter((p) => p.kind === "hotspot").length} hotspots, ${list.filter((p) => p.kind === "split").length} split-only)`);
 
 // roads and POIs from the cache
-const ways = new Map(), nodes = new Map(), pois = [];
+const ways = new Map(), nodes = new Map(), pois = [], rings = [];
 for (const f of readdirSync(CACHE)) {
   if (/^roads-.*\.json$/.test(f)) {
     for (const e of JSON.parse(readFileSync(join(CACHE, f), "utf8")).elements) {
       if (e.type === "way" && e.tags?.name) ways.set(e.id, e);
       else if (e.type === "node" && e.lat != null) nodes.set(e.id, e);
     }
+  } else if (/^rings-.*\.json$/.test(f)) {
+    const els = JSON.parse(readFileSync(join(CACHE, f), "utf8")).elements;
+    const rn = new Map(els.filter((e) => e.type === "node").map((n) => [n.id, n]));
+    for (const w of els.filter((e) => e.type === "way")) rings.push(w.nodes.map((id) => rn.get(id)).filter(Boolean));
   } else if (/^pois-.*\.json$/.test(f)) {
     for (const e of JSON.parse(readFileSync(join(CACHE, f), "utf8")).elements) if (e.type === "node" && e.tags?.name) pois.push(e);
   }
@@ -71,7 +76,16 @@ function roadCheck(p) {
       if (!best || d < best.d) best = { d, x, y };
     }
   }
-  return best;
+  if (best) return best;
+  // no shared node: both roads reach the same roundabout (a node on the ring, or within 60 m of one), and the point is on it
+  for (const ring of rings) {
+    const mid = { lat: ring.reduce((s, r) => s + r.lat, 0) / ring.length, lng: ring.reduce((s, r) => s + r.lon, 0) / ring.length };
+    if (HAV(p, mid) > 70) continue;
+    const reaches = (w) => w.nodes.some((n) => nodes.has(n) && ring.some((r) => HAV({ lat: r.lat, lng: r.lon }, { lat: nodes.get(n).lat, lng: nodes.get(n).lon }) <= 60));
+    const xs = hit(p.a).filter(reaches), ys = hit(p.b).filter(reaches);
+    if (xs.length && ys.length && xs[0].id !== ys[0].id) return { d: HAV(p, mid), x: xs[0], y: ys[0], ring: true };
+  }
+  return null;
 }
 
 // OSM places near all junctions: one cached Overpass query
@@ -99,7 +113,7 @@ for (const p of list) {
   const ps = placeNodes.map((n) => ({ n, d: HAV(p, { lat: n.lat, lng: n.lon }) })).sort((a, b) => a.d - b.d).slice(0, 4);
   const pp = pois.map((n) => ({ n, d: HAV(p, { lat: n.lat, lng: n.lon }) })).filter((x) => x.d < 400).sort((a, b) => a.d - b.d).slice(0, 4);
   console.log(`\n[${p.kind}] ${p.slug} / ${p.name} / "${p.junction}"`);
-  console.log(`  roads:  ${p.a} x ${p.b} -> ` + (rc ? `meet at a shared node ${Math.round(rc.d)} m away; OSM says "${rc.x.tags.name}" (${rc.x.tags.highway}) x "${rc.y.tags.name}" (${rc.y.tags.highway})` : "NO SHARED NODE within 70 m"));
+  console.log(`  roads:  ${p.a} x ${p.b} -> ` + (rc ? `meet at ${rc.ring ? "the same roundabout (its middle is" : "a shared node"} ${Math.round(rc.d)} m away${rc.ring ? ")" : ""}; OSM says "${rc.x.tags.name}" (${rc.x.tags.highway}) x "${rc.y.tags.name}" (${rc.y.tags.highway})` : "NO SHARED NODE within 70 m"));
   console.log(`  places: ` + ps.map((x) => `${x.n.tags.name} [${x.n.tags.place}] ${Math.round(x.d)} m`).join("; "));
   console.log(`  named:  ` + (pp.map((x) => `${x.n.tags.name} [${x.n.tags.amenity || x.n.tags.highway || x.n.tags.shop || ""}] ${Math.round(x.d)} m`).join("; ") || "none within 400 m"));
 }

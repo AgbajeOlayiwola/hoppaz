@@ -23,6 +23,10 @@
 --   * every zone has a split hint: a cut, and two junctions inside the zone
 --   * the table is read-only for the app: anon and signed-in Hoppers read only
 --     the active and planned rows, and cannot write
+--   * Jae's three calls of 10 Oct 2026 are in: Mile 2 (Lagos-Badagry Expressway x
+--     Jakande Estate Road), Bourdillon in Ikoyi kept, Ikorodu Garage (the trunk
+--     roundabout after the Agric bus stops); those three names, and only those, are
+--     confirmed; a split child that keeps its parent's junction has the same point
 --   * a run again keeps the status and the confirmed flag that staff set
 -- Every check raises an exception on failure; the last line printed is
 -- ALL HOTSPOT ZONE TESTS PASSED.
@@ -124,7 +128,8 @@ begin
   perform pg_temp.ok(not exists (select 1 from public.hotspots where name = '' or junction = '' or road_a = '' or road_b = '' or road_a = road_b), 'every zone has a name, a junction and two different roads');
   perform pg_temp.ok(not exists (select 1 from public.hotspots where wave not between 1 and 4), 'waves are 1 to 4');
   perform pg_temp.ok(exists (select 1 from public.hotspots where wave = 1), 'there is a first wave');
-  perform pg_temp.ok(not exists (select 1 from public.hotspots where name_confirmed), 'no name is marked confirmed before Jae has seen it');
+  perform pg_temp.eq((select string_agg(slug, ',' order by slug) from public.hotspots where name_confirmed), 'festac,ikorodu,ikoyi',
+    'only the three names Jae confirmed on 10 Oct 2026 (Mile 2, Bourdillon, Ikorodu Garage) are marked confirmed');
   -- shapes
   perform pg_temp.ok(not exists (select 1 from public.hotspots where not st_isvalid(zone_geom)), 'every zone shape is valid');
   perform pg_temp.ok(not exists (select 1 from public.hotspots where st_srid(zone_geom) <> 4326 or st_srid(geom) <> 4326), 'SRID 4326 everywhere');
@@ -137,6 +142,36 @@ begin
     perform pg_temp.ok(abs(r.area_km2 - r.real_km2) <= greatest(0.2, r.real_km2 * 0.01), format('area_km2 of %s is %s but the shape is %s', r.slug, r.area_km2, round(r.real_km2::numeric, 1)));
   end loop;
   raise notice 'ok: % first zones, shapes and fields', n;
+end $t$;
+
+-- ------------------------------------ Jae's three calls of 10 Oct 2026 ---
+do $t$
+declare h record; kid jsonb;
+begin
+  -- Mile 2 is the Lagos-Badagry Expressway crossing with Jakande Estate Road (6.46019, 3.30985), not the Festac 1st Avenue crossing
+  select * into h from public.hotspots where slug = 'festac';
+  perform pg_temp.eq(h.junction, 'Mile 2', 'the Festac and Apapa hotspot is called Mile 2');
+  perform pg_temp.eq(h.road_a || ' x ' || h.road_b, 'Lagos-Badagry Expressway x Jakande Estate Road', 'Mile 2 is the Expressway with Jakande Estate Road');
+  perform pg_temp.ok(st_distance(h.geom::geography, st_setsrid(st_makepoint(3.30985, 6.46019), 4326)::geography) <= 60, 'Mile 2 is at the Jakande Estate Road crossing');
+  -- Ikoyi keeps Bourdillon Road x Alexander Avenue
+  select * into h from public.hotspots where slug = 'ikoyi';
+  perform pg_temp.eq(h.junction, 'Bourdillon (Alexander Avenue)', 'the Ikoyi hotspot is still Bourdillon');
+  perform pg_temp.eq(h.road_a || ' x ' || h.road_b, 'Bourdillon Road x Alexander Avenue', 'Bourdillon is Bourdillon Road with Alexander Avenue');
+  -- Ikorodu Garage is the next big junction after the Agric bus stops (6.6254, 3.4840 to 3.4878), coming from Lagos on Ikorodu Road:
+  -- east of Agric, on Ikorodu Road, 1 to 2.5 km on, at the roundabout where it ends (180 m from OSM's Ikorodu Bus Terminal at 6.62118, 3.50199)
+  select * into h from public.hotspots where slug = 'ikorodu';
+  perform pg_temp.eq(h.junction, 'Ikorodu Garage', 'the Ikorodu and Epe hotspot is called Ikorodu Garage');
+  perform pg_temp.eq(h.road_a || ' x ' || h.road_b, 'Ikorodu Road x Ayangburen Road', 'Ikorodu Garage is Ikorodu Road with Ayangburen Road');
+  perform pg_temp.ok(h.lng > 3.4878, 'Ikorodu Garage is east of the Agric bus stops, towards the town');
+  perform pg_temp.ok(st_distance(h.geom::geography, st_setsrid(st_makepoint(3.4878, 6.62533), 4326)::geography) between 1000 and 2500, 'Ikorodu Garage is 1 to 2.5 km past the Agric bus stops');
+  perform pg_temp.ok(st_distance(h.geom::geography, st_setsrid(st_makepoint(3.50199, 6.62118), 4326)::geography) <= 250, 'Ikorodu Garage is by the Ikorodu Bus Terminal');
+  -- the split child that keeps the parent's junction has the same point and roads (Mile 2 and Ikorodu Garage moved; the children moved with them)
+  for h in select slug, lat, lng, road_a, road_b, junction, split_hint from public.hotspots where slug in ('festac', 'ikorodu') loop
+    kid := h.split_hint->'children'->0;
+    perform pg_temp.ok((kid->>'lat')::float8 = h.lat and (kid->>'lng')::float8 = h.lng and kid->>'junction' = h.junction
+      and kid->>'road_a' = h.road_a and kid->>'road_b' = h.road_b, format('%s: the first split child keeps the parent junction', h.slug));
+  end loop;
+  raise notice 'ok: Mile 2, Bourdillon and Ikorodu Garage are where Jae put them (10 Oct 2026)';
 end $t$;
 
 -- ------------------------------------------------ zones do not overlap ---

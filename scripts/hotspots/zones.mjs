@@ -24,7 +24,8 @@
 //      a table of well-known places (PROBES) each in the zone expected.
 //   5. One hotspot per zone (PICK) and the first split of each zone (SPLIT: a cut and
 //      two junctions) are found with the rules of docs/HOTSPOTS.md section 5: two
-//      named roads of class motorway to tertiary meet, not on a bridge, 60 m from
+//      named roads of class motorway to tertiary meet (or reach the same roundabout, for an
+//      anchor marked "rings" in DISCOVER), not on a bridge, 60 m from
 //      water, and (when the local database runs) outside every no-spawn zone and 100 m
 //      from military, prison, port and airport zones. A hotspot's 150 m surroundings
 //      then belong to its zone, so no hotspot sits on a zone edge.
@@ -537,7 +538,8 @@ if (args.stage === "geo") process.exit(0);
 
 // ========================================================== 4. junctions ===
 // The rules of docs/HOTSPOTS.md section 5: two roads with different names meet at one node
-// (motorway, trunk, primary, secondary, tertiary), nodes within 60 m count once, not only on a
+// (motorway, trunk, primary, secondary, tertiary; or both reach the same roundabout, which an
+// anchor marked "rings" in DISCOVER reads), nodes within 60 m count once, not only on a
 // bridge or tunnel, inside the zone, 60 m or more from water. Score: road class of the top
 // two roads + 1 per extra road (2 at most) + 3 for traffic signals within 60 m + 2 for a
 // roundabout + 0.4 per public place within 150 m (20 at most). In Lagos OSM the score leans
@@ -566,12 +568,18 @@ const waterDistanceM = (lat, lng) => {
   return best;
 };
 
-async function junctionsAt(key, lat, lng, r) {
+// `rings`: also read the roundabouts around the anchor (junction=roundabout, motorway to tertiary) and treat the
+// named roads that reach one as meeting there. Needed where the ring itself has no name, so no two named
+// roads share a node: Ikorodu Garage (Ikorodu Road, Sagamu Road and Ayangburen Road around an unnamed
+// trunk roundabout). Off for every other anchor, which keeps their cached answers and their picks as they were.
+async function junctionsAt(key, lat, lng, r, rings = false) {
   const around = `(around:${r},${lat},${lng})`;
   const roadsRaw = await overpass(`roads-${key}`,
     `[out:json][timeout:90];\nway${around}["highway"~"^(motorway|trunk|primary|secondary|tertiary)$"]["name"];\nout body;\n>;\nout skel qt;`);
   const poisRaw = await overpass(`pois-${key}`,
     `[out:json][timeout:90];\n(\n  node${around}["highway"~"^(traffic_signals|bus_stop)$"];\n  node${around}["amenity"~"^(bus_station|marketplace|fuel|bank|restaurant|bar|nightclub|cafe|fast_food|pub|school|university|college|place_of_worship|pharmacy|hospital|clinic|cinema|theatre)$"];\n  node${around}["shop"~"^(mall|supermarket|convenience)$"];\n);\nout body;`);
+  const ringRaw = rings ? await overpass(`rings-${key}`,
+    `[out:json][timeout:90];\nway${around}["junction"="roundabout"]["highway"~"^(motorway|trunk|primary|secondary|tertiary)$"];\nout body;\n>;\nout skel qt;`) : null;
   const nodes = new Map(roadsRaw.elements.filter((e) => e.type === "node").map((n) => [n.id, n]));
   const ways = roadsRaw.elements.filter((e) => e.type === "way");
   const canon = [];
@@ -589,6 +597,27 @@ async function junctionsAt(key, lat, lng, r) {
     const names = new Map();
     for (const w of ws) { const k = nameKey(w.tags.name); if (!names.has(k)) names.set(k, w); }
     if (names.size >= 2 && nodes.get(id)) raw.push({ id, ...nodes.get(id), ws: [...names.values()], onBridge: ws.some((w) => w.tags.bridge || w.tags.tunnel) });
+  }
+  if (ringRaw) {
+    // ring ways that share a node are one roundabout; its point is the middle of its nodes
+    const rn = new Map(ringRaw.elements.filter((e) => e.type === "node").map((n) => [n.id, n]));
+    const groups = [];
+    for (const w of ringRaw.elements.filter((e) => e.type === "way")) {
+      const hit = groups.filter((g) => w.nodes.some((id) => g.ids.has(id)));
+      const g = hit[0] ?? (groups.push({ ids: new Set(), ways: [] }), groups.at(-1));
+      for (const o of hit.slice(1)) { o.ids.forEach((id) => g.ids.add(id)); g.ways.push(...o.ways); groups.splice(groups.indexOf(o), 1); }
+      w.nodes.forEach((id) => g.ids.add(id));
+      g.ways.push(w);
+    }
+    for (const g of groups) {
+      const pts = [...g.ids].map((id) => rn.get(id)).filter(Boolean);
+      const mid = { lat: pts.reduce((s, p) => s + p.lat, 0) / pts.length, lon: pts.reduce((s, p) => s + p.lon, 0) / pts.length };
+      // the roads that reach it: a node on the ring, or within 60 m of one (an unnamed approach in between)
+      const reach = ways.filter((w) => !w.tags.junction && w.nodes.some((id) => nodes.get(id) && pts.some((p) => HAV(p, nodes.get(id)) <= 60)));
+      const names = new Map();
+      for (const w of reach) { const k = nameKey(w.tags.name); if (!names.has(k)) names.set(k, w); }
+      if (names.size >= 2) raw.push({ id: g.ways[0].id, ...mid, ws: [...names.values()], onBridge: false, ring: true });
+    }
   }
   const clusters = [];
   for (const n of raw) {
@@ -610,7 +639,7 @@ async function junctionsAt(key, lat, lng, r) {
     const list = [...here.values()].sort((a, b) => CLASS_W[b.class] - CLASS_W[a.class]);
     const onBridge = c.items.every((i) => i.onBridge);
     const signals = sig.filter((s) => HAV(c, s) <= 60).length;
-    const roundabout = c.items.some((i) => i.ws.some((w) => w.tags.junction === "roundabout"));
+    const roundabout = c.items.some((i) => i.ring || i.ws.some((w) => w.tags.junction === "roundabout"));
     const poi = busy.filter((p) => HAV(c, p) <= 150).length;
     const score = CLASS_W[list[0].class] + CLASS_W[list[1].class] + Math.min(list.length - 2, 2) + (signals ? 3 : 0) + (roundabout ? 2 : 0) + Math.min(poi, 20) * 0.4;
     const home = zones.find((z) => pointIn(c.lat, c.lon, z.mp));
@@ -640,13 +669,17 @@ const DISCOVER = [
   ["ikorodu", [6.6190, 3.5060], 2500], ["epe", [6.5840, 3.9790], 2500],
   ["sangotedo", [6.4700, 3.6300], 2000], ["ojota-int", [6.5885, 3.3795], 700], ["badagry-w", [6.4300, 2.9300], 6000], ["epe-town", [6.5840, 3.9790], 5000],
   ["ojo", [6.4650, 3.1700], 4000], ["badagry-exp", [6.4300, 3.0300], 9000],
+  // Ikorodu Garage (Jae, 10 Oct 2026: "the one after Agric"): the unnamed trunk roundabout where Ikorodu Road ends
+  // (Sagamu Road goes on, Ayangburen Road runs south into the town), 1.7 km past the Agric bus stops. The fourth
+  // element switches on the roundabout reading of junctionsAt.
+  ["ikorodu-garage", [6.6205, 3.5035], 700, "rings"],
 ];
 if (args.discover) {
   const only = typeof args.discover === "string" ? args.discover.split(",") : null;
-  for (const [key, [lat, lng], r] of DISCOVER) {
+  for (const [key, [lat, lng], r, rings] of DISCOVER) {
     if (only && !only.includes(key)) continue;
     log(`\n== ${key} (${lat}, ${lng}) r ${r} m`);
-    for (const j of (await junctionsAt(key, lat, lng, r)).slice(0, 12)) log("  " + fmtJ(j));
+    for (const j of (await junctionsAt(key, lat, lng, r, rings === "rings")).slice(0, 12)) log("  " + fmtJ(j));
   }
   process.exit(0);
 }
@@ -664,6 +697,8 @@ if (args.discover) {
 //           word of the name counts, so "Yaba Market" needs a market and "Pen Cinema" a cinema
 //           (scripts/hotspots/check-names.mjs prints the evidence)
 //   note    something else for Jae to look at: a better-known crossing, a junction on a zone line
+//   confirmed  Jae has confirmed the name and the junction (who and when). The SQL then sets name_confirmed true
+//           for that zone; a run again can switch the flag on but never off (staff own it from then on)
 // SPLIT cuts:
 //   { kind: "lga", along: "...", a: [LGA names], b: [LGA names] }   split along an LGA line
 //   { kind: "road", along: "Road name as OSM spells it", axis: "ew" | "ns" }
@@ -672,8 +707,8 @@ if (args.discover) {
 const PICK = {
   "lagos-island": { anchor: "obalende", want: [/obalende road/, /massey|moloney/], local: "Obalende",
     note: "Obalende is on the line with Ikoyi; the 150 m around it goes to Lagos Island" },
-  "ikoyi": { anchor: "alexander", want: [/bourdillon/, /alexander avenue/], local: "Bourdillon (Alexander Avenue)",
-    note: "Falomo Roundabout is the better-known crossing but sits 51 m from the Giwa defence headquarters, so the 100 m rule keeps it out; Jae can overrule. OSM's Alexander Roundabout is 510 m north of this crossing" },
+  "ikoyi": { anchor: "alexander", want: [/bourdillon/, /alexander avenue/], local: "Bourdillon (Alexander Avenue)", confirmed: "Jae, 10 Oct 2026",
+    note: "Jae kept Bourdillon on 10 Oct. Falomo Roundabout is the better-known crossing but sits 51 m from the Giwa defence headquarters, so the 100 m rule keeps it out. OSM's Alexander Roundabout is 510 m north of this crossing" },
   "victoria-island": { anchor: "vi-akin", want: [/akin adesola/, /adeola odeku/], local: "Adeola Odeku",
     note: "the nightlife strip is Adeola Odeku Street; the crossing is with Akin Adesola Street (OSM's own signals here are named for both streets)" },
   "lekki": { anchor: "lekki-ph1", want: [/admiralty way/, /fatai idowu/], local: "Lekki Phase 1 (Admiralty Way)" },
@@ -685,14 +720,14 @@ const PICK = {
   "yaba": { anchor: "jibowu", want: [/herbert macaulay/, /murt.la/], local: "Jibowu",
     note: "the LGA line runs through Jibowu; the 150 m around it goes to Yaba" },
   "surulere": { anchor: "ojuelegba", want: [/western avenue/, /ojuelegba road/], local: "Ojuelegba" },
-  "festac": { anchor: "mile2", want: [/1st avenue/, /badagry/], local: "Mile 2",
-    unsure: "this is the Festac 1st Avenue crossing on the Badagry Expressway. OSM puts its Mile 2 place 1.4 km east of here (6.4588, 3.3134) and Festac Town 2.1 km west. The named crossing nearest OSM's Mile 2 is the Expressway with Jakande Estate Road (6.46019, 3.30985): 960 m east of this one, in the same zone, clear of every rule, the swap if Jae wants the Mile 2 name" },
+  "festac": { anchor: "mile2", want: [/badagry/, /jakande estate/], local: "Mile 2", confirmed: "Jae, 10 Oct 2026",
+    note: "Jae moved Mile 2 on 10 Oct from the Festac 1st Avenue crossing (6.46018, 3.30115) to the Lagos-Badagry Expressway crossing with Jakande Estate Road, the named crossing nearest OSM's Mile 2 place (6.4588, 3.3134, 421 m away)" },
   "alimosho": { anchor: "ikotun", want: [/idimu.*ikotun/, /egbe road/], local: "Ikotun",
     note: "OSM names few Alimosho junctions; Ikotun is the clearest (Ikotun Terminal is 14 m away). Iyana Ipaja and Egbeda are the other big ones" },
   "ojo-badagry": { anchor: "alaba", want: [/lasu/, /badagry/], local: "Iyana Iba",
     note: "the LASU Road crossing on the Badagry Expressway near Alaba; OSM has Iyana-Iba Market 37 m away" },
-  "ikorodu": { anchor: "ikorodu", want: [/ayangburen/, /beach road/], local: "Ikorodu (Ayangburen Road)",
-    note: "I could not tell which crossing people call Ikorodu Garage (OSM maps no garage); this is the Ayangburen Road and Beach Road crossing" },
+  "ikorodu": { anchor: "ikorodu-garage", want: [/ikorodu road/, /ayangburen/], local: "Ikorodu Garage", confirmed: "Jae, 10 Oct 2026",
+    note: "Jae: Ikorodu Garage is the one after Agric. Coming from Lagos on Ikorodu Road the Agric bus stops (6.6254, 3.4840 to 3.4878) come first; the next big junction is the unnamed trunk roundabout 1.8 km on where Ikorodu Road ends (Sagamu Road goes on) and Ayangburen Road runs south into the town. OSM tags the Ikorodu Bus Terminal stop position (node 6291068229, 175 m west of the point on Ikorodu Road) with loc_name Ikorodu Garage, so the Garage is that stretch and this is its junction. It replaces the Ayangburen Road and Beach Road crossing" },
 };
 
 const SPLIT = {
@@ -724,7 +759,7 @@ const SPLIT = {
     a: { slug: "surulere-mushin", name: "Surulere and Mushin", label: "Surulere, Mushin, Ojuelegba, Aguda, Itire, Ilupeju", side: "Surulere and Mushin LGAs", anchor: "ojuelegba", want: [/western avenue/, /ojuelegba road/], local: "Ojuelegba" },
     b: { slug: "oshodi-isolo", name: "Oshodi and Isolo", label: "Oshodi, Isolo, Okota, Ejigbo", side: "Oshodi-Isolo LGA", anchor: "oshodi", want: [/agege motor road/, /apapa.oworonshoki/], local: "Oshodi" } },
   "festac": { cut: { kind: "lga", along: "the Amuwo Odofin LGA line", a: ["Amuwo Odofin"], b: ["Apapa", "Ajeromi/Ifelodun"] },
-    a: { slug: "festac-amuwo", name: "Festac and Amuwo Odofin", label: "Festac, Mile 2, Satellite Town, Amuwo Odofin", side: "Amuwo Odofin LGA", anchor: "mile2", want: [/1st avenue/, /badagry/], local: "Mile 2" },
+    a: { slug: "festac-amuwo", name: "Festac and Amuwo Odofin", label: "Festac, Mile 2, Satellite Town, Amuwo Odofin", side: "Amuwo Odofin LGA", anchor: "mile2", want: [/badagry/, /jakande estate/], local: "Mile 2" },
     b: { slug: "apapa-ajegunle", name: "Apapa and Ajegunle", label: "Apapa, Ajegunle, Ajeromi, Ifelodun", side: "Apapa and Ajeromi-Ifelodun LGAs", anchor: "apapa", want: [/liverpool road/, /liverpool roundabout/], local: "Liverpool (Apapa)", note: "the Liverpool roundabout in Apapa; the Wharf Road crossing is inside the port zone" } },
   "alimosho": { cut: { kind: "line", along: "Egbeda-Idimu Road, carried straight south to Egbe Road (about 3.285 E)", axis: "ns", at: 3.285 },
     a: { slug: "alimosho-west", name: "Ikotun and Igando", label: "Ikotun, Igando, Ipaja, Iyana Ipaja", side: "west", anchor: "ikotun", want: [/idimu.*ikotun/, /egbe road/], local: "Ikotun" },
@@ -733,7 +768,7 @@ const SPLIT = {
     a: { slug: "badagry-ojo-west", name: "Ojo and Badagry", label: "Ojo, Igbede, Era, Badagry", side: "west", anchor: "ojo", want: [/ilogbo/, /ojo.*igbede/], local: "Ojo (Igbede Road)", unsure: "the Ilogbo Road and Ojo-Igbede Road crossing; OSM's Ojo is 2.2 km east, Sabo Oniba is 727 m and Igbede 1.5 km away" },
     b: { slug: "alaba-iba", name: "Alaba and Iba", label: "Alaba, Iba, Okokomaiko, LASU", side: "east", anchor: "alaba", want: [/lasu/, /badagry/], local: "Iyana Iba" } },
   "ikorodu": { cut: { kind: "lga", along: "the Ikorodu LGA line", a: ["Ikorodu"], b: ["Epe"] },
-    a: { slug: "ikorodu-town", name: "Ikorodu", label: "Ikorodu, Itoikin, Imota", side: "Ikorodu LGA", anchor: "ikorodu", want: [/ayangburen/, /beach road/], local: "Ikorodu (Ayangburen Road)" },
+    a: { slug: "ikorodu-town", name: "Ikorodu", label: "Ikorodu, Itoikin, Imota", side: "Ikorodu LGA", anchor: "ikorodu-garage", want: [/ikorodu road/, /ayangburen/], local: "Ikorodu Garage" },
     b: { slug: "epe-town", name: "Epe", label: "Epe, Ijebu-Ode road", side: "Epe LGA", anchor: "epe-town", want: [/lekki.epe/, /old lagos road/], local: "Epe (Old Lagos Road)", unsure: "the Old Lagos Road crossing west of Epe town; OSM's Epe is 2.7 km away" } },
 };
 
@@ -748,7 +783,7 @@ const matchWant = (j, want) => {
 const anchorOf = (s) => {
   const d = DISCOVER.find((x) => x[0] === s.anchor);
   if (!d) throw new Error(`no anchor ${s.anchor} in DISCOVER`);
-  return { key: d[0], lat: d[1][0], lng: d[1][1], r: d[2] };
+  return { key: d[0], lat: d[1][0], lng: d[1][1], r: d[2], rings: d[3] === "rings" };
 };
 
 // The local database says whether a point is clean: outside every active no-spawn zone, 60 m or
@@ -783,7 +818,7 @@ const outsideM = (slug, p) => {
 
 async function pickJunction(parent, s, tag) {
   const an = anchorOf(s);
-  const all = await junctionsAt(an.key, an.lat, an.lng, an.r);
+  const all = await junctionsAt(an.key, an.lat, an.lng, an.r, an.rings);
   const found = all.map((j) => ({ j, m: matchWant(j, s.want) })).filter((x) => x.m && !x.j.onBridge && waterDistanceM(x.j.lat, x.j.lng) >= 60
     && (x.j.zone === parent || (outsideM(parent, x.j) <= DISC_M && (tag === parent || (picks[parent]?.lat === x.j.lat && picks[parent]?.lng === x.j.lng)))));
   if (!found.length) {
@@ -794,7 +829,7 @@ async function pickJunction(parent, s, tag) {
   found.sort((x, y) => y.j.score - x.j.score || x.j.dist - y.j.dist);
   const [{ j, m }] = found;
   return { local: s.local, lat: j.lat, lng: j.lng, road_a: shown(m[0].name), class_a: m[0].class, road_b: shown(m[1].name), class_b: m[1].class,
-    score: j.score, signals: j.signals, places: j.poi, roundabout: j.roundabout, others: found.length - 1, unsure: s.unsure ?? null, note: s.note ?? null };
+    score: j.score, signals: j.signals, places: j.poi, roundabout: j.roundabout, others: found.length - 1, unsure: s.unsure ?? null, note: s.note ?? null, confirmed: s.confirmed ?? null };
 }
 
 // Which side of a road is a point on? The road is read from OpenStreetMap (cached) as points. For
@@ -900,7 +935,7 @@ log("\n5. one hotspot per zone");
 for (const z of zones) {
   const p = picks[z.slug];
   if (!p) continue;
-  log(`   ${z.slug.padEnd(16)} ${p.local.padEnd(18)} ${p.road_a} (${p.class_a}) x ${p.road_b} (${p.class_b})  ${p.lat},${p.lng}  score ${p.score} sig ${p.signals} places ${p.places}${p.roundabout ? " roundabout" : ""}${p.unsure ? "  UNSURE: " + p.unsure : ""}${p.note ? "  NOTE: " + p.note : ""}`);
+  log(`   ${z.slug.padEnd(16)} ${p.local.padEnd(18)} ${p.road_a} (${p.class_a}) x ${p.road_b} (${p.class_b})  ${p.lat},${p.lng}  score ${p.score} sig ${p.signals} places ${p.places}${p.roundabout ? " roundabout" : ""}${p.confirmed ? "  CONFIRMED: " + p.confirmed : ""}${p.unsure ? "  UNSURE: " + p.unsure : ""}${p.note ? "  NOTE: " + p.note : ""}`);
   for (const k of splits[z.slug]?.kids ?? []) {
     const j = k.junction;
     log(`      split ${k.slug.padEnd(20)} ${j.local.padEnd(18)} ${j.road_a} x ${j.road_b}  ${j.lat},${j.lng}${j.unsure ? "  UNSURE: " + j.unsure : ""}${j.note ? "  NOTE: " + j.note : ""}`);
@@ -959,7 +994,7 @@ const jsonOf = (z) => JSON.stringify({ type: "MultiPolygon", coordinates: z.mpCl
 const sqlRow = ({ z, p, hint }) =>
   `  (${q(z.slug)}, ${q(z.name)}, ${q(z.label)}, ${q(z.side)}, ${q(p.local)}, ${q(p.road_a)}, ${q(p.road_b)}, ${p.lat}, ${p.lng},\n` +
   `   st_multi(st_setsrid(st_geomfromgeojson($g$${jsonOf(z)}$g$), 4326)), ${z.area.toFixed(1)}, ${z.landKm2.toFixed(1)},\n` +
-  `   $j$${JSON.stringify(hint)}$j$::jsonb, ${z.wave})`;
+  `   $j$${JSON.stringify(hint)}$j$::jsonb, ${z.wave}, ${p.confirmed ? "true" : "false"})`;
 
 const SQL = `-- ============================================================================
 -- Hoppaz: hotspot zones (one room per zone, Lagos cut into ${zones.length} zones)
@@ -1011,7 +1046,8 @@ const SQL = `-- ================================================================
 --   status                   planned (default), active, paused, split. A split
 --                            parent stays as history and is no longer shown.
 --   wave                     1 first (where Hoppaz events are) ... 4 the outer zones
---   name_confirmed           false until Jae has confirmed the local names
+--   name_confirmed           false until Jae has confirmed the local name. Confirmed so far
+--                            (PICK in the script): ${rows.filter(({ p }) => p.confirmed).map(({ p }) => p.local).join(", ")}
 --
 -- Who can read: anyone (anon and signed in) reads the rows whose status is
 -- active or planned. Nobody but the service role writes. The app never writes a
@@ -1054,15 +1090,17 @@ grant select on public.hotspots to anon, authenticated;
 grant all on public.hotspots to service_role;
 
 -- The zones. A run again updates the shapes, names, junctions and split hints but
--- never the status, the parent or the confirmed flag, which staff own.
-insert into public.hotspots (slug, name, zone_label, side, junction, road_a, road_b, lat, lng, zone_geom, area_km2, land_km2, split_hint, wave)
+-- never the status or the parent, which staff own. The confirmed flag is only ever
+-- switched on (for the names Jae confirmed, listed in PICK in the script), never off.
+insert into public.hotspots (slug, name, zone_label, side, junction, road_a, road_b, lat, lng, zone_geom, area_km2, land_km2, split_hint, wave, name_confirmed)
 values
 ${rows.map(sqlRow).join(",\n")}
 on conflict (slug) do update set
   name = excluded.name, zone_label = excluded.zone_label, side = excluded.side, junction = excluded.junction,
   road_a = excluded.road_a, road_b = excluded.road_b, lat = excluded.lat, lng = excluded.lng,
   zone_geom = excluded.zone_geom, area_km2 = excluded.area_km2, land_km2 = excluded.land_km2,
-  split_hint = excluded.split_hint, wave = excluded.wave;
+  split_hint = excluded.split_hint, wave = excluded.wave,
+  name_confirmed = public.hotspots.name_confirmed or excluded.name_confirmed;
 `;
 await writeFile(OUT_SQL, SQL);
 // zones.geojson: the final zones (after the hotspot surroundings), each hotspot and the split junctions

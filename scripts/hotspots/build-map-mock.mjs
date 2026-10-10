@@ -217,14 +217,14 @@ const splitAt = (h) =>
 // junction on a zone line ("Worth knowing"). These are the `unsure` and `note` texts of PICK in
 // zones.mjs and the tables of docs/HOTSPOTS.md section 4, shortened for a phone.
 const CHECK = {
-  festac: { kind: "name", text: "OpenStreetMap puts Mile 2 about 1.4 km east of here. This is the Festac 1st Avenue crossing on the expressway. The Jakande Estate Road crossing, 960 m east, is nearer the Mile 2 that OpenStreetMap maps." },
-  ikoyi: { kind: "note", text: "Falomo Roundabout is the famous one, but it sits 51 m from a military site, so the 100 m rule keeps it out. Jae can lift the rule for this one place." },
+  // (no hotspot carries a "name" note since 10 Oct: Jae confirmed Mile 2, Bourdillon and Ikorodu Garage, and the rest are backed)
+  ikoyi: { kind: "note", text: "Falomo Roundabout is the famous one, but it sits 51 m from a military site, so the 100 m rule keeps it out. Jae kept Bourdillon on 10 Oct." },
   yaba: { kind: "note", text: "The LGA line runs through Jibowu, so the 150 m around it is given to Yaba." },
   ojota: { kind: "note", text: "Sits on the Ikeja and Kosofe line, so the 150 m around it is given to this zone. Ketu is the other pick." },
   "lagos-island": { kind: "note", text: "On the line with Ikoyi, so the 150 m around it is given to Lagos Island." },
   "victoria-island": { kind: "note", text: "The nightlife strip is Adeola Odeku Street, but the crossing named is with Akin Adesola Street." },
   alimosho: { kind: "note", text: "OpenStreetMap names few junctions here. Iyana Ipaja and Egbeda are the other big ones." },
-  ikorodu: { kind: "note", text: "Not sure which crossing people call Ikorodu Garage. This is Ayangburen Road with Beach Road." },
+  ikorodu: { kind: "note", text: "This is the roundabout after the Agric bus stops, where Ikorodu Road ends. OpenStreetMap tags the Ikorodu Bus Terminal stop, 175 m before it on Ikorodu Road, as Ikorodu Garage." },
 };
 
 // ===================================================================== 4. the data ===

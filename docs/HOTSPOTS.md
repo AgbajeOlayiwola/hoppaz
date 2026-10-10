@@ -78,7 +78,7 @@ So there is no "3 in Yaba, 2 in Lekki Phase 1" any more, no size classes and no 
 
 Shape km2 includes the water margin; land km2 is land only. "Holds" is which of the 16 areas of the `areas` table have their centre in the zone. Waves are the roll-out order of section 11 (wave 1 is where Hoppaz events are).
 
-See them on a phone: open `/mocks/hotspots` on the phone proxy (`localdb/phone-https/mocks/hotspots.html`). It draws the 13 zones and 13 pins on the app's night map, opens a card per hotspot (name, zone, the two roads, the places in the zone, the first split line, and a short "Check this name" or "Worth knowing" note where section 4 has one), has a "Where am I" button that works out your zone on the phone only, and a toggle that draws each zone's first split line dashed. It is built from the `hotspots` table by `scripts/hotspots/build-map-mock.mjs` (page in `scripts/hotspots/hotspots-map.template.html`); run it again after any change to the zones, with `--deps=<the scratch install and Overpass cache that zones.mjs uses>`. `scripts/hotspots/check-map.mjs` drives the page in one headless Chrome at 390x844 and 375x667 (51 checks: it renders, the tap cards and notes, Where am I for five test points compared with PostGIS, the splits toggle, no location sent anywhere) and kills that Chrome when it ends; run it alone, never twice at once.
+See them on a phone: open `/mocks/hotspots` on the phone proxy (`localdb/phone-https/mocks/hotspots.html`). It draws the 13 zones and 13 pins on the app's night map, opens a card per hotspot (name, zone, the two roads, the places in the zone, the first split line, and a short "Check this name" or "Worth knowing" note where section 4 has one), has a "Where am I" button that works out your zone on the phone only, and a toggle that draws each zone's first split line dashed. It is built from the `hotspots` table by `scripts/hotspots/build-map-mock.mjs` (page in `scripts/hotspots/hotspots-map.template.html`); run it again after any change to the zones, with `--deps=<the scratch install and Overpass cache that zones.mjs uses>`. `scripts/hotspots/check-map.mjs` drives the page in one headless Chrome at 390x844 and 375x667 (52 checks: it renders, the tap cards and notes, Where am I for five test points compared with PostGIS, the splits toggle, no location sent anywhere) and kills that Chrome when it ends; run it alone, never twice at once.
 
 | Zone | Side | Wave | Hotspot | Two roads (OpenStreetMap, class) | km2 shape / land | Holds |
 |---|---|---|---|---|---|---|
@@ -90,11 +90,11 @@ See them on a phone: open `/mocks/hotspots` on the phone proxy (`localdb/phone-h
 | Ikoyi | island | 2 | Bourdillon (Alexander Avenue) | Bourdillon Road (primary) x Alexander Avenue (primary) | 19.7 / 14.9 | Ikoyi |
 | Lagos Island | island | 2 | Obalende | Obalende Road (secondary) x Massey Bamgboshe Street (secondary) | 8.9 / 6.0 | Lagos Island |
 | Ojota and Gbagada | mainland | 3 | Ojota | Ikorodu Road (primary) x Ogudu Road (secondary) | 76.0 / 69.9 | Gbagada, Ogudu, Magodo |
-| Festac and Apapa | mainland | 3 | Mile 2 | 1st Avenue (primary) x Lagos-Badagry Expressway (primary) | 172.3 / 135.3 | Festac, Apapa |
+| Festac and Apapa | mainland | 3 | Mile 2 | Lagos-Badagry Expressway (primary) x Jakande Estate Road (tertiary) | 172.3 / 135.3 | Festac, Apapa |
 | Ajah and beyond | island | 3 | Ajah (Mobil Road) | Lekki-Epe Expressway (trunk) x Mobil Estate Road (tertiary) | 1,051.2 / 933.0 | Ajah |
 | Alimosho | mainland | 4 | Ikotun | Idimu - Ikotun Road (primary) x Egbe Road (primary) | 178.9 / 178.8 | none |
 | Ojo and Badagry | mainland | 4 | Iyana Iba | Lasu-Isheri Road (primary) x Lagos-Badagry Expressway (primary) | 583.9 / 518.3 | none |
-| Ikorodu and Epe | mainland | 4 | Ikorodu (Ayangburen Road) | Ayangburen Road (primary) x Beach Road (primary) | 774.8 / 745.1 | none |
+| Ikorodu and Epe | mainland | 4 | Ikorodu Garage | Ikorodu Road (trunk) x Ayangburen Road (primary) | 774.8 / 745.1 | none |
 
 The places in each zone (`zone_label` in the table):
 
@@ -118,9 +118,9 @@ The places in each zone (`zone_label` in the table):
 
 Names are as OpenStreetMap spells them, except "Murtula Muhammed Way", which OpenStreetMap misspells and the tables show as Murtala Muhammed Way. The local names (Jibowu, Obalende, Mile 2...) are my reading of the coordinates, so on 10 Oct I checked all 26 junctions (the 13 hotspots and the 13 more in the split hints) against OpenStreetMap with `scripts/hotspots/check-names.mjs`. It prints the evidence for each one.
 
-- **The roads.** For all 26 junctions the two roads meet at a shared node in OpenStreetMap (the furthest is 29 m from the point, most are under 15 m), and both road names are OpenStreetMap's.
+- **The roads.** For all 26 junctions the two roads meet in OpenStreetMap, and both road names are OpenStreetMap's. 25 meet at a shared node (the furthest is 28 m from the point, most are under 15 m). The 26th, Ikorodu Garage, is a roundabout with no name of its own: the two roads do not share a node, they both reach the same ring, and the point is the middle of it (1 m).
 - **The local name.** A name is **backed** when the road at the junction carries it as its own name, or OpenStreetMap has a place of that name within 1 km or a named feature of that name within 500 m. Every word of the name counts. A road named for the two places it runs between (Lekki-Epe Expressway, Ojo - Igbede Road) does not back either place. A name that is not backed is **unsure**.
-- **Confirmed.** Backed is not confirmed: `name_confirmed` stays false for all of them until Jae has looked.
+- **Confirmed.** Backed is not confirmed: `name_confirmed` is false until Jae has looked. On 10 Oct he settled three (below), and `name_confirmed` is true for exactly those three: Mile 2, Bourdillon and Ikorodu Garage. The other ten stay false. `zones.mjs` sets the flag from the `confirmed` field of PICK, and a run again can switch it on but never off.
 
 The 13 hotspots:
 
@@ -131,16 +131,35 @@ The 13 hotspots:
 | Adeola Odeku (Victoria Island) | Victoria Island (town) 246 m; the traffic signals here are named for Akin Adesola and Adeola Odeku, 7 m | Backed |
 | Allen Roundabout (Ikeja) | Ikeja (city) 671 m; signals named Obafemi Awolowo/Allen, 26 m | Backed |
 | Ojuelegba (Surulere, Mushin and Oshodi) | Ojuelegba (suburb) 125 m | Backed |
-| Bourdillon (Ikoyi) | No place within 1.8 km; Bourdillon Road is one of the roads | Backed by the road |
+| Bourdillon (Ikoyi) | No place within 1.8 km; Bourdillon Road is one of the roads | Backed by the road, confirmed 10 Oct |
 | Obalende (Lagos Island) | Obalende (suburb) 111 m; Obalende Motor Park 46 m | Backed |
 | Ajah (Mobil Road) | Ajah (town) 436 m; the Lekki-Ajah Flyover meets the expressway 33 m from the point | Backed |
-| **Mile 2 (Festac and Apapa)** | **Mile 2 (town) is 1.36 km east of the point; Festac (town) is 2.1 km west** | **Unsure** |
+| Mile 2 (Festac and Apapa) | Mile 2 (town) 422 m | Backed, confirmed 10 Oct |
 | Ojota | Ojota (suburb) 168 m | Backed |
 | Ikotun (Alimosho) | Ikotun (town) 468 m; Ikotun Terminal bus station 14 m | Backed |
 | Iyana Iba (Ojo and Badagry) | Iyana-Iba Market 37 m | Backed |
-| Ikorodu (Ayangburen Road) | Ikorodu (city) 773 m | Backed |
+| Ikorodu Garage (Ikorodu and Epe) | Ikorodu (city) 165 m; the Ikorodu Bus Terminal stop position (node 6291068229) carries `loc_name` "Ikorodu Garage", 175 m west of the point on Ikorodu Road | Backed by that `loc_name`, confirmed 10 Oct |
 
-**Mile 2 is the one unsure hotspot.** This is the Festac 1st Avenue crossing on the Lagos-Badagry Expressway, which I read as Mile 2, but OpenStreetMap puts Mile 2 1.4 km east of it. The named crossing nearest OpenStreetMap's Mile 2 is the Expressway with Jakande Estate Road (6.46019, 3.30985): 960 m east of this one, in the same zone, outside every no-spawn zone, 240 m from water and 700 m from the nearest military zone. Two ways out for Jae: swap to that crossing and keep the name Mile 2, or keep this crossing and call it Festac 1st Avenue.
+**Jae's three calls, 10 Oct 2026.** Mile 2 was the one unsure hotspot and Ikorodu was the one I could not place. Jae settled both, and kept Bourdillon.
+
+| Hotspot | Jae's call | Final point | Two roads (OpenStreetMap, class) |
+|---|---|---|---|
+| Mile 2 (Festac and Apapa) | Move it to the real Mile 2 | 6.46019, 3.30985 | Lagos-Badagry Expressway (primary) x Jakande Estate Road (tertiary) |
+| Bourdillon (Ikoyi) | Keep it | 6.44491, 3.44976 | Bourdillon Road (primary) x Alexander Avenue (primary) |
+| Ikorodu Garage (Ikorodu and Epe) | "The one after Agric" | 6.62045, 3.50345 | Ikorodu Road (trunk) x Ayangburen Road (primary) |
+
+- **Mile 2** moved from the Festac 1st Avenue crossing (6.46018, 3.30115) to the Expressway with Jakande Estate Road, the named crossing nearest OpenStreetMap's Mile 2 place (422 m; the old crossing was 1,362 m from it). It is 961 m east of the old point, in the same zone and in Amuwo Odofin LGA, so the first split child (Festac and Amuwo Odofin) keeps it. It is outside every no-spawn zone, 240 m from water, 702 m from the nearest military zone (Signals Barracks) and 643 m inside the zone edge. The two roads share a node (0 m).
+- **Bourdillon** is unchanged, so Ikoyi's hotspot stays Bourdillon Road with Alexander Avenue and Falomo Roundabout stays out under the 100 m military rule (see the flags below). It is 177 m from water, 999 m from the nearest military zone and 323 m inside the zone edge.
+- **Ikorodu Garage** replaces the Ayangburen Road and Beach Road crossing (6.61282, 3.50117), which was 885 m south-west of it. The first split child (Ikorodu) keeps it. It is outside every no-spawn zone, 2,419 m from water, 16.4 km from the nearest military zone and 3,199 m inside the zone edge. The evidence follows.
+
+**Ikorodu Garage, the evidence.** No OpenStreetMap feature has Garage in its `name`, `alt_name` or `old_name`. One does in its `loc_name` (the local name): the Ikorodu Bus Terminal stop position (node 6291068229, 6.62113, 3.50202, on Ikorodu Road), 175 m west of the point. A search of the same three tags for "agric" finds only the four Agric bus stops. So the Garage is the Ikorodu Bus Terminal stretch, and the spot is found from Agric, along the road, by what comes next. Coming from Lagos on the Lagos-Ikorodu road (OpenStreetMap: Ikorodu Road, `trunk`, ref A1, a one-way pair), west to east:
+
+1. **Agric.** Four bus stop nodes on Ikorodu Road: "Agric" (node 5674251021, 6.62541, 3.48393), the "Agric" stop position (6291068706), and two "Agric Bus Stop" stop positions (6291068705 at 3.48633 E and 6291068704 at 3.48783 E). They sit either side of where Ikorodu Road crosses Owutu-Isawo Road (6.62571, 3.48467), a tertiary road.
+2. **Then nothing big for 1.8 km.** Aruna bus stop (1,272 m before the pick), Benson bus stop (514 m before), then the Ikorodu Bus Terminal (a `bus_station` way and its stop position, the one tagged Ikorodu Garage, 175 to 181 m from the pick). The BRT lane's last mapped point is about 90 m from the pick. Between Agric and the pick, Ikorodu Road meets only residential and service streets, footways and two pairs of slip links, not one other road of class trunk to tertiary.
+3. **The next big junction.** An unnamed `trunk` roundabout (way 134580953) at 6.62045, 3.50345, where Ikorodu Road ends and three roads meet: Ikorodu Road comes in from the west, Sagamu Road (the same A1 trunk) carries on to the north-east, and Ayangburen Road (primary, F270) leaves south into the town. Ikorodu (city) is 165 m away. It is 1.8 km from the eastern Agric Bus Stop and 2.2 km from the western Agric stop. The roundabout after it (Sagamu Road with Old Lagos Road, 6.62634, 3.50612) is 718 m beyond it, so it comes second.
+4. **The two roads** are Ikorodu Road and Ayangburen Road. Sagamu Road is not named because it is Ikorodu Road's own continuation (the same A1), not a second road.
+
+Why the build missed it before: the ring has no name, so no two named roads share a node there, and the junction finder only looked at shared nodes. `zones.mjs` now reads the roundabouts around an anchor marked "rings" in DISCOVER (the `ikorodu-garage` entry) and counts the named roads that reach one (on the ring, or within 60 m of it) as meeting there. `check-names.mjs` accepts the same. Every other anchor reads exactly as before: the zone shapes in `hotspot_zones.sql` are byte for byte the same, and only the three rows and their split hints changed.
 
 The 13 junctions that appear only in a split hint (below): 7 are backed and 6 are unsure.
 
@@ -164,13 +183,13 @@ Backed names that are still worth a look (the name is fine, something else may n
 
 | Hotspot | Why |
 |---|---|
-| Bourdillon (Ikoyi) | Falomo Roundabout is the better-known crossing, but it sits 51 m from the Giwa defence headquarters (a military no-spawn zone), so the 100 m rule of section 5 keeps it out. Jae can lift the rule for this one place. OpenStreetMap's Alexander Roundabout is 510 m north of this crossing. |
+| Bourdillon (Ikoyi) | Falomo Roundabout is the better-known crossing, but it sits 51 m from the Giwa defence headquarters (a military no-spawn zone), so the 100 m rule of section 5 keeps it out. Jae kept Bourdillon on 10 Oct. OpenStreetMap's Alexander Roundabout is 510 m north of this crossing. |
 | Jibowu (Yaba) | OpenStreetMap puts the LGA line through the junction itself (Jibowu is Shomolu LGA; the other side is Mushin LGA), so the 150 m around it is given to Yaba. |
 | Ojota (Ojota and Gbagada) | The junction is Ikorodu Road with Ogudu Road, on the line between the Ikeja and Kosofe LGAs; the 150 m around it is given to this zone. Ketu (Ikosi Road x Ikorodu Road) is the alternative. |
 | Obalende (Lagos Island) | On the line with Ikoyi; the 150 m around it is given to Lagos Island. |
 | Adeola Odeku (Victoria Island) | The nightlife strip is Adeola Odeku Street; the crossing named is with Akin Adesola Street. |
 | Ikotun (Alimosho) | OpenStreetMap names few Alimosho junctions. Ikotun is the clearest; Iyana Ipaja and Egbeda are the other big ones. |
-| Ikorodu (Ayangburen Road) | I could not tell which crossing people call Ikorodu Garage, and OpenStreetMap maps no garage. This is Ayangburen Road with Beach Road. |
+| Ikorodu Garage | OpenStreetMap tags the Ikorodu Bus Terminal stop position `loc_name` "Ikorodu Garage", 175 m before this roundabout on Ikorodu Road. This is Jae's call of 10 Oct: the roundabout after the Agric bus stops, where Ikorodu Road ends (evidence above). |
 
 I am sure of Allen Roundabout, Ojuelegba and Lekki Phase 1 on Admiralty Way as crossings as well as names. One correction from the check: an earlier flag said the Ajah roundabout and flyover were a few hundred metres east of the Ajah pick. OpenStreetMap has the Lekki-Ajah Flyover 33 m from it, so that flag was wrong and is gone.
 
@@ -198,7 +217,7 @@ Each zone row has `parent_id` (null for these first zones) and a `split_hint` (j
 | Ajah and beyond | Addo Road (line, north-south, 3.5655 E) | Ajah (west): Ajah (Mobil Road), as the parent | Sangotedo and beyond (east): Sangotedo (Lekki-Epe Expressway x Cardinal Okogie Road) |
 | Alimosho | Egbeda-Idimu Road, carried south to Egbe Road (line, north-south, 3.285 E) | Ikotun and Igando (west): Ikotun, as the parent | Egbeda and Idimu (east): Shasha (Ejigbo Road x Shasha Road) |
 | Ojo and Badagry | A line between Ojo and Iba (north-south, 3.185 E; no named road follows it) | Ojo and Badagry (west): Ojo (Ilogbo Road x Ojo - Igbede Road) | Alaba and Iba (east): Iyana Iba, as the parent |
-| Ikorodu and Epe | Ikorodu LGA line | Ikorodu: Ikorodu (Ayangburen Road), as the parent | Epe: Epe (Lekki-Epe Expressway x Old Lagos Road) |
+| Ikorodu and Epe | Ikorodu LGA line | Ikorodu: Ikorodu Garage, as the parent | Epe: Epe (Lekki-Epe Expressway x Old Lagos Road) |
 
 Badagry town has no crossing of two named roads in OpenStreetMap, so Ojo and Badagry is first cut between Ojo and Iba, not at the Badagry LGA line.
 
@@ -212,7 +231,7 @@ The starting proposal was a list of places; the LGA lines say where each place r
 4. **Surulere and Mushin also holds Oshodi-Isolo LGA** (Oshodi, Isolo, Okota). Without it the proposal left the Oshodi and Isolo land in no zone. The zone is named for the three.
 5. **Ikorodu also holds Epe north of the lagoon** ("Ikorodu and Epe"), and **Ajah also holds Ibeju-Lekki and the Epe land south of the lagoon** ("Ajah and beyond"), because the proposal said "Ibeju-Lekki, Epe as one outer zone if needed" and the lagoon is the edge between them.
 6. **Jibowu is Yaba's hotspot and Ojuelegba is Surulere's.** Jae's example said "Ojuelegba or Jibowu for Yaba". The OpenStreetMap LGA line puts Ojuelegba in Mushin LGA, so it is in the Surulere zone; Jibowu is in the Yaba zone (the line runs through it). Both are used, in neighbouring zones, 950 m apart.
-7. **Ikoyi's hotspot is Bourdillon and Alexander, not Falomo,** because of the 100 m military rule (see the flags). Jae can lift the rule for one place.
+7. **Ikoyi's hotspot is Bourdillon and Alexander, not Falomo,** because of the 100 m military rule (see the flags). Jae kept it on 10 Oct.
 8. **Oniru is in Victoria Island's zone and Phase 1 starts the Lekki zone,** because Eti Osa is cut along Admiralty Way (west leg) and Akiogun Road, and Lekki runs from there to Chevron Drive and Jakande, as Jae said.
 9. **13 zones, within the 10 to 14 asked for.** Waves: 1 Yaba, Lekki, Victoria Island, Ikeja; 2 Surulere and Mushin, Ikoyi, Lagos Island; 3 Ojota and Gbagada, Festac and Apapa, Ajah and beyond; 4 Alimosho, Ojo and Badagry, Ikorodu and Epe (the outer zones exist so nobody is left out).
 
@@ -226,7 +245,7 @@ Dropped from the old section 4: the size classes (L, M, S), "add a hotspot at 25
 
 | Rule | Value |
 |---|---|
-| Roads | Two roads with different names meeting at one node. Classes motorway, trunk, primary, secondary, tertiary (see the finding below) |
+| Roads | Two roads with different names meeting at one node, or both reaching the same roundabout when the ring has no name of its own (Ikorodu Garage). Classes motorway, trunk, primary, secondary, tertiary (see the finding below) |
 | Merge | Junction nodes within 60 m of each other count once (dual carriageways, slip roads) |
 | Inside its zone | The point is inside the zone shape. A junction on a zone line is allowed: the 150 m around a hotspot goes to its zone (section 4) |
 | Avoid | Inside any active `no_spawn_zones` zone; within 60 m of a water zone; within 100 m of a military, prison, port or airport zone; a node that is only on a bridge or tunnel |
@@ -444,7 +463,7 @@ Each step ends with the app playable and tests passing (`supabase/tests/hotspots
 
 | Step | What | Size | Jae can try |
 |---|---|---|---|
-| 0 | Done (10 Oct): `scripts/hotspots/zones.mjs` made the 13 zones, their hotspots and split hints; `check-land.mjs` and `check-names.mjs` re-check them from the database and OpenStreetMap (all pass; 7 of the 26 local names are not backed by OpenStreetMap and are marked unsure). Jae answers section 12 and confirms the local names | S | Look at the 13 zones and junctions on the phone map (`/mocks/hotspots`) |
+| 0 | Done (10 Oct): `scripts/hotspots/zones.mjs` made the 13 zones, their hotspots and split hints; `check-land.mjs` and `check-names.mjs` re-check them from the database and OpenStreetMap (all pass; 6 of the 26 local names, all split junctions, are not backed by OpenStreetMap and are marked unsure). Jae answers section 12 and confirms the local names | S | Look at the 13 zones and junctions on the phone map (`/mocks/hotspots`) |
 | 1 | Table, RLS and the 13 rows are done (`supabase/hotspot_zones.sql`, tested by `supabase/tests/hotspot_zones_test.sql`: no overlap, every hotspot in its own zone and clear of no-spawn zones, no zone across the lagoon, all area centres covered, anon reads active and planned rows only). Still to do: `hotspot_list()` and the staff switch that flips a zone from planned to active (wave 1 first) | S | The list in the database |
 | 2 | Map layer: marker, near-you row in the tray, sheet (no entering yet), deep link, finding the Hopper's zone on the phone from the public shapes, demo fixtures, the Lagos-only refusal replaced by the full list. Files: `src/components/play/HotspotMarker.tsx`, `HotspotSheet.tsx`, a `useHotspots` hook; edits in `PlayLayer.tsx` and `Tray.tsx` | M | See hotspots near you and tap one |
 | 3 | Presence: `hotspot_visits`, `enter_hotspot`, `leave_hotspot`, `hotspot_pulse`, `in_room` branch, the run animation, heads around the junction, Bring avatar home, one avatar one place. Needs the sign-up sheet, not Phase 4 | M | Two phones in one room as heads |
@@ -462,7 +481,7 @@ Order matters for safety: do not open step 4's chat to real Hoppers before the f
 
 1. **Chat reverses a Play rule.** Play mode section 7 says "No spot chat, ever. Wave, then DM." Hotspots have a group chat. Spot rooms stay chat-free (a 90 minute prize race with heads from within 3 km); hotspots have no prize and no location link, so chat is safe. OK to change that one line when you approve this?
 2. **The zones.** Are the 13 zones in section 4 right? The borders follow the LGA lines, so Gbagada and Anthony are in Ojota and Gbagada, Ilupeju and Oshodi are in Surulere, Mushin and Oshodi, Maryland is in Ikeja, and Jibowu is in Yaba. Open Yaba alone first, or wave 1 (Yaba, Lekki, Victoria Island, Ikeja)?
-3. **The 13 junctions.** Jibowu (Yaba), Admiralty Way (Lekki), Adeola Odeku (Victoria Island), Allen Roundabout (Ikeja), Ojuelegba (Surulere, Mushin and Oshodi), Bourdillon (Ikoyi), Obalende (Lagos Island), Ojota, Mile 2, Ajah, Ikotun, Iyana Iba, Ikorodu. Please correct the local names and swap any. OpenStreetMap does not back Mile 2 (it maps Mile 2 1.4 km east of that crossing) or six of the split junctions; they are marked unsure in section 4, with the swap for Mile 2. Falomo for Ikoyi needs the 100 m military rule lifted for that one place.
+3. **The 13 junctions.** Jibowu (Yaba), Admiralty Way (Lekki), Adeola Odeku (Victoria Island), Allen Roundabout (Ikeja), Ojuelegba (Surulere, Mushin and Oshodi), Bourdillon (Ikoyi), Obalende (Lagos Island), Ojota, Mile 2, Ajah, Ikotun, Iyana Iba, Ikorodu. Please correct the local names and swap any. On 10 Oct Jae settled three: Mile 2 moved to the Jakande Estate Road crossing, Bourdillon kept, and Ikorodu Garage at the roundabout after the Agric bus stops (section 4). OpenStreetMap does not back six of the split junctions; they are marked unsure in section 4. Falomo for Ikoyi would need the 100 m military rule lifted for that one place.
 4. **Anyone anywhere.** Section 6 lets a Hopper outside Lagos, or with location off, see and enter hotspots, with an account. OK?
 5. **The events map.** A small hotspot icon on the main map that opens Play? Boxes still never show there.
 6. **Age.** Is there an age rule (18 and over)? A public chat of strangers needs it.
