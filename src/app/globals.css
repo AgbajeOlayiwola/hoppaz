@@ -1569,3 +1569,12 @@ svg.rig.poke #character { animation: rig-poke 0.42s cubic-bezier(0.3, 1.6, 0.5, 
     animation: none !important;
   }
 }
+
+/*
+ * A Hotspot room is open over Play. Map markers carry huge z-indexes (the avatar's is 90 million) so they would paint
+ * over the room, so while it is open every marker is hidden; they come back the moment the room goes. Here, not in
+ * Hotspots.module.css: a CSS module may not hold a selector with no local class (production builds refuse it).
+ */
+.hz-room-open .maplibregl-marker {
+  visibility: hidden !important;
+}

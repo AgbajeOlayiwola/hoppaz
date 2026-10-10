@@ -202,10 +202,3 @@
     animation: none;
   }
 }
-/*
- * A room is open over Play. Map markers carry huge z-indexes (the avatar's is 90 million) so they would paint over the
- * room, so while it is open every marker is hidden; they come back the moment the room goes.
- */
-:global(.hz-room-open) :global(.maplibregl-marker) {
-  visibility: hidden !important;
-}
