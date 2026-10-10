@@ -1,0 +1,893 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#0E0B0A">
+<meta name="color-scheme" content="dark">
+<link rel="icon" href="data:,">
+<title>Hoppaz music audition</title>
+<style>
+/* Hoppaz music audition. One file. The loops and the two box sounds are embedded as base64 data URIs at the bottom.
+   Built by scripts/music/build-mock.mjs from scripts/music/mock/music.template.html. Do not edit the built file. */
+:root {
+  --night: #0E0B0A;
+  --orange: #FF4D00;
+  --cream: #F5EBDD;
+  --dim: #C9B9A3;
+  --card: #171210;
+  --raise: #251D18;
+  --line: rgba(245, 235, 221, .16);
+  --head: Poppins, "Avenir Next", ui-rounded, "SF Pro Rounded", system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  --mono: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+  color-scheme: dark;
+}
+* { box-sizing: border-box; }
+[hidden] { display: none !important; }
+html { -webkit-text-size-adjust: 100%; }
+body {
+  margin: 0;
+  background: var(--night);
+  color: var(--cream);
+  font: 16px/1.45 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  padding-bottom: calc(176px + env(safe-area-inset-bottom));
+}
+button {
+  font: inherit;
+  color: inherit;
+  -webkit-appearance: none;
+  appearance: none;
+  touch-action: manipulation;
+  -webkit-tap-highlight-color: transparent;
+  -webkit-user-select: none;
+  user-select: none;
+  cursor: pointer;
+}
+button:active { transform: scale(.98); }
+button:disabled { opacity: .5; cursor: default; }
+:focus-visible { outline: 3px solid var(--orange); outline-offset: 2px; }
+.wrap { max-width: 560px; margin: 0 auto; padding: 0 16px; }
+
+/* header */
+.top { padding-top: calc(28px + env(safe-area-inset-top)); }
+.eyebrow { margin: 0 0 8px; font: 700 12px/1 var(--head); letter-spacing: .14em; text-transform: uppercase; color: var(--orange); }
+h1 { margin: 0 0 12px; font: 900 40px/1.02 var(--head); letter-spacing: -.02em; }
+.lede { margin: 0 0 12px; font-size: 17px; }
+.steps { margin: 0 0 12px; padding: 0; list-style: none; counter-reset: s; }
+.steps li { position: relative; margin: 0 0 6px; padding-left: 32px; font-size: 15px; counter-increment: s; }
+.steps li::before {
+  content: counter(s);
+  position: absolute;
+  left: 0;
+  top: 1px;
+  width: 22px;
+  height: 22px;
+  display: grid;
+  place-items: center;
+  background: var(--raise);
+  border-radius: 7px;
+  font: 800 13px/1 var(--head);
+  color: var(--orange);
+}
+.fine { margin: 0; font-size: 14px; color: var(--dim); }
+.silent {
+  margin: 14px 0 0;
+  padding: 12px 14px;
+  border: 2px solid var(--orange);
+  border-radius: 14px;
+  font-size: 15px;
+}
+.silent strong { font-family: var(--head); font-weight: 800; }
+.jump { display: flex; gap: 8px; margin: 18px 0 0; }
+.jump a {
+  flex: 1;
+  min-width: 0;
+  min-height: 56px;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  gap: 4px;
+  padding: 8px 10px;
+  border: 2px solid var(--line);
+  border-radius: 14px;
+  color: var(--cream);
+  text-decoration: none;
+  font: 800 14px/1.1 var(--head);
+  overflow-wrap: anywhere;
+}
+.jump small { font: 500 12px/1.1 system-ui, sans-serif; color: var(--dim); }
+.jump a.has { border-color: rgba(255, 77, 0, .6); }
+.jump a.has small { color: var(--orange); }
+
+/* sections */
+.lane { margin-top: 32px; scroll-margin-top: 16px; }
+.lane-head { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; }
+h2 { margin: 0; font: 900 26px/1.1 var(--head); letter-spacing: -.01em; }
+.lane-count { font: 700 14px/1 var(--head); color: var(--dim); white-space: nowrap; }
+.lane-count.has { color: var(--orange); }
+.lane-note { margin: 4px 0 14px; font-size: 14px; color: var(--dim); }
+
+/* one track */
+.trk { margin: 0 0 14px; padding: 16px 14px 14px; background: var(--card); border: 1px solid var(--line); border-radius: 20px; }
+.trk.has { border-color: rgba(255, 77, 0, .6); }
+.trk.on { border-color: var(--orange); box-shadow: 0 0 0 1px var(--orange); }
+.thead { display: flex; align-items: center; gap: 12px; }
+.num {
+  flex: none;
+  width: 40px;
+  height: 40px;
+  display: grid;
+  place-items: center;
+  background: var(--raise);
+  border-radius: 12px;
+  font: 900 20px/1 var(--head);
+}
+.ttl { min-width: 0; }
+h3 { margin: 0; font: 800 19px/1.15 var(--head); }
+.meta { margin: 3px 0 0; font: 500 12px/1.3 var(--mono); color: var(--dim); }
+.why { margin: 12px 0 4px; font-size: 15px; }
+.hook { margin: 0 0 14px; font-size: 13px; color: var(--dim); }
+.go {
+  position: relative;
+  overflow: hidden;
+  width: 100%;
+  min-height: 64px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  padding: 0 12px;
+  background: var(--orange);
+  border: 0;
+  border-radius: 16px;
+  color: var(--night);
+  font: 900 20px/1 var(--head);
+}
+.go svg { width: 18px; height: 18px; fill: currentColor; flex: none; }
+.go.on { background: var(--cream); }
+.go .ico-stop { display: none; }
+.go.on .ico-play { display: none; }
+.go.on .ico-stop { display: block; }
+
+/* progress line: orange fill, the last 4 s tinted, a cream post at the seam */
+.prog { position: relative; height: 12px; margin: 14px 0 0; background: var(--raise); border-radius: 6px; overflow: hidden; }
+.prog .zone { position: absolute; top: 0; bottom: 0; right: 0; width: calc(var(--z, .12) * 100%); background: rgba(255, 77, 0, .3); }
+.prog .fill { position: absolute; inset: 0; background: var(--orange); transform-origin: left center; transform: scaleX(0); }
+.prog .post { position: absolute; top: 0; bottom: 0; right: 0; width: 3px; background: var(--cream); }
+.prog.hit { animation: hit .7s ease-out; }
+@keyframes hit { 0% { box-shadow: 0 0 0 0 rgba(245, 235, 221, .9); } 100% { box-shadow: 0 0 0 10px rgba(245, 235, 221, 0); } }
+.stat { display: flex; justify-content: space-between; gap: 8px; margin: 8px 0 0; font: 500 13px/1.3 var(--mono); color: var(--dim); font-variant-numeric: tabular-nums; }
+.msg { margin: 4px 0 12px; min-height: 22px; font-size: 14px; color: var(--cream); }
+.msg.hot { color: var(--orange); font-weight: 600; }
+.msg.bad { color: #FF8A5C; }
+
+.row2 { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }
+.sec {
+  position: relative;
+  overflow: hidden;
+  min-height: 54px;
+  padding: 6px 8px;
+  background: transparent;
+  border: 2px solid rgba(245, 235, 221, .3);
+  border-radius: 14px;
+  font: 800 15px/1.15 var(--head);
+}
+.sec::after, .go.run::after {
+  content: "";
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  height: 4px;
+  background: var(--orange);
+  transform: scaleX(0);
+  transform-origin: left;
+}
+.sec.run { border-color: var(--orange); }
+.sec.run::after, .go.run::after { animation: sweep var(--d, 1s) linear forwards; }
+.go.run::after { background: var(--night); height: 6px; }
+@keyframes sweep { to { transform: scaleX(1); } }
+.pick {
+  width: 100%;
+  min-height: 54px;
+  margin-top: 8px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  background: transparent;
+  border: 2px solid rgba(245, 235, 221, .3);
+  border-radius: 14px;
+  font: 800 16px/1 var(--head);
+}
+.pick svg { width: 16px; height: 16px; fill: none; stroke: currentColor; stroke-width: 3; stroke-linecap: round; stroke-linejoin: round; }
+.pick:not([aria-pressed="true"]) svg { display: none; }
+.pick[aria-pressed="true"] { background: var(--orange); border-color: var(--orange); color: var(--night); }
+.chk { margin: 12px 0 0; font: 12px/1.4 var(--mono); color: var(--dim); }
+.chk.bad { color: #FF8A5C; }
+
+/* dusk */
+.dusk {
+  margin: 0 0 14px;
+  padding: 16px 14px 14px;
+  border: 2px dashed rgba(255, 77, 0, .55);
+  border-radius: 20px;
+  background: linear-gradient(180deg, rgba(255, 77, 0, .14), rgba(14, 11, 10, 0) 75%), var(--card);
+}
+.dusk h3 { font-size: 21px; }
+.dusk .why { margin-top: 6px; margin-bottom: 14px; }
+.dusk .msg { margin-bottom: 0; margin-top: 10px; }
+
+/* footer */
+.bar {
+  position: fixed;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  z-index: 5;
+  background: var(--night);
+  border-top: 1px solid var(--line);
+  padding: 8px 0 calc(8px + env(safe-area-inset-bottom));
+}
+.bar .r1 { display: flex; align-items: center; gap: 14px; }
+.vol { flex: 1; min-width: 0; display: block; }
+.vol .lab { display: flex; justify-content: space-between; gap: 8px; font: 700 13px/1 var(--head); }
+.vol .lab small { font: 500 12px/1 system-ui, sans-serif; color: var(--dim); }
+input[type="range"] {
+  -webkit-appearance: none;
+  appearance: none;
+  display: block;
+  width: 100%;
+  height: 34px;
+  margin: 2px 0 0;
+  padding: 0;
+  background: transparent;
+}
+input[type="range"]::-webkit-slider-runnable-track { height: 6px; border-radius: 3px; background: linear-gradient(to right, var(--orange) var(--p, 35%), var(--raise) var(--p, 35%)); }
+input[type="range"]::-webkit-slider-thumb { -webkit-appearance: none; width: 28px; height: 28px; margin-top: -11px; border-radius: 50%; background: var(--cream); border: 4px solid var(--orange); }
+input[type="range"]::-moz-range-track { height: 6px; border-radius: 3px; background: var(--raise); }
+input[type="range"]::-moz-range-progress { height: 6px; border-radius: 3px; background: var(--orange); }
+input[type="range"]::-moz-range-thumb { width: 20px; height: 20px; border-radius: 50%; background: var(--cream); border: 4px solid var(--orange); }
+.cta {
+  flex: none;
+  min-height: 54px;
+  padding: 0 16px;
+  background: var(--orange);
+  border: 0;
+  border-radius: 14px;
+  color: var(--night);
+  font: 900 16px/1.05 var(--head);
+}
+.pl {
+  margin: 6px 0 0;
+  font: 12.5px/1.4 var(--mono);
+  color: var(--cream);
+  overflow-wrap: anywhere;
+  -webkit-user-select: all;
+  user-select: all;
+}
+.pl b { color: var(--dim); font-weight: 500; }
+.sr { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
+@media (prefers-reduced-motion: reduce) {
+  .prog.hit { animation: none; }
+  .sec.run::after, .go.run::after { animation: none; transform: scaleX(1); }
+}
+</style>
+</head>
+<body>
+
+<header class="top wrap">
+  <p class="eyebrow">Hoppaz music</p>
+  <h1>Pick the music</h1>
+  <p class="lede">You are the conductor. Three spots need a loop: Play by day, Play at night, and the menus. Pick one for each.</p>
+  <ol class="steps">
+    <li>Tap Play. Let the loop go round twice.</li>
+    <li>Tap Jump to the seam. Listen for the join. Good loops have none.</li>
+    <li>Tap Test with a box. Is the music too loud under the sounds?</li>
+  </ol>
+  <p class="fine">These are AI sketches for you to choose from. A Lagos producer makes the real ones.</p>
+  <p class="silent"><strong>Take the iPhone off silent.</strong> Flip the side switch, then turn the volume up.</p>
+  <nav class="jump" id="jump" aria-label="Jump to a section"></nav>
+</header>
+
+<main class="wrap" id="list"></main>
+
+<footer class="bar">
+  <div class="wrap">
+    <div class="r1">
+      <label class="vol" for="vol">
+        <span class="lab"><span>Volume <b id="volv">35%</b></span><small id="volnote">app level</small></span>
+        <input type="range" id="vol" min="0" max="100" step="1" value="35" aria-label="Music volume">
+      </label>
+      <button type="button" class="cta" id="copy">Copy my picks</button>
+    </div>
+    <p class="pl" id="picks" aria-label="Your picks"></p>
+  </div>
+</footer>
+
+<div class="sr" id="live" role="status" aria-live="polite"></div>
+<noscript><p class="wrap">This page needs JavaScript to play the loops.</p></noscript>
+
+<!-- Track list, copy and mix levels. The audio itself is at the bottom of the page. -->
+<script type="application/json" id="meta">__META__</script>
+
+<script>
+(() => {
+  "use strict";
+
+  const META = JSON.parse(document.getElementById("meta").textContent);
+  const SECTIONS = META.sections;
+  const TRACKS = META.tracks;
+  const byId = {};
+  TRACKS.forEach((t) => { byId[t.id] = t; });
+
+  const KEY = "hz-music-picks";
+  const APP_VOL = 35;   // percent: the level the app would play background music at
+  const SEAM_LEAD = 4;  // seconds before the end that Jump to the seam starts
+  const FADE = 3;       // seconds for the day to night crossfade
+  const LEAD_IN = 4;    // seconds of day before the fade, when Day to night starts from silence
+  const $ = (id) => document.getElementById(id);
+  const esc = (s) => String(s).replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" })[c]);
+  const say = (t) => { $("live").textContent = t; };
+  const inSlot = (slot) => TRACKS.filter((t) => t.slot === slot);
+
+  /* ---- picks: { slot: n }, n is the 1-based number on the card ---- */
+  let picks = {};
+  try {
+    const raw = JSON.parse(localStorage.getItem(KEY) || "{}");
+    SECTIONS.forEach((s) => {
+      const n = raw[s.slot];
+      if (Number.isInteger(n) && TRACKS.some((t) => t.slot === s.slot && t.n === n)) picks[s.slot] = n;
+    });
+  } catch (e) { /* storage blocked or unreadable: start empty */ }
+  const save = () => {
+    try { localStorage.setItem(KEY, JSON.stringify(picks)); } catch (e) { /* private mode: picks last this visit */ }
+  };
+  const picksLine = () => SECTIONS.map((s) => s.slot + ":" + (picks[s.slot] || "none")).join(" ");
+  const pickedTrack = (slot) => {
+    const all = inSlot(slot);
+    return all.find((t) => t.n === picks[slot]) || all[0] || null;
+  };
+
+  /* ---- audio ---- */
+  const AC = window.AudioContext || window.webkitAudioContext;
+  let ctx = null;
+  let musicBus = null;  // the volume slider
+  let sfxBus = null;    // box sounds, at the level the app plays them
+  let vol = APP_VOL / 100;
+  let epoch = 0;        // bumped by every new start or stop, so a slow decode or a timer can tell it lost
+  let duskBusy = false;
+  let duskNote = "";
+  let duskLabel = "";
+  let raf = 0;
+  const voices = new Set();
+  const loading = new Set();
+  const failed = new Set();
+  const pcm = new Map();    // key -> Promise<AudioBuffer>
+  const preps = new Map();  // track id -> Promise<{ buf, ls, le, len, ... }>
+  const boxTimers = new Set();
+  let AUDIO = null;
+  /* Deliberately no navigator.audioSession "playback" here. That setting makes iPhone Safari ignore the silent switch.
+     The app will follow the switch (it is in docs/MUSIC.md), so this page does too, and the box at the top says so. */
+
+  /* The audio lives in a script tag after this one. Wait for the parser to reach it. */
+  const audioReady = new Promise((ok) => {
+    const read = () => {
+      try { AUDIO = JSON.parse($("audio").textContent); } catch (e) { AUDIO = null; }
+      ok();
+    };
+    if (document.readyState === "loading") document.addEventListener("DOMContentLoaded", read);
+    else read();
+  });
+
+  function ensureCtx() {
+    if (!AC) return null;
+    if (!ctx) {
+      ctx = new AC();
+      musicBus = ctx.createGain();
+      musicBus.gain.value = vol;
+      musicBus.connect(ctx.destination);
+      sfxBus = ctx.createGain();
+      sfxBus.gain.value = 1;
+      sfxBus.connect(ctx.destination);
+      ctx.onstatechange = () => { if (ctx.state === "interrupted") stopAll(0.05); };
+      try { // iPhone Safari wants a sound started inside the tap before it lets go of the speaker
+        const s = ctx.createBufferSource();
+        s.buffer = ctx.createBuffer(1, 1, 22050);
+        s.connect(ctx.destination);
+        s.start(0);
+      } catch (e) { /* not needed elsewhere */ }
+      warm();
+    }
+    if (ctx.state !== "running") {
+      try { const p = ctx.resume(); if (p && p.catch) p.catch(() => {}); } catch (e) { /* ignore */ }
+    }
+    return ctx;
+  }
+  const bytes = (uri) => {
+    const s = atob(uri.slice(uri.indexOf(",") + 1));
+    const u = new Uint8Array(s.length);
+    for (let i = 0; i < s.length; i++) u[i] = s.charCodeAt(i);
+    return u.buffer;
+  };
+  function decodeKey(key) {
+    if (!pcm.has(key)) {
+      const p = audioReady.then(() => new Promise((ok, no) => {
+        const uri = AUDIO && AUDIO[key];
+        if (!uri) return no(new Error("missing " + key));
+        const r = ctx.decodeAudioData(bytes(uri), ok, no); // callback form first: iPhone Safari before 14.1
+        if (r && r.catch) r.catch(no);
+      }));
+      pcm.set(key, p);
+      p.catch(() => pcm.delete(key));
+    }
+    return pcm.get(key);
+  }
+  /* The loop has to be exactly its length, or the wrap leaves a gap. Chrome and Safari read the gapless tag in the MP3.
+     If a phone leaves the standard 1105 samples of encoder delay in, trim them off with loopStart and loopEnd. */
+  function prep(t, buf) {
+    const sr = buf.sampleRate;
+    const want = Math.round((t.samples / t.rate) * sr);
+    const extra = buf.length - want;
+    let ls = 0;
+    let le = buf.duration;
+    let kind = "exact";
+    if (Math.abs(extra) > 8) {
+      if (extra > 8 && extra <= 6000) {
+        ls = Math.round((1105 / t.rate) * sr) / sr;
+        le = Math.min(buf.duration, ls + want / sr);
+        kind = "trimmed";
+      } else {
+        kind = "off";
+      }
+    }
+    return { buf, ls, le, len: le - ls, kind, extra };
+  }
+  function loadTrack(t) {
+    if (!preps.has(t.id)) {
+      const p = decodeKey(t.id).then((buf) => {
+        const r = prep(t, buf);
+        const c = cards[t.id];
+        if (c) {
+          const secs = r.len.toFixed(2) + " s";
+          c.chk.classList.toggle("bad", r.kind === "off");
+          c.chk.textContent = r.kind === "exact" ? "Loop check: exact, " + secs + ", no gap at the join."
+            : r.kind === "trimmed" ? "Loop check: this phone added " + r.extra + " samples of padding. Trimmed, " + secs + "."
+            : "Loop check: length is off by " + r.extra + " samples. There may be a gap.";
+        }
+        return r;
+      });
+      preps.set(t.id, p);
+      p.catch(() => preps.delete(t.id));
+    }
+    return preps.get(t.id);
+  }
+  /* After the first tap, decode the rest in the background so later taps start at once. */
+  function warm() {
+    const todo = TRACKS.map((t) => () => loadTrack(t).catch(() => fail(t)))
+      .concat([() => decodeKey("box_burst_common"), () => decodeKey("hoppaz_three_full")]);
+    const next = () => {
+      const f = todo.shift();
+      if (!f) return;
+      Promise.resolve(f()).catch(() => {}).then(() => setTimeout(next, 0));
+    };
+    setTimeout(next, 250);
+  }
+  function fail(t) {
+    failed.add(t.id);
+    const c = cards[t.id];
+    if (c) {
+      c.chk.classList.add("bad");
+      c.chk.textContent = "Loop check: this loop did not decode on this phone.";
+    }
+    kick();
+  }
+
+  /* A voice is one running loop. Its gain node does the fades. */
+  function startVoice(t, p, locOff, when) {
+    const src = ctx.createBufferSource();
+    src.buffer = p.buf;
+    src.loop = true;
+    src.loopStart = p.ls;
+    src.loopEnd = p.le;
+    const g = ctx.createGain();
+    g.gain.value = 0;
+    src.connect(g);
+    g.connect(musicBus);
+    const off = p.ls + Math.min(Math.max(locOff, 0), p.len - 0.01);
+    src.start(when, off);
+    const v = { t, src, g, t0: when, off, ls: p.ls, len: p.len, dying: false, seen: 0, hitAt: -1e9, hitTimer: 0 };
+    voices.add(v);
+    src.onended = () => {
+      voices.delete(v);
+      try { g.disconnect(); } catch (e) { /* already gone */ }
+      kick();
+    };
+    return v;
+  }
+  function fadeIn(v, when, sec) {
+    const p = v.g.gain;
+    p.cancelScheduledValues(0);
+    p.setValueAtTime(0, ctx.currentTime);
+    p.setValueAtTime(0, when);
+    p.linearRampToValueAtTime(1, when + sec);
+  }
+  function killVoice(v, sec) {
+    if (v.dying) return;
+    v.dying = true;
+    const t = ctx.currentTime;
+    const p = v.g.gain;
+    try {
+      if (p.cancelAndHoldAtTime) p.cancelAndHoldAtTime(t);
+      else p.cancelScheduledValues(t);
+      p.setTargetAtTime(0, t, Math.max(sec, 0.02) / 4);
+      v.src.stop(t + sec + 0.06);
+    } catch (e) { /* already ended */ }
+  }
+  function killAll(sec) { voices.forEach((v) => killVoice(v, sec)); }
+  function stopAll(sec) {
+    epoch++;
+    duskBusy = false;
+    duskNote = "";
+    boxTimers.forEach((id) => clearTimeout(id));
+    boxTimers.clear();
+    document.querySelectorAll(".run").forEach((el) => el.classList.remove("run"));
+    if (ctx) killAll(sec === undefined ? 0.15 : sec);
+    loading.clear();
+    kick();
+  }
+  /* Position inside the loop, in seconds from the loop start, and how many times the seam has passed. */
+  function where(v) {
+    const lag = ctx.outputLatency || ctx.baseLatency || 0; // what you see follows what you hear
+    const rel = Math.max(0, ctx.currentTime - lag - v.t0) + (v.off - v.ls);
+    return { x: rel % v.len, len: v.len, wraps: Math.floor(rel / v.len) };
+  }
+  const voiceFor = (id) => {
+    let best = null;
+    voices.forEach((v) => { if (v.t.id === id && (!best || v.t0 >= best.t0)) best = v; });
+    return best;
+  };
+  const liveVoice = () => {
+    let best = null;
+    voices.forEach((v) => { if (!v.dying && (!best || v.t0 >= best.t0)) best = v; });
+    return best;
+  };
+
+  /* Start a track on its own, stopping whatever else is playing. locOff below zero counts back from the end. */
+  async function startExclusive(t, locOff, fadeSec) {
+    const my = ++epoch;
+    duskBusy = false;
+    duskNote = "";
+    if (!ensureCtx()) { say("This browser cannot play Web Audio."); return null; }
+    loading.add(t.id);
+    failed.delete(t.id);
+    kick();
+    let p;
+    try { p = await loadTrack(t); } catch (e) { loading.delete(t.id); fail(t); return null; }
+    loading.delete(t.id);
+    if (my !== epoch) return null; // a newer tap won
+    killAll(0.06);
+    const when = ctx.currentTime + 0.02;
+    const v = startVoice(t, p, locOff < 0 ? p.len + locOff : locOff, when);
+    fadeIn(v, when, fadeSec);
+    kick();
+    return v;
+  }
+  function togglePlay(t) {
+    const v = voiceFor(t.id);
+    if ((v && !v.dying) || loading.has(t.id)) { stopAll(); return; }
+    startExclusive(t, 0, 0.012);
+  }
+  function jumpToSeam(t) {
+    startExclusive(t, -SEAM_LEAD, 0.04);
+  }
+
+  /* A short box sound over the music. Same trims and lane level as the app: file gain x 0.7 master. */
+  function sfxAt(buf, when, gain) {
+    const s = ctx.createBufferSource();
+    const g = ctx.createGain();
+    s.buffer = buf;
+    g.gain.value = gain;
+    s.connect(g);
+    g.connect(sfxBus);
+    s.start(when);
+  }
+  async function boxTest(t, btn) {
+    if (!ensureCtx()) { say("This browser cannot play Web Audio."); return; }
+    const cur = voiceFor(t.id);
+    let lead = 0.08;
+    if (!(cur && !cur.dying)) {
+      const v = await startExclusive(t, 0, 0.012);
+      if (!v) return;
+      lead = 1.4;
+    }
+    let burst;
+    let motif;
+    try { [burst, motif] = await Promise.all([decodeKey("box_burst_common"), decodeKey("hoppaz_three_full")]); } catch (e) { say("The box sounds did not load."); return; }
+    const when = ctx.currentTime + lead;
+    sfxAt(burst, when, META.sfx.burst.g);
+    sfxAt(motif, when + META.sfx.motif.at, META.sfx.motif.g);
+    sweep(btn, lead + META.sfx.motif.at + motif.duration);
+  }
+  function sweep(btn, secs) {
+    btn.classList.remove("run");
+    void btn.offsetWidth; // restart the sweep when it is tapped again
+    btn.style.setProperty("--d", secs + "s");
+    btn.classList.add("run");
+    const id = setTimeout(() => { boxTimers.delete(id); btn.classList.remove("run"); }, secs * 1000);
+    boxTimers.add(id);
+  }
+
+  /* Day to night, the way the app does at dusk: equal power fade, and the incoming loop joins on the same beat. */
+  const CURVE_IN = new Float32Array(128);
+  const CURVE_OUT = new Float32Array(128);
+  for (let i = 0; i < 128; i++) {
+    CURVE_IN[i] = Math.sin((i / 127) * Math.PI / 2);
+    CURVE_OUT[i] = Math.cos((i / 127) * Math.PI / 2);
+  }
+  function curve(p, c, from, to, when, secs) {
+    p.cancelScheduledValues(0);
+    p.setValueAtTime(from, ctx.currentTime);
+    p.setValueAtTime(from, when);
+    try { p.setValueCurveAtTime(c, when, secs); } catch (e) { p.linearRampToValueAtTime(to, when + secs); }
+  }
+  const duskGoes = () => {
+    const cur = liveVoice();
+    const night = !!cur && cur.t.slot === "play_night";
+    return night ? { from: pickedTrack("play_night"), to: pickedTrack("play_day"), name: "Night to day" }
+      : { from: pickedTrack("play_day"), to: pickedTrack("play_night"), name: "Day to night" };
+  };
+  async function dusk() {
+    if (duskBusy) return;
+    const go = duskGoes();
+    if (!go.from || !go.to) return;
+    if (!ensureCtx()) { say("This browser cannot play Web Audio."); return; }
+    const my = ++epoch;
+    duskBusy = true;
+    duskLabel = go.name;
+    duskNote = "Loading the two loops.";
+    kick();
+    let pf;
+    let pt;
+    try { [pf, pt] = await Promise.all([loadTrack(go.from), loadTrack(go.to)]); } catch (e) { duskBusy = false; duskNote = "A loop did not load."; kick(); return; }
+    if (my !== epoch) return;
+    let vf = liveVoice();
+    if (!vf || vf.t.id !== go.from.id) {
+      killAll(0.06);
+      const w = ctx.currentTime + 0.02;
+      vf = startVoice(go.from, pf, 0, w);
+      fadeIn(vf, w, 0.012);
+      duskNote = go.name === "Day to night" ? "Day plays first. Dusk in " + LEAD_IN + " s." : "Night plays first. Dawn in " + LEAD_IN + " s.";
+      kick();
+      await new Promise((ok) => { const id = setTimeout(ok, LEAD_IN * 1000); boxTimers.add(id); });
+      if (my !== epoch) return;
+    }
+    const at = ctx.currentTime + 0.05;
+    const frac = (((Math.max(0, at - vf.t0) + (vf.off - vf.ls)) % vf.len) / vf.len); // where the outgoing loop is when the fade starts
+    const vt = startVoice(go.to, pt, frac * pt.len, at); // same place in the bar, so the beat does not move
+    curve(vf.g.gain, CURVE_OUT, 1, 0, at, FADE);
+    curve(vt.g.gain, CURVE_IN, 0, 1, at, FADE);
+    try { vf.src.stop(at + FADE + 0.05); } catch (e) { /* ended */ }
+    vf.dying = true;
+    duskNote = go.name === "Day to night" ? "Dusk. Day fades out, night fades in." : "Dawn. Night fades out, day fades in.";
+    sweep($("duskgo"), FADE);
+    kick();
+    await new Promise((ok) => { const id = setTimeout(ok, (FADE + 0.1) * 1000); boxTimers.add(id); });
+    if (my !== epoch) return;
+    duskBusy = false;
+    duskNote = go.name === "Day to night" ? "Night is on. The beat did not move." : "Day is on. The beat did not move.";
+    kick();
+  }
+
+  /* ---- the page ---- */
+  const cards = {};
+  const PLAY = '<svg class="ico-play" viewBox="0 0 12 12" aria-hidden="true"><path d="M2 1l9 5-9 5z"/></svg>';
+  const STOP = '<svg class="ico-stop" viewBox="0 0 12 12" aria-hidden="true"><rect x="2" y="2" width="8" height="8" rx="1.2"/></svg>';
+  const TICK = '<svg viewBox="0 0 16 16" aria-hidden="true"><path d="M3 8.5l3.5 3.5L13 4.5"/></svg>';
+
+  function cardHTML(t) {
+    return '<article class="trk" id="trk-' + t.id + '">' +
+      '<div class="thead"><span class="num" aria-hidden="true">' + t.n + '</span><div class="ttl"><h3>' + esc(t.name) + '</h3>' +
+      '<p class="meta">' + esc(t.bpm + " BPM, " + t.key + ", " + Math.round(t.sec) + " s loop") + '</p></div></div>' +
+      '<p class="why">' + esc(t.blurb) + '</p>' +
+      (t.hook ? '<p class="hook">Hook: ' + esc(t.hook) + '</p>' : '<p class="hook">No hook. It stays out of the way.</p>') +
+      '<button type="button" class="go" data-act="play" data-id="' + t.id + '">' + PLAY + STOP + '<span class="gol">Play</span></button>' +
+      '<div class="prog" aria-hidden="true" style="--z:' + Math.min(0.5, SEAM_LEAD / t.sec).toFixed(4) + '"><i class="zone"></i><i class="fill"></i><i class="post"></i></div>' +
+      '<div class="stat"><span class="time"></span><span class="seams"></span></div>' +
+      '<p class="msg"></p>' +
+      '<div class="row2">' +
+        '<button type="button" class="sec" data-act="seam" data-id="' + t.id + '">Jump to the seam</button>' +
+        '<button type="button" class="sec" data-act="box" data-id="' + t.id + '">Test with a box</button></div>' +
+      '<button type="button" class="pick" data-act="pick" data-id="' + t.id + '" aria-pressed="false">' + TICK + '<span>Pick</span></button>' +
+      '<p class="chk">Loop check: loads on your first tap.</p></article>';
+  }
+  const duskHTML =
+    '<section class="dusk" id="dusk" aria-labelledby="dusk-h"><h3 id="dusk-h">Dusk</h3>' +
+    '<p class="why">Hear the handover. Your picked day loop fades into your picked night loop over ' + FADE + ' s, on the same beat, the way the app does at dusk.</p>' +
+    '<button type="button" class="go" id="duskgo" data-act="dusk"><span class="gol">Day to night</span></button>' +
+    '<p class="msg" id="duskmsg"></p></section>';
+
+  function build() {
+    $("list").innerHTML = SECTIONS.map((s) => {
+      const rows = inSlot(s.slot);
+      return '<section class="lane" id="lane-' + s.slot + '" aria-labelledby="h-' + s.slot + '"><div class="lane-head"><h2 id="h-' + s.slot + '">' + esc(s.title) + '</h2>' +
+        '<span class="lane-count" id="n-' + s.slot + '"></span></div><p class="lane-note">' + esc(s.note) + '</p>' +
+        rows.map(cardHTML).join("") + (s.slot === "play_day" ? duskHTML : "") + '</section>';
+    }).join("");
+    $("jump").innerHTML = SECTIONS.map((s) => '<a href="#lane-' + s.slot + '" id="j-' + s.slot + '">' + esc(s.title) + '<small></small></a>').join("");
+    TRACKS.forEach((t) => {
+      const root = $("trk-" + t.id);
+      cards[t.id] = {
+        root,
+        go: root.querySelector(".go"),
+        gol: root.querySelector(".gol"),
+        prog: root.querySelector(".prog"),
+        fill: root.querySelector(".fill"),
+        time: root.querySelector(".time"),
+        seams: root.querySelector(".seams"),
+        msg: root.querySelector(".msg"),
+        pick: root.querySelector(".pick"),
+        chk: root.querySelector(".chk"),
+      };
+    });
+  }
+  /* Write to the page only when the text changed. */
+  function put(el, text) { if (el._t !== text) { el._t = text; el.textContent = text; } }
+  function flag(el, cls, on) { const k = "_c" + cls; if (el[k] !== on) { el[k] = on; el.classList.toggle(cls, on); } }
+
+  function render() {
+    const now = performance.now();
+    TRACKS.forEach((t) => {
+      const c = cards[t.id];
+      const v = ctx ? voiceFor(t.id) : null;
+      const active = !!v && !v.dying;
+      const busy = loading.has(t.id);
+      let x = 0;
+      let seams = 0;
+      let msg = "Tap Play to start the loop.";
+      let hot = false;
+      if (v) {
+        const w = where(v);
+        x = w.x;
+        seams = w.wraps;
+        if (w.wraps > v.seen) {
+          v.seen = w.wraps;
+          v.hitAt = now;
+          c.prog.classList.remove("hit");
+          void c.prog.offsetWidth;
+          c.prog.classList.add("hit");
+        }
+        const left = w.len - w.x;
+        if (v.dying) msg = "Fading out.";
+        else if (now - v.hitAt < 1800) { msg = "That was the seam. Did you hear a join?"; hot = true; }
+        else if (left <= SEAM_LEAD) { msg = "Seam in " + left.toFixed(1) + " s. Listen for the join."; hot = true; }
+        else msg = "Playing. Let it go round.";
+      } else if (busy) msg = "Loading the loop.";
+      if (failed.has(t.id)) msg = "This loop did not decode here.";
+      c.fill.style.transform = "scaleX(" + (v ? x / v.len : 0).toFixed(4) + ")";
+      put(c.time, (v ? x.toFixed(1) : "0.0") + " / " + t.sec.toFixed(1) + " s");
+      put(c.seams, "Seams passed " + seams);
+      put(c.msg, msg);
+      flag(c.msg, "hot", hot);
+      flag(c.msg, "bad", failed.has(t.id));
+      put(c.gol, active ? "Stop" : busy ? "Loading" : "Play");
+      flag(c.go, "on", active);
+      c.go.setAttribute("aria-label", (active ? "Stop " : "Play ") + t.name);
+      flag(c.root, "on", active);
+    });
+    renderDusk();
+  }
+  function renderDusk() {
+    const go = duskGoes();
+    const btn = $("duskgo");
+    if (!btn) return;
+    put(btn.querySelector(".gol"), duskBusy ? duskLabel : go.name);
+    btn.disabled = !go.from || !go.to;
+    btn.style.opacity = duskBusy ? ".8" : "";
+    const idle = go.from && go.to
+      ? (picks.play_day && picks.play_night ? "" : "No pick yet, so it uses number 1 of each. ") + "Fades " + go.from.name + " into " + go.to.name + "."
+      : "Needs one day loop and one night loop.";
+    put($("duskmsg"), duskNote || idle);
+  }
+  function frame() {
+    raf = 0;
+    render();
+    if (voices.size || loading.size || duskBusy) raf = requestAnimationFrame(frame);
+  }
+  function kick() { if (!raf) raf = requestAnimationFrame(frame); }
+
+  function paintPicks() {
+    TRACKS.forEach((t) => {
+      const c = cards[t.id];
+      const on = picks[t.slot] === t.n;
+      c.root.classList.toggle("has", on);
+      c.pick.setAttribute("aria-pressed", on ? "true" : "false");
+      c.pick.querySelector("span").textContent = on ? "Picked" : "Pick";
+      c.pick.setAttribute("aria-label", (on ? "Picked: " : "Pick ") + t.name + " for " + SECTIONS.find((s) => s.slot === t.slot).title);
+    });
+    SECTIONS.forEach((s) => {
+      const n = picks[s.slot];
+      const txt = n ? "Picked " + n : "No pick yet";
+      const count = $("n-" + s.slot);
+      count.textContent = txt;
+      count.classList.toggle("has", !!n);
+      const j = $("j-" + s.slot);
+      j.querySelector("small").textContent = txt;
+      j.classList.toggle("has", !!n);
+    });
+    $("picks").innerHTML = picksLine().split(" ").map((p) => { const i = p.indexOf(":"); return "<b>" + esc(p.slice(0, i + 1)) + "</b>" + esc(p.slice(i + 1)); }).join(" ");
+    renderDusk();
+  }
+
+  /* ---- taps ---- */
+  $("list").addEventListener("click", (e) => {
+    const b = e.target.closest("button[data-act]");
+    if (!b || b.disabled) return;
+    const act = b.dataset.act;
+    if (act === "dusk") return void dusk();
+    const t = byId[b.dataset.id];
+    if (act === "play") return void togglePlay(t);
+    if (act === "seam") return void jumpToSeam(t);
+    if (act === "box") return void boxTest(t, b);
+    if (act === "pick") {
+      if (picks[t.slot] === t.n) delete picks[t.slot];
+      else picks[t.slot] = t.n;
+      save();
+      paintPicks();
+      say(picks[t.slot] ? t.name + " picked." : "Pick cleared.");
+    }
+  });
+
+  /* ---- volume ---- */
+  function paintVol() {
+    const v = Number($("vol").value);
+    vol = v / 100;
+    $("volv").textContent = v + "%";
+    $("volnote").textContent = v === APP_VOL ? "app level" : "app level is " + APP_VOL + "%";
+    $("vol").style.setProperty("--p", v + "%");
+    if (ctx) musicBus.gain.setTargetAtTime(vol, ctx.currentTime, 0.02);
+  }
+  $("vol").value = APP_VOL;
+  $("vol").addEventListener("input", paintVol);
+
+  /* ---- copy ---- */
+  let copyTimer = 0;
+  function fallbackCopy() {
+    try {
+      const r = document.createRange();
+      r.selectNodeContents($("picks"));
+      const s = getSelection();
+      s.removeAllRanges();
+      s.addRange(r);
+      return document.execCommand("copy");
+    } catch (e) { return false; }
+  }
+  async function copy() {
+    const line = picksLine();
+    let ok = false;
+    try {
+      if (navigator.clipboard && navigator.clipboard.writeText) { await navigator.clipboard.writeText(line); ok = true; }
+    } catch (e) { ok = false; }
+    if (!ok) ok = fallbackCopy();
+    const btn = $("copy");
+    btn.textContent = ok ? "Copied" : "Hold the line";
+    say(ok ? "Picks copied: " + line : "Press and hold the picks line to copy it.");
+    clearTimeout(copyTimer);
+    copyTimer = setTimeout(() => { btn.textContent = "Copy my picks"; }, 2200);
+  }
+  $("copy").addEventListener("click", copy);
+
+  document.addEventListener("visibilitychange", () => { if (document.hidden) stopAll(0.05); });
+  window.addEventListener("pagehide", () => stopAll(0.02));
+
+  build();
+  paintVol();
+  paintPicks();
+  render();
+})();
+</script>
+
+<!-- The loops and the box sounds, as data URIs. -->
+<script type="application/json" id="audio">__AUDIO__</script>
+</body>
+</html>

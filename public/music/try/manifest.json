@@ -1,0 +1,259 @@
+[
+  {
+    "name": "play_day_afrobeats_bounce",
+    "slot": "play_day",
+    "prompt": "Instrumental only: no vocals, no chants, no choir, no spoken voice. Adventurous, bouncy, cheeky overworld theme for a Lagos street-party map game, loud and bright and a little mischievous, not luxe. Modern Afrobeats groove, 2020s Lagos production, 112 BPM, D major, syncopated 3-2 feel. Talking drum and agogo bell trade short call-and-response phrases on top, shekere drives steady sixteenth notes, a warm round bass bounces under a punchy kick and rim-click snare, and bright clean palm-muted highlife guitar plays pentatonic licks between the phrases. A catchy hook on plucked guitar climbs D5, F sharp 5, A5 (short, short, long) and returns every four bars. Steady tempo, exactly 112 BPM in 4/4, no tempo changes. Full groove from the very first beat: no intro build, no riser, no drum roll, no breakdown, no drop, no fade out, no ending, no final hit. The last bar is as full as the first, so it loops cleanly. Consistent energy from start to finish.",
+    "take": 1,
+    "bpm": 111.998,
+    "bars": 16,
+    "seconds": 34.286,
+    "lufs": -16.1,
+    "bytes": 549615,
+    "seamScore": 1,
+    "flagged": false,
+    "flags": [],
+    "notes": [],
+    "regenerate": false,
+    "flavour": "Afrobeats bounce",
+    "key": "D major",
+    "hook": "D5 F#5 A5 on plucked guitar, every 4 bars",
+    "bpmPlanned": 112,
+    "bpmFound": 111.998,
+    "truePeakDb": -1.6,
+    "lra": 1.1,
+    "loopSamples": 1512025,
+    "sampleRate": 44100,
+    "channels": 2,
+    "bitrateKbps": 128,
+    "loopStartSec": 2.139,
+    "loopStartBar": 1,
+    "blendMs": 536,
+    "blendMode": "pre",
+    "gapless": true,
+    "gainDb": -1.3,
+    "limiterShaveDb": 0.68,
+    "seam": {
+      "seamScore": 1,
+      "junction": {
+        "dRmsDb": 27.79,
+        "fluxDb": 26.85,
+        "hfAbove4kDb": -31.7
+      },
+      "barLines": {
+        "dRmsDbMedian": 16.95,
+        "dRmsDbP90": 28.72,
+        "fluxDbMedian": 27.28,
+        "fluxDbP90": 29.95,
+        "hfAbove4kP95AnyPositionDb": -28.3
+      },
+      "ratios": {
+        "rms": 0.97,
+        "flux": 0.9,
+        "click": 0.67,
+        "blend": 0.77
+      },
+      "n": 30,
+      "blend": {
+        "bumpDb": 0.83,
+        "beatsP90Db": 1.24
+      },
+      "alignment": {
+        "residualMs": -0.35,
+        "attackCorrelation": 0.87,
+        "score": 1
+      },
+      "naiveHardCutScore": 1,
+      "naiveRatios": {
+        "rms": 0.94,
+        "flux": 0.94,
+        "click": 0.63,
+        "blend": 0.5
+      }
+    },
+    "speech": {
+      "offGrid": 0.114,
+      "repeat": 0.914,
+      "thresholds": {
+        "offGrid": 0.18,
+        "repeat": 0.82,
+        "repeatClear": 0.88
+      }
+    },
+    "tempoWobbleMs": 3,
+    "tempoDriftPct": 0,
+    "takeSeconds": 51.44,
+    "takeFile": "play_day_afrobeats_bounce.wav"
+  },
+  {
+    "name": "play_night_afrobeats_dim",
+    "slot": "play_night",
+    "prompt": "Instrumental only: no vocals, no chants, no choir, no spoken voice. The same Lagos map-game world after dark: moody but still playful, street-lamp and late-night mood, not luxe. Stripped-back Afrobeats groove, 112 BPM, D major. Fewer drums: a soft kick, a quiet rim click, a light shekere, sparse talking drum ghost notes and an occasional low agogo tick. Deep warm sub bass leads, soft pads breathe underneath, and muted palm-muted highlife guitar plucks ring with a touch of echo. A lighter, quieter hook on kalimba climbs D5, F sharp 5, A5 (short, short, long) every eight bars. Steady tempo, exactly 112 BPM in 4/4, no tempo changes. Same sparse groove from the very first beat: no intro build, no riser, no breakdown, no drop, no fade out, no ending, no final hit. The last bar matches the first, so it loops cleanly. Consistent mood and energy from start to finish.",
+    "take": 1,
+    "bpm": 111.999,
+    "bars": 16,
+    "seconds": 34.286,
+    "lufs": -16,
+    "bytes": 549615,
+    "seamScore": 0.995,
+    "flagged": false,
+    "flags": [],
+    "notes": [],
+    "regenerate": false,
+    "flavour": "Afrobeats, dimmed",
+    "key": "D major",
+    "hook": "D5 F#5 A5 on kalimba, every 8 bars",
+    "bpmPlanned": 112,
+    "bpmFound": 111.992,
+    "truePeakDb": -4.8,
+    "lra": 1,
+    "loopSamples": 1512016,
+    "sampleRate": 44100,
+    "channels": 2,
+    "bitrateKbps": 128,
+    "loopStartSec": 17.14,
+    "loopStartBar": 8,
+    "blendMs": 8,
+    "blendMode": "pre",
+    "gapless": true,
+    "gainDb": -4.3,
+    "limiterShaveDb": 0,
+    "seam": {
+      "seamScore": 0.995,
+      "junction": {
+        "dRmsDb": 9.67,
+        "fluxDb": 17.2,
+        "hfAbove4kDb": -36.4
+      },
+      "barLines": {
+        "dRmsDbMedian": 8.26,
+        "dRmsDbP90": 9.59,
+        "fluxDbMedian": 19.22,
+        "fluxDbP90": 20.94,
+        "hfAbove4kP95AnyPositionDb": -34.4
+      },
+      "ratios": {
+        "rms": 1.01,
+        "flux": 0.83,
+        "click": 0.79,
+        "blend": 0.79
+      },
+      "n": 30,
+      "blend": {
+        "bumpDb": 0.61,
+        "beatsP90Db": 0.9
+      },
+      "alignment": {
+        "residualMs": -0.1,
+        "attackCorrelation": 0.834,
+        "score": 1
+      },
+      "naiveHardCutScore": 0.993,
+      "naiveRatios": {
+        "rms": 1.01,
+        "flux": 0.83,
+        "click": 0.81,
+        "blend": 0.82
+      }
+    },
+    "speech": {
+      "offGrid": 0.129,
+      "repeat": 0.887,
+      "thresholds": {
+        "offGrid": 0.18,
+        "repeat": 0.82,
+        "repeatClear": 0.88
+      }
+    },
+    "tempoWobbleMs": 1.8,
+    "tempoDriftPct": 0.01,
+    "takeSeconds": 51.44,
+    "takeFile": "play_night_afrobeats_dim.wav"
+  },
+  {
+    "name": "menu_lofi_highlife",
+    "slot": "menu",
+    "prompt": "Instrumental only: no vocals, no chants, no choir, no spoken voice. Soft background music for browsing an app, very low energy, calm, warm and a little sleepy, nothing that competes with a voice note or the listener's own thoughts. Lo-fi highlife, 92 BPM, D major. A dusty soft kick and brushed snare, a light shaker, a mellow clean highlife guitar playing a slow sparse repeating figure with long gaps, a warm Rhodes pad holding long chords (D, Bm7, G, A) and a soft round bass. No lead melody, no hook, no sudden accents, nothing bright or sharp, quiet dynamics. Steady tempo, exactly 92 BPM in 4/4, no tempo changes. Same sparse texture from the very first beat: no intro build, no breakdown, no drop, no fade out, no ending. The last bar matches the first, so it loops cleanly. Consistent very low energy from start to finish. Keep the midrange uncluttered so a voice note stays clear on top. Important: the drums, bass, Rhodes pad and guitar are all playing from the very first beat of the file, at the same quiet level as the end of the file. The first eight bars sound exactly like the last eight bars. No solo intro, no quiet opening, no fade in, no section change, no build. One steady quiet groove the whole way through.",
+    "take": 2,
+    "bpm": 91.999,
+    "bars": 16,
+    "seconds": 41.74,
+    "lufs": -19,
+    "bytes": 668733,
+    "seamScore": 0.982,
+    "flagged": false,
+    "flags": [],
+    "notes": [
+      "the take ends with a fade or ending (last 1.5 s is 51.9 dB under the median bar); the loop does not use it"
+    ],
+    "regenerate": false,
+    "flavour": "Lo-fi highlife",
+    "key": "D major",
+    "hook": null,
+    "bpmPlanned": 92,
+    "bpmFound": 91.999,
+    "truePeakDb": -5.1,
+    "lra": 2.8,
+    "loopSamples": 1840712,
+    "sampleRate": 44100,
+    "channels": 2,
+    "bitrateKbps": 128,
+    "loopStartSec": 0,
+    "loopStartBar": 0,
+    "blendMs": 8,
+    "blendMode": "post",
+    "gapless": true,
+    "gainDb": -4,
+    "limiterShaveDb": 0,
+    "seam": {
+      "seamScore": 0.982,
+      "junction": {
+        "dRmsDb": 15.97,
+        "fluxDb": 23.77,
+        "hfAbove4kDb": -48.2
+      },
+      "barLines": {
+        "dRmsDbMedian": 13.17,
+        "dRmsDbP90": 21.27,
+        "fluxDbMedian": 17.77,
+        "fluxDbP90": 25.28,
+        "hfAbove4kP95AnyPositionDb": -46.1
+      },
+      "ratios": {
+        "rms": 0.76,
+        "flux": 0.94,
+        "click": 0.79,
+        "blend": 0.83
+      },
+      "n": 30,
+      "blend": {
+        "bumpDb": 6.53,
+        "beatsP90Db": 7.99
+      },
+      "alignment": {
+        "residualMs": 3.18,
+        "attackCorrelation": 0.012,
+        "score": 0.982
+      },
+      "naiveHardCutScore": 0.302,
+      "naiveRatios": {
+        "rms": 0.76,
+        "flux": 0.95,
+        "click": 2.05,
+        "blend": 0.83
+      }
+    },
+    "speech": {
+      "offGrid": 0.334,
+      "repeat": 0.912,
+      "thresholds": {
+        "offGrid": 0.18,
+        "repeat": 0.82,
+        "repeatClear": 0.88
+      }
+    },
+    "tempoWobbleMs": 5.7,
+    "tempoDriftPct": 0,
+    "takeSeconds": 52.16,
+    "takeFile": "menu_lofi_highlife.wav"
+  }
+]

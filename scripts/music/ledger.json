@@ -1,0 +1,74 @@
+{
+  "ceiling": 3000,
+  "note": "Credits this job has spent, probe included. The account also showed 675 music credits from the hour before the planner started (20:00 to 21:00 WAT, music_v2_5); who spent them is unknown and they are not counted here.",
+  "entries": [
+    {
+      "id": "probe",
+      "credits": 201,
+      "note": "planner probes: 3 s mp3 (38), 10 s mp3 (125), 3 s on music_v2 (38)"
+    },
+    {
+      "id": "format test pcm_48000",
+      "credits": 38,
+      "note": "3 s real call, usage readout moved 876 to 914. pcm_48000 is accepted by this key"
+    },
+    {
+      "id": "play_day_afrobeats_bounce",
+      "credits": 643,
+      "est": 643,
+      "measured": 643,
+      "how": "usage endpoint (matches estimate)",
+      "format": "pcm_48000",
+      "bytes": 9876480,
+      "song_id": "G0YVmkGohWbV0LeQcFCw",
+      "seconds_requested": 51.43,
+      "ts": "2026-10-09T20:28:41.197Z",
+      "track": "play_day_afrobeats_bounce",
+      "take": 1
+    },
+    {
+      "id": "play_night_afrobeats_dim",
+      "credits": 643,
+      "est": 643,
+      "measured": 643,
+      "how": "usage endpoint (matches estimate)",
+      "format": "pcm_48000",
+      "bytes": 9876480,
+      "song_id": "KAKB0KzNEJBnhpqUgk2n",
+      "seconds_requested": 51.43,
+      "ts": "2026-10-09T20:45:04.194Z",
+      "track": "play_night_afrobeats_dim",
+      "take": 1
+    },
+    {
+      "id": "menu_lofi_highlife",
+      "credits": 653,
+      "est": 653,
+      "measured": 652,
+      "how": "usage endpoint (652) vs estimate 653, larger kept",
+      "format": "pcm_48000",
+      "bytes": 10014720,
+      "song_id": "vktbeKxJqpcsQINQmTVb",
+      "seconds_requested": 52.17,
+      "ts": "2026-10-09T20:45:22.119Z",
+      "track": "menu_lofi_highlife",
+      "take": 1
+    },
+    {
+      "id": "menu_lofi_highlife take 2",
+      "credits": 653,
+      "est": 653,
+      "measured": 652,
+      "how": "usage endpoint (652) vs estimate 653, larger kept",
+      "format": "pcm_48000",
+      "bytes": 10014720,
+      "song_id": "TQT9ACB7W2v51LE6yqtV",
+      "seconds_requested": 52.17,
+      "ts": "2026-10-09T20:50:43.160Z",
+      "track": "menu_lofi_highlife",
+      "take": 2,
+      "prompt_suffix": "Important: the drums, bass, Rhodes pad and guitar are all playing from the very first beat of the file, at the same quiet level as the end of the file. The first eight bars sound exactly like the last eight bars. No solo intro, no quiet opening, no fade in, no section change, no build. One steady quiet groove the whole way through.",
+      "note": "regenerated once: take 1 opened with 8 near-silent bars (about 15 dB under the groove), so no clean 16 bar stretch. Take 1 is kept as menu_lofi_highlife.take1.wav"
+    }
+  ]
+}

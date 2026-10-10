@@ -1,0 +1,202 @@
+{
+  "_about": "Hoppaz background music candidates for Jae to audition, ElevenLabs Music. Instrumental only. A Lagos producer makes the final later. Read by the generator script; the key is never in this file.",
+  "provider": "elevenlabs",
+  "request": {
+    "method": "POST",
+    "url": "https://api.elevenlabs.io/v1/music",
+    "query": {
+      "output_format": "mp3_44100_128"
+    },
+    "formats_in_order": ["pcm_48000", "mp3_48000_320", "mp3_44100_128"],
+    "formats_note": "Best allowed first. A real 3 s call proved this key accepts pcm_48000 (lossless 48 kHz 16-bit stereo), so raw takes are WAV and the loop step makes the only lossy encode. The free length-validation probe cannot tell formats apart (the length error comes first).",
+    "body_fixed": {
+      "model_id": "music_v2_5",
+      "force_instrumental": true
+    },
+    "body_per_track": [
+      "prompt",
+      "music_length_ms"
+    ],
+    "note": "prompt mode (not composition_plan) because force_instrumental only works with prompt. Seed is not allowed with prompt. Verified live: music_v2_5 and music_v2 both accept 3000 ms and return 44.1 kHz stereo mp3 at 128 kbps, about 0.03 s longer than asked."
+  },
+  "loop_rule": "Every length is a whole number of bars at the track BPM so the file can be cut on bar lines. Cut the final loop at 8 or 16 bars inside the take, on a downbeat, and crossfade a few ms if needed. Menu tracks are 20 bars, play tracks 24 bars.",
+  "cost": {
+    "credits_per_second": 12.5,
+    "credits_per_minute": 750,
+    "measured": "3 s = 38, 10 s = 125, 3 s on music_v2 = 38 (usage-by-model readout). Linear at 12.5 credits per second, same price on music_v2 and music_v2_5. No cost header is returned by /v1/music.",
+    "probe_spend_credits": 201,
+    "other_music_spend_seen_before_probe_credits": 675,
+    "plan_ceiling_credits": 2700,
+    "hard_ceiling_credits": 3000
+  },
+  "totals": {
+    "wave1_credits": 1938,
+    "enabled_credits": 2581,
+    "all_nine_at_this_length_credits": 5771,
+    "all_nine_at_75s_credits": 8438,
+    "all_nine_at_45s_credits": 5063,
+    "six_at_45s_credits": 3375
+  },
+  "waves": {
+    "1": "One candidate per slot. Run first.",
+    "2": "Second play_day flavour. Run only if the 675 credits of music spend that predates the probe does not count against the 3000.",
+    "3": "Reserve. Defined and ready, switched off (enabled false). Turn on only with more budget."
+  },
+  "experiments_not_enabled": [
+    {
+      "id": "loop_mode",
+      "body_extra": {
+        "generation_mode": "loop"
+      },
+      "note": "The live API accepts generation_mode track, loop, ambience, video_to_music (checked with a free validation call), but the docs do not mention it. If it yields seamless loops it would beat bar-line cutting. Untested, so not used. A test costs credits at 12.5 per second."
+    }
+  ],
+  "tracks": [
+    {
+      "id": "play_day_afrobeats_bounce",
+      "slot": "play_day",
+      "flavour": "Afrobeats bounce",
+      "wave": 1,
+      "enabled": true,
+      "bpm": 112,
+      "key": "D major",
+      "bars": 24,
+      "hook": "D5 F#5 A5 on plucked guitar, every 4 bars",
+      "bar_ms": 2142.857,
+      "music_length_ms": 51429,
+      "seconds": 51.43,
+      "est_credits": 643,
+      "prompt": "Instrumental only: no vocals, no chants, no choir, no spoken voice. Adventurous, bouncy, cheeky overworld theme for a Lagos street-party map game, loud and bright and a little mischievous, not luxe. Modern Afrobeats groove, 2020s Lagos production, 112 BPM, D major, syncopated 3-2 feel. Talking drum and agogo bell trade short call-and-response phrases on top, shekere drives steady sixteenth notes, a warm round bass bounces under a punchy kick and rim-click snare, and bright clean palm-muted highlife guitar plays pentatonic licks between the phrases. A catchy hook on plucked guitar climbs D5, F sharp 5, A5 (short, short, long) and returns every four bars. Steady tempo, exactly 112 BPM in 4/4, no tempo changes. Full groove from the very first beat: no intro build, no riser, no drum roll, no breakdown, no drop, no fade out, no ending, no final hit. The last bar is as full as the first, so it loops cleanly. Consistent energy from start to finish."
+    },
+    {
+      "id": "play_day_amapiano_log",
+      "slot": "play_day",
+      "flavour": "Amapiano log drum",
+      "wave": 2,
+      "enabled": true,
+      "bpm": 112,
+      "key": "D major",
+      "bars": 24,
+      "hook": "D5 F#5 A5 on bright piano, every 4 bars",
+      "bar_ms": 2142.857,
+      "music_length_ms": 51429,
+      "seconds": 51.43,
+      "est_credits": 643,
+      "prompt": "Instrumental only: no vocals, no chants, no choir, no spoken voice. Adventurous, bouncy, cheeky overworld theme for a Lagos street-party map game, loud and bright and a little mischievous, not luxe. Amapiano groove, 112 BPM, D major. A deep round log drum bassline carries the harmony, a soft four-on-the-floor kick, shuffling hi-hats and shakers, light piano stabs, agogo bell and talking drum accents on top, and bright clean highlife guitar licks that answer the log drum. A catchy hook on bright piano climbs D5, F sharp 5, A5 (short, short, long) and returns every four bars. Steady tempo, exactly 112 BPM in 4/4, no tempo changes. Full groove from the very first beat: no intro build, no riser, no drum roll, no breakdown, no drop, no fade out, no ending, no final hit. The last bar is as full as the first, so it loops cleanly. Consistent energy from start to finish."
+    },
+    {
+      "id": "play_day_highlife_house",
+      "slot": "play_day",
+      "flavour": "Highlife-house",
+      "wave": 3,
+      "enabled": false,
+      "bpm": 112,
+      "key": "D major",
+      "bars": 24,
+      "hook": "D5 F#5 A5 on a bell-like guitar, every 4 bars",
+      "bar_ms": 2142.857,
+      "music_length_ms": 51429,
+      "seconds": 51.43,
+      "est_credits": 643,
+      "prompt": "Instrumental only: no vocals, no chants, no choir, no spoken voice. Adventurous, bouncy, cheeky overworld theme for a Lagos street-party map game, loud and bright and a little mischievous, not luxe. Highlife-house, Afro-house with highlife guitar, 112 BPM, D major. Four-on-the-floor kick, offbeat open hi-hat, congas and shekere, agogo bell on the offbeats, a talking drum answering every few bars, warm sub bass with a gentle sidechain pump, and rolling interlocking highlife guitar arpeggios in D major pentatonic. A catchy hook on a bright bell-like guitar climbs D5, F sharp 5, A5 (short, short, long) and returns every four bars. Steady tempo, exactly 112 BPM in 4/4, no tempo changes. Full groove from the very first beat: no intro build, no riser, no drum roll, no breakdown, no drop, no fade out, no ending, no final hit. The last bar is as full as the first, so it loops cleanly. Consistent energy from start to finish."
+    },
+    {
+      "id": "play_night_afrobeats_dim",
+      "slot": "play_night",
+      "flavour": "Afrobeats, dimmed",
+      "wave": 1,
+      "enabled": true,
+      "bpm": 112,
+      "key": "D major",
+      "bars": 24,
+      "hook": "D5 F#5 A5 on kalimba, every 8 bars",
+      "note": "Same tempo and key as the day tracks so the app can crossfade day to night on the beat.",
+      "bar_ms": 2142.857,
+      "music_length_ms": 51429,
+      "seconds": 51.43,
+      "est_credits": 643,
+      "prompt": "Instrumental only: no vocals, no chants, no choir, no spoken voice. The same Lagos map-game world after dark: moody but still playful, street-lamp and late-night mood, not luxe. Stripped-back Afrobeats groove, 112 BPM, D major. Fewer drums: a soft kick, a quiet rim click, a light shekere, sparse talking drum ghost notes and an occasional low agogo tick. Deep warm sub bass leads, soft pads breathe underneath, and muted palm-muted highlife guitar plucks ring with a touch of echo. A lighter, quieter hook on kalimba climbs D5, F sharp 5, A5 (short, short, long) every eight bars. Steady tempo, exactly 112 BPM in 4/4, no tempo changes. Same sparse groove from the very first beat: no intro build, no riser, no breakdown, no drop, no fade out, no ending, no final hit. The last bar matches the first, so it loops cleanly. Consistent mood and energy from start to finish."
+    },
+    {
+      "id": "play_night_amapiano_deep",
+      "slot": "play_night",
+      "flavour": "Deep amapiano",
+      "wave": 3,
+      "enabled": false,
+      "bpm": 108,
+      "key": "B minor",
+      "bars": 24,
+      "hook": "D5 F#5 A5 on soft marimba (Bm7 chord tones), every 8 bars",
+      "bar_ms": 2222.222,
+      "music_length_ms": 53333,
+      "seconds": 53.33,
+      "est_credits": 667,
+      "prompt": "Instrumental only: no vocals, no chants, no choir, no spoken voice. The same Lagos map-game world after dark: moody but still playful, street-lamp and late-night mood, not luxe. Deep late-night amapiano, 108 BPM, B minor. Fewer drums: a low round log drum bassline, a soft kick, a barely-there shaker and sparse talking drum ghost notes. Airy pads and a few muted piano chords moving Bm7, G, D, A, with muted highlife guitar plucks and a touch of echo. A lighter hook on soft marimba climbs D5, F sharp 5, A5 (short, short, long), the chord tones of Bm7, every eight bars. Steady tempo, exactly 108 BPM in 4/4, no tempo changes. Same sparse groove from the very first beat: no intro build, no riser, no breakdown, no drop, no fade out, no ending, no final hit. The last bar matches the first, so it loops cleanly. Consistent mood and energy from start to finish."
+    },
+    {
+      "id": "play_night_afrosoul_dub",
+      "slot": "play_night",
+      "flavour": "Afro-soul dub",
+      "wave": 3,
+      "enabled": false,
+      "bpm": 110,
+      "key": "D major",
+      "bars": 24,
+      "hook": "D5 F#5 A5 on music-box kalimba, every 8 bars",
+      "bar_ms": 2181.818,
+      "music_length_ms": 52364,
+      "seconds": 52.36,
+      "est_credits": 655,
+      "prompt": "Instrumental only: no vocals, no chants, no choir, no spoken voice. The same Lagos map-game world after dark: moody but still playful, street-lamp and late-night mood, not luxe. Slow-burning Afro-soul with dub echo, 110 BPM, D major. Minimal drums: a soft kick, a brushed rim click and a quiet shekere. Deep sub bass, warm Rhodes keys and soft pads, muted highlife guitar with tape-style echo, and a quiet agogo ping every few bars. A lighter hook on a music-box-like kalimba climbs D5, F sharp 5, A5 (short, short, long) every eight bars. Steady tempo, exactly 110 BPM in 4/4, no tempo changes. Same sparse groove from the very first beat: no intro build, no riser, no breakdown, no drop, no fade out, no ending, no final hit. The last bar matches the first, so it loops cleanly. Consistent mood and energy from start to finish."
+    },
+    {
+      "id": "menu_lofi_highlife",
+      "slot": "menu",
+      "flavour": "Lo-fi highlife",
+      "wave": 1,
+      "enabled": true,
+      "bpm": 92,
+      "key": "D major",
+      "bars": 20,
+      "hook": null,
+      "bar_ms": 2608.696,
+      "music_length_ms": 52174,
+      "seconds": 52.17,
+      "est_credits": 652,
+      "regen_suffix": "Important: the drums, bass, Rhodes pad and guitar are all playing from the very first beat of the file, at the same quiet level as the end of the file. The first eight bars sound exactly like the last eight bars. No solo intro, no quiet opening, no fade in, no section change, no build. One steady quiet groove the whole way through.",
+      "prompt": "Instrumental only: no vocals, no chants, no choir, no spoken voice. Soft background music for browsing an app, very low energy, calm, warm and a little sleepy, nothing that competes with a voice note or the listener's own thoughts. Lo-fi highlife, 92 BPM, D major. A dusty soft kick and brushed snare, a light shaker, a mellow clean highlife guitar playing a slow sparse repeating figure with long gaps, a warm Rhodes pad holding long chords (D, Bm7, G, A) and a soft round bass. No lead melody, no hook, no sudden accents, nothing bright or sharp, quiet dynamics. Steady tempo, exactly 92 BPM in 4/4, no tempo changes. Same sparse texture from the very first beat: no intro build, no breakdown, no drop, no fade out, no ending. The last bar matches the first, so it loops cleanly. Consistent very low energy from start to finish. Keep the midrange uncluttered so a voice note stays clear on top."
+    },
+    {
+      "id": "menu_afrosoul_keys",
+      "slot": "menu",
+      "flavour": "Gentle Afro-soul",
+      "wave": 3,
+      "enabled": false,
+      "bpm": 96,
+      "key": "D major",
+      "bars": 20,
+      "hook": null,
+      "bar_ms": 2500,
+      "music_length_ms": 50000,
+      "seconds": 50,
+      "est_credits": 625,
+      "prompt": "Instrumental only: no vocals, no chants, no choir, no spoken voice. Soft background music for browsing an app, very low energy, calm, warm and a little sleepy, nothing that competes with a voice note or the listener's own thoughts. Gentle Afro-soul, 96 BPM, D major. Soft Rhodes chords moving Dmaj7, Bm7, Em7, A7, a soft round bass, light brushed drums with only a quiet kick and rim click, a very quiet shekere and a faint agogo ping now and then. No lead melody, no hook, no sudden accents, nothing bright or sharp, quiet dynamics. Steady tempo, exactly 96 BPM in 4/4, no tempo changes. Same sparse texture from the very first beat: no intro build, no breakdown, no drop, no fade out, no ending. The last bar matches the first, so it loops cleanly. Consistent very low energy from start to finish. Keep the midrange uncluttered so a voice note stays clear on top."
+    },
+    {
+      "id": "menu_kalimba_haze",
+      "slot": "menu",
+      "flavour": "Kalimba haze",
+      "wave": 3,
+      "enabled": false,
+      "bpm": 100,
+      "key": "D major",
+      "bars": 20,
+      "hook": null,
+      "bar_ms": 2400,
+      "music_length_ms": 48000,
+      "seconds": 48,
+      "est_credits": 600,
+      "prompt": "Instrumental only: no vocals, no chants, no choir, no spoken voice. Soft background music for browsing an app, very low energy, calm, warm and a little sleepy, nothing that competes with a voice note or the listener's own thoughts. Sparse kalimba haze, 100 BPM, D major. A few soft kalimba notes from the D major pentatonic scale, spaced far apart, over a warm slow pad, a quiet shaker pulse and a muted kick on beat one only. Very sparse, no lead melody, no hook, no sudden accents, nothing bright or sharp, quiet dynamics. Steady tempo, exactly 100 BPM in 4/4, no tempo changes. Same sparse texture from the very first beat: no intro build, no breakdown, no drop, no fade out, no ending. The last bar matches the first, so it loops cleanly. Consistent very low energy from start to finish. Keep the midrange uncluttered so a voice note stays clear on top."
+    }
+  ]
+}
