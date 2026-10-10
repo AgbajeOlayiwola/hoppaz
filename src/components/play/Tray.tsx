@@ -1,7 +1,7 @@
 "use client";
 
 import clsx from "clsx";
-import type { Ref } from "react";
+import type { ReactNode, Ref } from "react";
 import { Layers } from "lucide-react";
 
 export type TrayLine = {
@@ -13,18 +13,20 @@ export type TrayLine = {
 /**
  * The tray along the bottom: your Shelf count (cards and collectibles) and one line
  * of what Play is saying: today's XP and boxes, or the state it is in. No Gist
- * count until a Gist system exists.
+ * count until a Gist system exists. Under them, `children`: the hotspots row.
  */
 export default function Tray({
   shelf,
   line,
   shelfRef,
   trayRef,
+  children,
 }: {
   shelf: number | null;
   line: TrayLine;
   shelfRef?: Ref<HTMLSpanElement>;
   trayRef?: Ref<HTMLDivElement>;
+  children?: ReactNode;
 }) {
   return (
     <div ref={trayRef} className="hz-tray" role="region" aria-label="Your tray">
@@ -45,6 +47,7 @@ export default function Tray({
         {line.tone === "warn" && <i aria-hidden className="h-2 w-2 flex-none rounded-full bg-violet" />}
         <span className="min-w-0 truncate">{line.text}</span>
       </p>
+      {children}
     </div>
   );
 }

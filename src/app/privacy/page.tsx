@@ -26,6 +26,10 @@ const SECTIONS: Array<{ title: string; body: string }> = [
     body: "Event photos are private while awaiting review. Approved photos are displayed in Hoppaz with time-limited image access. Chat messages are visible in their room or private thread; moderators may resolve reported content and can map anonymous room aliases to an account when investigating abuse. Blocking and reporting are available in chat.",
   },
   {
+    title: "Hotspots",
+    body: "Hotspots are open rooms at fixed junctions in Lagos. Entering one sends no location of its own: your phone works out which hotspot is yours from public shapes, and the room never asks where you are. A hotspot can only be entered from Play, though, and while Play is open it still sends your position about every 20 seconds, as described above. Other people in the room see an alias that stays the same in that room and a face made from the alias, never your name, handle or avatar. You confirm once that you are 18 or older. While your avatar is in a room, Hoppaz keeps which room it is, and it keeps which room you visited on which day for 30 days, to count visits and pay the daily reward. Your Regular badges are visible to you only. Messages can be read for 24 hours, only by people in the room, and are deleted after 7 days. If someone reports a message, Hoppaz keeps a short copy of it so the crew can review it, and the crew can match an alias to an account when they do. You can block and report anyone in a room; a block made in a hotspot only applies in hotspots.",
+  },
+  {
     title: "Sharing",
     body: "Monthly report cards use a private, hard-to-guess link. Anyone with that link can view the report snapshot. Do not share it if you want to keep those activity details private.",
   },

@@ -1,7 +1,7 @@
 "use client";
 
 import clsx from "clsx";
-import { useEffect, useImperativeHandle, useRef, useState, type Ref } from "react";
+import { useEffect, useImperativeHandle, useRef, useState, type ReactNode, type Ref } from "react";
 import { ArrowLeft, Volume2, VolumeX } from "lucide-react";
 import { levelFor } from "@/lib/brand";
 import Pips, { type PipsHandle } from "./Pips";
@@ -45,6 +45,7 @@ function Roll({ to, className }: { to: number; className?: string }) {
  * pips, the XP bar with your level, and the tray along the bottom (Shelf and one
  * line of what is going on). Plus the mute button, which the shell owns.
  * Everything is over the map with no blur (a cheap phone cannot afford it).
+ * `tray` is whatever Play hangs under the tray's line (the hotspots row).
  */
 export default function Hud({
   xp,
@@ -56,6 +57,7 @@ export default function Hud({
   muted,
   onMute,
   onExit,
+  tray: trayExtra,
   ref,
 }: {
   xp: number;
@@ -67,6 +69,7 @@ export default function Hud({
   muted: boolean;
   onMute: () => void;
   onExit: () => void;
+  tray?: ReactNode;
   ref?: Ref<HudHandle>;
 }) {
   const level = levelFor(xp);
@@ -119,7 +122,9 @@ export default function Hud({
       <div className={clsx("hz-play-night", night && "hz-play-night-on")} aria-hidden={!night}>
         Night mode. Boxes stay close.
       </div>
-      <Tray shelf={shelf} line={line} shelfRef={shelfEl} trayRef={tray} />
+      <Tray shelf={shelf} line={line} shelfRef={shelfEl} trayRef={tray}>
+        {trayExtra}
+      </Tray>
     </div>
   );
 }

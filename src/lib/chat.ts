@@ -169,6 +169,7 @@ const CREW_TEXT: Record<string, string> = {
   blocked: "YOU BLOCKED THEM",
   no_session: "NOT SIGNED IN YET",
   need_account: "MAKE AN ACCOUNT TO ADD PEOPLE",
+  not_met: "YOU HAVE NOT MET YET",
 };
 
 /** Add the person behind a room key to your crew: they show on your map. */

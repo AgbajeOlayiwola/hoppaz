@@ -1,0 +1,85 @@
+/*
+ * The hotspot room: the junction stage with the heads standing around it. Only transform and
+ * opacity are animated. Colours are the app's own variables, so day and night both work.
+ */
+.stage {
+  --d: 38px;
+  position: relative;
+  /* Shrinks a little before the chat gives up its room (a short phone, a keyboard that resizes the window). */
+  flex: 0 1 auto;
+  height: clamp(180px, 27vh, 236px);
+  height: clamp(180px, 27dvh, 236px);
+  min-height: 112px;
+  overflow: hidden;
+  border-top: 1px solid rgb(var(--hairline));
+  border-bottom: 1px solid rgb(var(--hairline));
+  background: rgb(var(--ground));
+}
+.roads {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+}
+.head {
+  position: absolute;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  min-width: 44px;
+  min-height: 44px;
+  padding: 0;
+  transform: translate(-50%, calc(var(--d) / -2));
+  animation: arrive 0.28s cubic-bezier(0.2, 0.9, 0.3, 1) both;
+  -webkit-tap-highlight-color: transparent;
+}
+.you {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  transform: translate(-50%, -23px);
+}
+.ring {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  width: 64px;
+  height: 64px;
+  margin: -32px 0 0 -32px;
+  border: 2px solid #ff4d00;
+  border-radius: 9999px;
+  opacity: 0.85;
+}
+.hot {
+  animation: ring 2.4s ease-in-out infinite;
+}
+@keyframes arrive {
+  from {
+    opacity: 0;
+    transform: translate(-50%, calc(var(--d) / -2)) scale(0.6);
+  }
+  to {
+    opacity: 1;
+    transform: translate(-50%, calc(var(--d) / -2)) scale(1);
+  }
+}
+@keyframes ring {
+  0%,
+  100% {
+    opacity: 0.5;
+    transform: scale(1);
+  }
+  50% {
+    opacity: 1;
+    transform: scale(1.07);
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .head,
+  .hot {
+    animation: none;
+  }
+}

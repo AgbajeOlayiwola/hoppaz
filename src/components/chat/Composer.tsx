@@ -15,11 +15,14 @@ export default function Composer({
   maxLength,
   onSend,
   safeArea = true,
+  images = true,
 }: {
   placeholder: string;
   maxLength: number;
   onSend: (body: string, image: File | null) => Promise<string | null>;
   safeArea?: boolean;
+  /** False for a text-only room (a hotspot): no picture button. */
+  images?: boolean;
 }) {
   const [body, setBody] = useState("");
   const [image, setImage] = useState<File | null>(null);
@@ -64,24 +67,28 @@ export default function Composer({
         </div>
       )}
       <div className="flex items-end gap-2">
-        <button
-          type="button"
-          onClick={() => file.current?.click()}
-          aria-label="Add a picture"
-          className="btn btn-ghost w-11 flex-none px-0"
-        >
-          <ImagePlus size={17} />
-        </button>
-        <input
-          ref={file}
-          type="file"
-          accept="image/*"
-          className="hidden"
-          onChange={(e) => {
-            setImage(e.target.files?.[0] ?? null);
-            e.target.value = "";
-          }}
-        />
+        {images && (
+          <>
+            <button
+              type="button"
+              onClick={() => file.current?.click()}
+              aria-label="Add a picture"
+              className="btn btn-ghost w-11 flex-none px-0"
+            >
+              <ImagePlus size={17} />
+            </button>
+            <input
+              ref={file}
+              type="file"
+              accept="image/*"
+              className="hidden"
+              onChange={(e) => {
+                setImage(e.target.files?.[0] ?? null);
+                e.target.value = "";
+              }}
+            />
+          </>
+        )}
         <input value={body} onChange={(e) => setBody(e.target.value)} placeholder={placeholder} maxLength={maxLength} autoComplete="off" aria-label="Message" className="min-h-[44px]" />
         <button type="submit" className="btn flex-none px-4" disabled={sending || (!body.trim() && !image)}>
           {sending ? "..." : "SEND"}

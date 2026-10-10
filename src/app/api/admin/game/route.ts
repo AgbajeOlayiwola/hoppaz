@@ -2,6 +2,7 @@ import { createHash, randomBytes, timingSafeEqual } from "node:crypto";
 import { createClient, type SupabaseClient } from "@supabase/supabase-js";
 import { NextResponse } from "next/server";
 import { huntItem } from "@/lib/huntItems";
+import { hotspotAction, hotspotsData } from "./hotspots";
 
 export const runtime="nodejs";
 export const dynamic="force-dynamic";
@@ -103,7 +104,7 @@ export async function GET(req:Request){
   // Say what failed rather than showing empty queues (a bad service key fails every query).
   const failed=[events,liveEvents,photos,claims,reports,drops,partners,rules].find(r=>r.error);if(failed?.error)return bad(`Database error: ${failed.error.message}`,500);
   const pendingPhotos=await Promise.all(((photos.data??[]) as {id:string;event_id:string;user_id:string;path:string;created_at:string;events:unknown}[]).map(async p=>{const {data}=await sb.storage.from("event-photos").createSignedUrl(p.path,900);return {...p,url:data?.signedUrl??null};}));
-  return NextResponse.json({events:events.data??[],liveEvents:liveEvents.data??[],photos:pendingPhotos,claims:claims.data??[],reports:reports.data??[],drops:drops.data??[],partners:partners.data??[],rules:rules.data??[],spawner:await spawnerData(sb)});
+  return NextResponse.json({events:events.data??[],liveEvents:liveEvents.data??[],photos:pendingPhotos,claims:claims.data??[],reports:reports.data??[],drops:drops.data??[],partners:partners.data??[],rules:rules.data??[],spawner:await spawnerData(sb),hotspots:await hotspotsData(sb)});
 }
 
 export async function POST(req:Request){
@@ -225,6 +226,10 @@ export async function POST(req:Request){
     const {data,error}=await sb.from("game_drops").update({closes_at:new Date().toISOString()}).eq("id",b.id).in("kind",["spawn","welcome"]).select("id").maybeSingle();
     if(error)return error.code==="23514"?bad("That box only just opened. Try again in a second.",409):bad(error.message,500);
     if(!data)return bad("Street or welcome box not found",404);return NextResponse.json({ok:true});
+  }
+  if(action.startsWith("hotspot_")){
+    // Hotspots (supabase/hotspots.sql): open, pause, slow mode, mutes, the word list. Closing a report is resolve_report above.
+    const out=await hotspotAction(sb,action,b);if(out)return NextResponse.json(out.body,{status:out.status});
   }
   return bad("Unknown admin action");
 }

@@ -4,6 +4,8 @@ import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore
 import type { GeoJSONSource, Map as MLMap } from "maplibre-gl";
 import clsx from "clsx";
 import { requireAccount } from "@/lib/accountGate";
+import type { Hotspot } from "@/lib/hotspots/types";
+import { useHotspots } from "@/lib/hotspots/useHotspots";
 import { introActive, introEvent, registerIntroAction, useIntroActive } from "@/lib/intro";
 import { introSetOpening } from "@/lib/intro/store";
 import { deviceTier, playTuning } from "@/lib/deviceTier";
@@ -26,6 +28,8 @@ import MapMarker from "./MapMarker";
 import { clamp, circleRing, easeInOut, easeOut, insideLagos, lerp, metresBetween, nudgePoint, reducedMotion } from "./geo";
 import type { TrayLine } from "./Tray";
 import OpenStage, { type ClaimResult, type LandKind, type OpenTargets } from "./open/OpenStage";
+import HotspotsLayer from "./hotspots/HotspotsLayer";
+import HotspotsRow from "./hotspots/HotspotsRow";
 
 const IS_DEV = process.env.NODE_ENV !== "production";
 
@@ -43,12 +47,21 @@ const RUN_MIN_S = 0.9;
 const RUN_MAX_S = 3.5;
 /** The avatar stops this far short of the crate it runs to, so it stands beside it. */
 const STOP_SHORT_M = 8;
+/** A hotspot run is a long way across the city, so it is quicker than a box run: 700 m/s, 1.4 to 5 s, with the camera pulling back on the way. */
+const FAR_RUN_M = 400;
+const FAR_RUN_MPS = 700;
+const FAR_RUN_MIN_S = 1.4;
+const FAR_RUN_MAX_S = 5;
+/** The avatar stops this far short of a hotspot's pin, so it stands beside it. */
+const STOP_SHORT_SPOT_M = 14;
+/** A visitor with no home in Lagos comes in from this far south-west of the junction. */
+const STRAY_START_M = 260;
 /** Development: arrow keys walk at this speed. */
 const DEV_WALK_MPS = 28;
 
 type Pt = { lat: number; lng: number };
 type Here = Pt & { accuracy: number; real: boolean };
-type Run = { from: Pt; to: Pt; t0: number; dur: number; done: () => void };
+type Run = { from: Pt; to: Pt; t0: number; dur: number; /** Zoom levels the camera pulls back at the middle of a long run. */ dip: number; z0: number; done: () => void };
 
 const ms = (n: number) => (reducedMotion() ? 0 : n);
 
@@ -151,7 +164,10 @@ export default function PlayLayer({
     return null;
   }, [livePos, fix]);
   const hereRef = useRef(here);
-  const home: Pt | null = useMemo(() => here ?? (fix ? { lat: fix.lat, lng: fix.lng } : null), [here, fix]);
+  // Boxes and the avatar's home are Lagos only; hotspots are for everyone, wherever they are or with location off.
+  const place: Pt | null = useMemo(() => here ?? (fix ? { lat: fix.lat, lng: fix.lng } : null), [here, fix]);
+  const home: Pt | null = useMemo(() => (place && insideLagos(place.lat, place.lng) ? place : null), [place]);
+  const abroad = !!place && !home;
   const homeRef = useRef<Pt | null>(home);
   useEffect(() => {
     hereRef.current = here;
@@ -170,8 +186,18 @@ export default function PlayLayer({
   const disp = useRef<Pt | null>(null);
   const runRef = useRef<Run | null>(null);
   const followRef = useRef(false);
+  /** The avatar is at a hotspot (running there or in the room): it stays put whatever the GPS says. */
+  const stayRef = useRef(false);
+  /** A hotspot sheet or list is open: Escape closes it (the sheet does that itself) and leaves Play where it is. */
+  const covered = useRef(false);
   const bias = useRef({ target: { lng: 0, lat: 0, until: 0 }, now: { lng: 0, lat: 0 } });
   const [styleEpoch, setStyleEpoch] = useState(0);
+  /** The hotspot room that is open: the avatar has arrived and HotspotRoom has the screen. */
+  const [room, setRoom] = useState<string | null>(null);
+  const roomRef = useRef<string | null>(null);
+  useEffect(() => {
+    roomRef.current = room;
+  });
 
   const tell = useCallback((text: string, forMs = 2600) => {
     if (flashTimer.current) clearTimeout(flashTimer.current);
@@ -183,7 +209,7 @@ export default function PlayLayer({
   const [demo, setDemo] = useState<PlayBox[]>([]);
   const exit = useCallback(() => usePlayMode.getState().exit(), []);
   const tick = usePlayTick({
-    active: playing && !DEMO,
+    active: playing && !DEMO && !abroad,
     userId,
     everyMs: tuning.heartbeatMs,
     getPos: () => {
@@ -196,6 +222,8 @@ export default function PlayLayer({
       await ensureWelcomeBoxes(userId, { lat: p.lat, lng: p.lng, fresh: !!h?.real });
     },
     onIdle: () => {
+      // Reading a hotspot's chat takes no touches, and a hotspot is a room that is always on: it is not idle.
+      if (roomRef.current) return;
       say("Play paused. Tap your avatar to come back.");
       exit();
     },
@@ -221,12 +249,11 @@ export default function PlayLayer({
   useEffect(() => {
     if (!playing || !tick.refusal) return;
     if (tick.refusal === "outside_lagos") {
-      say("Play is Lagos only for now.");
-      exit();
+      tell("Boxes are Lagos only. Hotspots are open.", 3200);
     } else if (tick.refusal === "need_account") {
       requireAccount("keep playing");
     }
-  }, [playing, tick.refusal, say, exit]);
+  }, [playing, tick.refusal, tell]);
 
   // A box that appears after the first answer rises with a sound.
   const known = useRef<Set<string> | null>(null);
@@ -280,7 +307,9 @@ export default function PlayLayer({
   }, [playing, userId]);
 
   /* ----------------------------------------------------------- the camera -- */
-  const saved = useRef<{ zoom: number; pitch: number; bearing: number } | null>(null);
+  const saved = useRef<{ zoom: number; pitch: number; bearing: number; center: [number, number] } | null>(null);
+  /** Play opened with no home in Lagos, so the camera is out over the city looking at the hotspots. */
+  const overview = useRef(false);
   const wasPlaying = useRef(false);
   const enteredAt = useRef(0);
   const soundOff = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -292,12 +321,17 @@ export default function PlayLayer({
     const d = disp.current ?? homeRef.current;
     const box = map.getContainer();
     box.classList.toggle("hz-low", deviceTier() === "low");
+    // While Play is open the map is its own stacking context, so a crate (z-index in the millions) or the avatar can never paint
+    // over the HUD, the tray or the pointer to your hotspot.
+    box.classList.toggle("hz-play-map", playing);
     // The nav bar leaves (or returns) and the map gets (or gives back) its height.
     requestAnimationFrame(() => map.resize());
     setTimeout(() => map.resize(), 80);
     if (playing) {
-      saved.current = { zoom: map.getZoom(), pitch: map.getPitch(), bearing: map.getBearing() };
+      const c = map.getCenter();
+      saved.current = { zoom: map.getZoom(), pitch: map.getPitch(), bearing: map.getBearing(), center: [c.lng, c.lat] };
       followRef.current = false;
+      overview.current = !d;
       enteredAt.current = performance.now();
       // Coming back within the exit tail must not leave Play silent.
       if (soundOff.current) clearTimeout(soundOff.current);
@@ -317,6 +351,7 @@ export default function PlayLayer({
       return () => clearTimeout(t);
     }
     followRef.current = false;
+    overview.current = false;
     sfx.talkingDrum("exit");
     if (soundOff.current) clearTimeout(soundOff.current);
     soundOff.current = setTimeout(() => {
@@ -324,9 +359,11 @@ export default function PlayLayer({
       sfx.setPlaying(false);
     }, 700);
     const s = saved.current;
-    if (d) {
+    // Out of Play the camera goes back to the avatar, or to where the events map was if Play never had one.
+    const back = d ? ([d.lng, d.lat] as [number, number]) : s?.center;
+    if (back) {
       map.easeTo({
-        center: [d.lng, d.lat],
+        center: back,
         zoom: Math.min(s?.zoom ?? 13.2, 14.5),
         pitch: s?.pitch ?? 50,
         bearing: s?.bearing ?? map.getBearing(),
@@ -459,11 +496,13 @@ export default function PlayLayer({
         d.lng = lerp(run.from.lng, run.to.lng, e);
         d.lat = lerp(run.from.lat, run.to.lat, e);
         moved = true;
+        // A long run: the camera pulls back over the city and comes in again.
+        if (run.dip) map.setZoom(run.z0 - run.dip * Math.sin(Math.PI * u));
         if (u >= 1) {
           runRef.current = null;
           run.done();
         }
-      } else if (h) {
+      } else if (h && !stayRef.current) {
         const dist = metresBetween(d.lat, d.lng, h.lat, h.lng);
         if (dist > 400 || reducedMotion()) {
           if (dist > 0.01) {
@@ -522,7 +561,7 @@ export default function PlayLayer({
   // Escape leaves Play (the open stage handles its own Escape first).
   useEffect(() => {
     if (!playing) return;
-    const onKey = (e: KeyboardEvent) => e.key === "Escape" && !busy.current && exit();
+    const onKey = (e: KeyboardEvent) => e.key === "Escape" && !busy.current && !covered.current && exit();
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
   }, [playing, exit]);
@@ -574,20 +613,37 @@ export default function PlayLayer({
   }, [playing, boxes, fitWelcome]);
 
   /* ------------------------------------------------ the run to a box ----- */
-  const runTo = useCallback((to: Pt, done: () => void) => {
-    const d = disp.current;
-    if (!d) return done();
-    const m = metresBetween(d.lat, d.lng, to.lat, to.lng);
-    const dur = reducedMotion() ? 200 : clamp(m / RUN_MPS, RUN_MIN_S, RUN_MAX_S) * 1000;
-    runRef.current = { from: { ...d }, to, t0: performance.now(), dur, done };
-    setRunning(true);
-  }, []);
+  const runTo = useCallback(
+    (to: Pt, done: () => void) => {
+      const d = disp.current;
+      if (!d) return done();
+      const m = metresBetween(d.lat, d.lng, to.lat, to.lng);
+      // A box is a few steps away. A hotspot can be across the city, so a long run goes faster and the camera pulls back.
+      const far = m > FAR_RUN_M && !reducedMotion();
+      const dur = reducedMotion() ? 200 : (far ? clamp(m / FAR_RUN_MPS, FAR_RUN_MIN_S, FAR_RUN_MAX_S) : clamp(m / RUN_MPS, RUN_MIN_S, RUN_MAX_S)) * 1000;
+      const dip = far ? clamp(Math.log2(m / FAR_RUN_M) * 0.9, 0.6, 3.8) : 0;
+      runRef.current = { from: { ...d }, to, t0: performance.now(), dur, dip, z0: map.getZoom(), done };
+      setRunning(true);
+    },
+    [map]
+  );
 
+  /** A visitor who has no home in Lagos stands in from here, and walks off the map again when they leave. */
+  const strayFrom = useRef<Pt | null>(null);
+  const [, setStray] = useState(false);
   const goHome = useCallback(() => {
-    const h = homeRef.current;
     const d = disp.current;
-    if (!h || !d) return;
-    runTo(h, () => setRunning(false));
+    const to = homeRef.current ?? strayFrom.current;
+    if (!d || !to) return;
+    runTo(to, () => {
+      setRunning(false);
+      stayRef.current = false;
+      if (!homeRef.current) {
+        disp.current = null;
+        strayFrom.current = null;
+        setStray(false);
+      }
+    });
   }, [runTo]);
 
   /* -------------------------------------------------------- opening a box -- */
@@ -770,22 +826,218 @@ export default function PlayLayer({
     if (!playing) introSetOpening(false);
   }, [playing]);
 
-  /* ------------------------------------------------------ entering Play ---- */
-  const pendingEnter = useRef(false);
-  const enterNow = useCallback(() => {
-    const h = homeRef.current;
-    if (h && !insideLagos(h.lat, h.lng)) {
-      say("Play is Lagos only for now.");
+  /* ------------------------------------------------------------ hotspots --- */
+  // Hotspots are for everyone (docs/HOTSPOTS.md section 6): the pins, the tray row and the sheet work with location off
+  // and outside Lagos. "Your hotspot" and every distance are worked out here from the public zone shapes; nothing about
+  // where the Hopper is goes to the server for them.
+  const hotspotsOn = playing && !touring;
+  const hs = useHotspots({ active: hotspotsOn, at: home });
+  const { reload: reloadHotspots } = hs;
+  const pinsRef = useRef(hs.pins);
+  useEffect(() => {
+    pinsRef.current = hs.pins;
+  });
+  const [sheet, setSheet] = useState<string | null>(null);
+  const [listOpen, setListOpen] = useState(false);
+  useEffect(() => {
+    covered.current = !!sheet || listOpen;
+  });
+  /**
+   * The map's standing padding in Play: the avatar stands a fifth of the way down, and the tray never covers its feet or the
+   * reach ring around them. The tray is as tall as its contents (the hotspots row makes it taller), so it is measured.
+   */
+  const playPadding = useCallback(() => {
+    const h = map.getContainer().clientHeight;
+    const tray = hud.current?.trayHeight() ?? 0;
+    // The avatar stands at the middle of the padded area (0.6 h - bottom / 2) and its ring reaches about 48 px below.
+    return { top: Math.round(h * 0.2), bottom: Math.round(Math.max(0, 2 * (tray + 48 - 0.4 * h))), left: 0, right: 0 };
+  }, [map]);
+
+  /** The camera over all the pins, for a Hopper with no avatar on the map. */
+  const fitPins = useCallback(() => {
+    const pts = pinsRef.current;
+    if (!pts.length) return;
+    const lngs = pts.map((p) => p.lng);
+    const lats = pts.map((p) => p.lat);
+    followRef.current = false;
+    map.fitBounds(
+      [
+        [Math.min(...lngs), Math.min(...lats)],
+        [Math.max(...lngs), Math.max(...lats)],
+      ],
+      // absolutePadding: this padding replaces the one a sheet left standing on the map (top 96, bottom up to 350). Added to it,
+      // the two leave no room on a phone under 800 px tall, fitBounds refuses, and the camera stays on one junction.
+      {
+        padding: { top: 112, bottom: (hud.current?.trayHeight() ?? 190) + 36, left: 36, right: 36 },
+        absolutePadding: true,
+        maxZoom: 12.4,
+        pitch: 0,
+        bearing: 0,
+        duration: ms(900),
+      }
+    );
+  }, [map]);
+
+  /** The camera comes back to the avatar, or to all the pins when there is no avatar. */
+  const comeBack = useCallback(() => {
+    if (busy.current) return;
+    const d = disp.current ?? homeRef.current;
+    if (!d) return fitPins();
+    followRef.current = true;
+    map.easeTo({ center: [d.lng, d.lat], zoom: PLAY_ZOOM, pitch: tuning.pitch, padding: playPadding(), duration: ms(700) });
+  }, [map, tuning.pitch, playPadding, fitPins]);
+
+  // Play opened with no home in Lagos: once the list is in, the camera shows the pins.
+  const pinsFitted = useRef(false);
+  useEffect(() => {
+    if (!playing) {
+      pinsFitted.current = false;
       return;
     }
-    usePlayMode.getState().enter();
-  }, [say]);
+    if (!overview.current || pinsFitted.current || !hs.loaded || sheet || room || busy.current) return;
+    pinsFitted.current = true;
+    fitPins();
+  }, [playing, hs.loaded, sheet, room, fitPins]);
+  // ...and if the Hopper's position turns up after that, the camera comes to the avatar.
+  useEffect(() => {
+    if (!playing || !overview.current || !home || sheet || room || busy.current) return;
+    overview.current = false;
+    followRef.current = true;
+    map.easeTo({ center: [home.lng, home.lat], zoom: PLAY_ZOOM, pitch: tuning.pitch, padding: playPadding(), duration: ms(900) });
+  }, [playing, home, sheet, room, map, tuning.pitch, playPadding]);
+
+  const openSheet = useCallback(
+    (h: Hotspot) => {
+      if (busy.current) return;
+      setListOpen(false);
+      setSheet(h.slug);
+      void reloadHotspots();
+      followRef.current = false;
+      const el = map.getContainer();
+      map.flyTo({
+        center: [h.lng, h.lat],
+        zoom: 15.4,
+        pitch: tuning.pitch,
+        padding: { top: 96, bottom: Math.round(Math.min(350, el.clientHeight * 0.55)), left: 0, right: 0 },
+        duration: ms(1100),
+        essential: true,
+      });
+    },
+    [map, tuning.pitch, reloadHotspots]
+  );
+  const closeSheet = useCallback(() => {
+    setSheet(null);
+    comeBack();
+  }, [comeBack]);
+  const closeList = useCallback(() => setListOpen(false), []);
+  /** The bottom of the screen the tray covers, with a little air: where a pointer to a pin off the screen must stay clear of. */
+  const trayInset = useCallback(() => (hud.current?.trayHeight() ?? 110) + 26, []);
+  const openList = useCallback(() => {
+    setSheet(null);
+    setListOpen(true);
+  }, []);
+
+  /** ENTER: the avatar runs to the junction (cosmetic, nothing about it goes to the server), then the room opens. */
+  const enterHotspot = useCallback(
+    (h: Hotspot) => {
+      if (busy.current || !playing || h.status !== "open") return;
+      // Browsing is open to everyone; being in the room needs an account (and the 18 and over question, asked by the room).
+      if (!requireAccount("enter a hotspot", () => enterHotspot(h))) return;
+      busy.current = true;
+      stayRef.current = true;
+      setSheet(null);
+      setListOpen(false);
+      let d = disp.current;
+      if (!d) {
+        // No home in Lagos (location off, or the Hopper is elsewhere): the avatar comes in from a few streets away.
+        strayFrom.current = nudgePoint(h.lat, h.lng, -STRAY_START_M, -STRAY_START_M);
+        disp.current = { ...strayFrom.current };
+        d = disp.current;
+        setStray(true);
+      }
+      const m = metresBetween(d.lat, d.lng, h.lat, h.lng);
+      const short = Math.min(STOP_SHORT_SPOT_M, m / 2);
+      const stop = m > 0 ? { lat: h.lat + ((d.lat - h.lat) * short) / m, lng: h.lng + ((d.lng - h.lng) * short) / m } : h;
+      // The camera comes to the avatar first, then follows it.
+      followRef.current = false;
+      map.easeTo({ center: [d.lng, d.lat], zoom: PLAY_ZOOM, pitch: tuning.pitch, padding: playPadding(), duration: ms(500) });
+      setTimeout(() => {
+        if (!usePlayMode.getState().active) return;
+        followRef.current = true;
+        runTo(stop, () => {
+          setRunning(false);
+          // The room asks the server in and plays the hotspot sound and buzz when that works (room/useHotspotRoom.ts).
+          if (usePlayMode.getState().active) setRoom(h.slug);
+        });
+      }, ms(520));
+    },
+    [playing, map, tuning.pitch, playPadding, runTo]
+  );
+
+  /** Leave in the room: the avatar goes home. */
+  const leaveRoom = useCallback(() => {
+    setRoom(null);
+    busy.current = false;
+    goHome();
+  }, [goHome]);
+
+  // Leaving Play leaves the hotspot too: one avatar, one place. Taking the room off the screen is what leaves (the room's
+  // own hook calls leave_hotspot when it goes), so nobody is left standing there.
+  useEffect(() => {
+    if (playing) return;
+    setSheet(null);
+    setListOpen(false);
+    if (!stayRef.current && !roomRef.current) return;
+    setRoom(null);
+    busy.current = false;
+    stayRef.current = false;
+    runRef.current = null;
+    setRunning(false);
+    if (strayFrom.current) {
+      disp.current = null;
+      strayFrom.current = null;
+      setStray(false);
+    }
+  }, [playing]);
+
+  // /?hotspot=yaba opens Play on that hotspot's sheet (a link for the WhatsApp Community: "Yaba is on at Jibowu. Come in.").
+  const hotspotLinked = useRef(false);
+  useEffect(() => {
+    if (new URL(window.location.href).searchParams.has("hotspot")) void reloadHotspots(true);
+  }, [reloadHotspots]);
+  useEffect(() => {
+    // Paz's first-run tour has the screen: the link waits for it to end.
+    if (hotspotLinked.current || !hs.loaded || touring) return;
+    const slug = new URL(window.location.href).searchParams.get("hotspot");
+    if (!slug) return;
+    // A timer, not a straight call, for the same Strict Mode reason as /?play.
+    const t = setTimeout(() => {
+      if (hotspotLinked.current) return;
+      hotspotLinked.current = true;
+      const url = new URL(window.location.href);
+      url.searchParams.delete("hotspot");
+      window.history.replaceState(window.history.state, "", url.pathname + url.search + url.hash);
+      const h = hs.bySlug(slug);
+      if (!h || h.status === "paused") return;
+      if (!usePlayMode.getState().active) usePlayMode.getState().enter();
+      setTimeout(() => usePlayMode.getState().active && openSheet(h), ms(1000));
+    }, 0);
+    return () => clearTimeout(t);
+  }, [hs, openSheet, touring]);
+
+  /* ------------------------------------------------------ entering Play ---- */
+  const pendingEnter = useRef(false);
+  // Play opens for everyone. Without a place in Lagos (location off, or the Hopper is elsewhere) it shows the hotspots only.
+  const enterNow = useCallback(() => usePlayMode.getState().enter(), []);
 
   const onAvatarTap = useCallback(() => {
     if (playing) {
       // Tap yourself to bring the camera back.
       const d = disp.current;
-      if (d && !busy.current) map.easeTo({ center: [d.lng, d.lat], duration: ms(400) });
+      if (d && !busy.current) {
+        followRef.current = true;
+        map.easeTo({ center: [d.lng, d.lat], duration: ms(400) });
+      }
       return;
     }
     if (livePos || (IS_DEV && fix)) {
@@ -794,9 +1046,14 @@ export default function PlayLayer({
     }
     // No fresh GPS yet: ask for it, and go in the moment it arrives.
     if (live.status === "denied") {
-      say("Turn on location to open boxes.");
       introEvent("location_needed");
-      onNeedLocation();
+      if (introActive()) {
+        say("Turn on location to open boxes.");
+        onNeedLocation();
+        return;
+      }
+      // Hotspots do not need to know where you are, so Play opens anyway; the tray says boxes need location.
+      enterNow();
       return;
     }
     pendingEnter.current = true;
@@ -813,14 +1070,19 @@ export default function PlayLayer({
     } else if (live.status === "denied") {
       pendingEnter.current = false;
       setWantLive(false);
-      say("Turn on location to open boxes.");
       introEvent("location_needed");
-      onNeedLocation();
+      if (introActive()) {
+        say("Turn on location to open boxes.");
+        onNeedLocation();
+      } else {
+        enterNow();
+      }
     } else if (live.status === "unavailable") {
-      // A timeout or no signal is not a settings problem: say so, and let them tap again.
+      // A timeout or no signal is not a settings problem. Play opens on the hotspots, and boxes follow once we find you.
       pendingEnter.current = false;
       setWantLive(false);
-      say("Still finding you. Try again in a moment.");
+      if (introActive()) say("Still finding you. Try again in a moment.");
+      else enterNow();
     }
   }, [livePos, live.status, enterNow, say, onNeedLocation]);
 
@@ -849,6 +1111,7 @@ export default function PlayLayer({
   const seen = playSeen();
   const line: TrayLine = (() => {
     if (flash) return { tone: "info", text: flash };
+    if (abroad) return { tone: "info", text: "Boxes are Lagos only. Hotspots are open." };
     if (!here) return { tone: "warn", text: live.status === "denied" ? "Turn on location to open boxes" : "Finding you" };
     if (tick.sleeping) return { tone: "info", text: "Paused. Touch the screen to carry on." };
     if (welcome.length && !hasAccount && !seen.welcome && today.boxes === 0) {
@@ -880,7 +1143,7 @@ export default function PlayLayer({
       clearTimeout(t);
       root.style.removeProperty("--hz-play-lift");
     };
-  }, [playing, line.text]);
+  }, [playing, line.text, hs.row.length, room]);
 
   /* ---------------------------------------------------------------- render -- */
   const d0 = disp.current ?? home;
@@ -931,6 +1194,22 @@ export default function PlayLayer({
             </MapMarker>
           );
         })}
+      <HotspotsLayer
+        map={map}
+        playing={hotspotsOn}
+        hs={hs}
+        sheet={sheet}
+        listOpen={listOpen}
+        room={room}
+        inSlug={room}
+        running={running}
+        inset={trayInset}
+        onPin={openSheet}
+        onEnter={enterHotspot}
+        onCloseSheet={closeSheet}
+        onCloseList={closeList}
+        onLeave={leaveRoom}
+      />
       {playing && (
         <Hud
           ref={hud}
@@ -943,6 +1222,20 @@ export default function PlayLayer({
           muted={muted}
           onMute={() => sfx.setMuted(!muted)}
           onExit={exit}
+          tray={
+            hotspotsOn &&
+            !room && (
+              <HotspotsRow
+                items={hs.row}
+                total={hs.list.filter((h) => h.status !== "paused").length}
+                yoursSlug={hs.yours?.slug ?? null}
+                located={hs.located}
+                metres={hs.metres}
+                onPick={openSheet}
+                onMore={openList}
+              />
+            )
+          }
         />
       )}
       {opening && (

@@ -122,7 +122,8 @@ begin
   perform pg_temp.ok(n between 10 and 14, format('10 to 14 first zones, found %s', n));
   perform pg_temp.eq((select count(*) from public.hotspots)::text, n::text, 'only the first zones are in the table so far');
   perform pg_temp.ok(not exists (select 1 from public.hotspots where parent_id is not null), 'first zones have no parent');
-  perform pg_temp.ok(not exists (select 1 from public.hotspots where status <> 'planned'), 'every zone starts planned');
+  -- hotspots.sql (loaded after this file) opens wave 1 once; before it, and for every other wave, a zone is planned
+  perform pg_temp.ok(not exists (select 1 from public.hotspots where status <> 'planned' and not (status = 'active' and wave = 1)), 'every zone starts planned (wave 1 may be open)');
   perform pg_temp.ok(not exists (select 1 from public.hotspots where side not in ('mainland', 'island')), 'side is mainland or island');
   perform pg_temp.ok(exists (select 1 from public.hotspots where side = 'island') and exists (select 1 from public.hotspots where side = 'mainland'), 'both sides have zones');
   perform pg_temp.ok(not exists (select 1 from public.hotspots where name = '' or junction = '' or road_a = '' or road_b = '' or road_a = road_b), 'every zone has a name, a junction and two different roads');

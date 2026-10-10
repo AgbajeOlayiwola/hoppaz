@@ -1376,6 +1376,10 @@ svg.rig.poke #character { animation: rig-poke 0.42s cubic-bezier(0.3, 1.6, 0.5, 
 }
 
 /* The HUD: exit, pips, XP and the tray. Over the map, no blur. */
+/* Play: everything on the map stays under the HUD, whatever z-index a marker carries. */
+.hz-play-map {
+  isolation: isolate;
+}
 .hz-hud {
   position: absolute;
   inset: 0;

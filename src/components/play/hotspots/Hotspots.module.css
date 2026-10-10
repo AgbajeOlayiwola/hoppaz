@@ -1,0 +1,211 @@
+/*
+ * Play: hotspot pins. A dark disc with a cream crossroads inside an orange ring, the place name under it, and a small
+ * bar badge for how many are there. The marker element is MapLibre's to move, so the animations live on the wrapper
+ * inside it. The pin looks the same by day and by night (brand colours, not theme ones).
+ */
+.spot {
+  --ring: #ff4d00;
+  --ink: #0e0b0a;
+  --cream: #f5ebdd;
+  width: 56px;
+  height: 56px;
+  padding: 0;
+  border: 0;
+  background: none;
+  cursor: pointer;
+  -webkit-tap-highlight-color: transparent;
+}
+.wrap {
+  position: absolute;
+  inset: 0;
+  display: block;
+  animation: born 0.6s cubic-bezier(0.2, 1.4, 0.4, 1) both;
+  transform-origin: 50% 50%;
+}
+@keyframes born {
+  0% {
+    opacity: 0;
+    transform: scale(0.4);
+  }
+  100% {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+.disc {
+  position: absolute;
+  left: 8px;
+  top: 8px;
+  display: grid;
+  width: 40px;
+  height: 40px;
+  place-items: center;
+  border: 3px solid var(--ring);
+  border-radius: 9999px;
+  background: var(--ink);
+  color: var(--cream);
+  box-shadow: 0 4px 10px rgb(0 0 0 / 0.5);
+  transition: transform 0.18s;
+}
+.glyph {
+  display: block;
+  width: 22px;
+  height: 22px;
+}
+.pulse {
+  position: absolute;
+  left: 8px;
+  top: 8px;
+  width: 40px;
+  height: 40px;
+  border: 2px solid var(--ring);
+  border-radius: 9999px;
+  opacity: 0;
+  pointer-events: none;
+  animation: pulse 2.2s ease-out infinite;
+}
+@keyframes pulse {
+  0% {
+    opacity: 0.85;
+    transform: scale(0.9);
+  }
+  100% {
+    opacity: 0;
+    transform: scale(2.1);
+  }
+}
+.name {
+  position: absolute;
+  left: 50%;
+  top: 49px;
+  max-width: 120px;
+  overflow: hidden;
+  color: var(--cream);
+  font-family: var(--font-poppins), sans-serif;
+  font-weight: 800;
+  font-size: 11px;
+  line-height: 1.1;
+  letter-spacing: 0.05em;
+  text-overflow: ellipsis;
+  text-transform: uppercase;
+  white-space: nowrap;
+  pointer-events: none;
+  transform: translateX(-50%);
+  -webkit-text-stroke: 3px var(--ink);
+  paint-order: stroke fill;
+}
+.bars {
+  position: absolute;
+  right: 0;
+  top: 7px;
+  display: flex;
+  align-items: flex-end;
+  gap: 1.5px;
+  height: 14px;
+  padding: 2px 3px;
+  border-radius: 7px;
+  background: var(--ink);
+  pointer-events: none;
+}
+.bars i {
+  display: block;
+  width: 2.5px;
+  border-radius: 1px;
+  background: rgb(245 235 221 / 0.28);
+}
+.bars i.on {
+  background: var(--ring);
+}
+.bars i:nth-child(1) {
+  height: 3px;
+}
+.bars i:nth-child(2) {
+  height: 5px;
+}
+.bars i:nth-child(3) {
+  height: 7px;
+}
+.bars i:nth-child(4) {
+  height: 9px;
+}
+.yours {
+  position: absolute;
+  left: 50%;
+  top: -7px;
+  padding: 1.5px 5px;
+  border-radius: 3px;
+  background: var(--ring);
+  color: var(--ink);
+  font-family: var(--font-mono), monospace;
+  font-weight: 500;
+  font-size: 8px;
+  line-height: 1.2;
+  letter-spacing: 0.1em;
+  white-space: nowrap;
+  pointer-events: none;
+  transform: translateX(-50%);
+}
+.mine .disc {
+  border-width: 4px;
+}
+.picked .disc {
+  transform: scale(1.14);
+  box-shadow:
+    0 0 0 4px rgb(255 77 0 / 0.28),
+    0 4px 10px rgb(0 0 0 / 0.5);
+}
+/* Not open yet: the ring goes quiet and the name dims. Still tappable, it says "Opening soon". */
+.soon {
+  --ring: rgb(245 235 221 / 0.45);
+}
+.soon .name {
+  opacity: 0.8;
+}
+.soon .glyph {
+  opacity: 0.75;
+}
+/* Zoomed out over all of Lagos: just the disc. */
+.far .disc {
+  left: 14px;
+  top: 14px;
+  width: 28px;
+  height: 28px;
+  border-width: 2.5px;
+}
+.far .glyph {
+  width: 15px;
+  height: 15px;
+}
+.far .pulse {
+  left: 14px;
+  top: 14px;
+  width: 28px;
+  height: 28px;
+}
+.far .name,
+.far .yours {
+  display: none;
+}
+.far .bars {
+  right: 5px;
+  top: 12px;
+  transform: scale(0.8);
+}
+/* A cheap phone gets no ambient animation. */
+:global(.hz-low) .pulse,
+:global(.hz-low) .wrap {
+  animation: none;
+}
+@media (prefers-reduced-motion: reduce) {
+  .pulse,
+  .wrap {
+    animation: none;
+  }
+}
+/*
+ * A room is open over Play. Map markers carry huge z-indexes (the avatar's is 90 million) so they would paint over the
+ * room, so while it is open every marker is hidden; they come back the moment the room goes.
+ */
+:global(.hz-room-open) :global(.maplibregl-marker) {
+  visibility: hidden !important;
+}

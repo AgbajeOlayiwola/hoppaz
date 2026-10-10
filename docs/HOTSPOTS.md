@@ -1,6 +1,6 @@
 # Hoppaz Hotspots
 
-Status: plan, 9 Oct 2026, updated 10 Oct 2026. Jae's zone decision of 9 Oct replaces the size classes (section 4): Lagos is cut into 13 zones with one hotspot each, and the zones, junctions and split hints are built as data (`supabase/hotspot_zones.sql`, made by `scripts/hotspots/zones.mjs`, tested by `supabase/tests/hotspot_zones_test.sql`). The Play screens, rooms and chat are not built. It sits on top of Play mode ([PLAY-MODE.md](PLAY-MODE.md)) and Ola's chat system (`supabase/chat_accounts.sql`). Jae's rows in [DECISIONS.md](DECISIONS.md) win over any number here.
+Status: built and open (wave 1), 10 Oct 2026. The plan below was written 9 Oct and updated 10 Oct; section 15 says what the review of 10 Oct found and what was changed. Jae's zone decision of 9 Oct replaces the size classes (section 4): Lagos is cut into 13 zones with one hotspot each, and the zones, junctions and split hints are built as data (`supabase/hotspot_zones.sql`, made by `scripts/hotspots/zones.mjs`, tested by `supabase/tests/hotspot_zones_test.sql`). The database for steps 1, 3, 4 and 6 is built (10 Oct: `supabase/hotspots.sql`, tested by `supabase/tests/hotspots_test.sql`, contract in section 13). The room screen, the 18+ sheet, the reward moment and the admin section are built (10 Oct, section 14); the Play screens live in `src/components/play/hotspots/`. A safety, correctness and phone review of 10 Oct found 26 things; all are fixed or answered (section 15). It sits on top of Play mode ([PLAY-MODE.md](PLAY-MODE.md)) and Ola's chat system (`supabase/chat_accounts.sql`). Jae's rows in [DECISIONS.md](DECISIONS.md) win over any number here.
 
 Jae's words, tidied from his voice note: "Three spots in Yaba that are always open 24/7, a general group that people in Yaba can enter and have conversations and vibe. Anyone anywhere can enter, but it should be closer to the people in that region. When you click Play you see the hotspots near you on the map, you move your avatar there, you enter the conversation and enjoy yourself or interact with people from the same community. Start with three in Yaba, then scale: Phase 1 maybe two, very large areas several. Call them HOTSPOTS. They should always be at junctions."
 
@@ -361,7 +361,7 @@ The room is Ola's chat system with one new channel kind, `hotspot:<id>`. Nothing
 | Thing | Rule |
 |---|---|
 | Name in the room | An alias from `identity_for(user, 'hotspot:<id>', false)`, for example "Jollof Rider 4F". The same alias in the same hotspot every time, so regulars know each other; a different one in every other hotspot, so nobody is followed between rooms. A Hopper can pick a new alias once a day |
-| Look | The Hopper's avatar look, as in spot rooms |
+| Look | A face drawn from the alias, never the Hopper's avatar. Profiles are readable by everyone, so a real look in a head or a message would link the alias to the profile that owns it (found 10 Oct). The server sends `look: null` and the phone draws the alias face |
 | Handle and real name | Never shown. A handle shows to one person after a returned wave or an accepted link up, as in spots |
 | Account | Needed to enter and to post (`has_account()`, then a verified email after Phase 6). No account, no entry |
 
@@ -372,7 +372,7 @@ The room is Ola's chat system with one new channel kind, `hotspot:<id>`. Nothing
 | Content | Text only. No pictures in v1 (the picture bucket and moderation load wait) |
 | Length | 240 characters (Ola's table allows 400; the hotspot trigger is stricter) |
 | Speed | At most 5 messages in 30 s and 40 an hour per Hopper in a hotspot. 00:00 to 05:00 Lagos: 1 message every 10 s (slow mode) |
-| Filter | A message with a link, an email address or a phone number is refused ("No numbers or links in hotspots"). A short staff word list can be added later |
+| Filter | A message with a link, an email address, an @name or a phone number is refused ("No numbers or links in hotspots"), and so is one with a word from the staff list. The text is normalised first, so lookalike letters (Cyrillic, Greek, fullwidth, mathematical), zero-width characters, accents, spaced-out letters ("w.h.a.t.s.a.p.p"), digits in other scripts or in words ("zero eight zero...") and "dot com" change nothing. Seven digits with up to three non-letters between each pair is a number. A message with nothing that shows is empty |
 | Duplicates | The same text twice inside 60 s is refused |
 | Visible | The last 24 hours, only while your avatar is in the room |
 | Kept | 7 days, then deleted. Reports keep a 400 character excerpt of the message they name |
@@ -389,8 +389,8 @@ A 24/7 room with no staff awake needs rules that run by themselves.
 
 | Control | What it does |
 |---|---|
-| Report | The existing `report('room', message)` and `report('person', key)`. Three different people reporting one alias in 24 hours mutes it in that hotspot for an hour. Six hides it from all hotspots until staff look. Nothing is deleted by the machine |
-| Block | The existing both-way block. A blocked person's messages and head disappear for you |
+| Report | `report_hotspot` (the existing `report('room', ...)` and `report('person', ...)` still work but feed no mutes). Three different people reporting one alias in 24 hours mutes it in that hotspot for an hour. Six mutes it in all hotspots for 12 hours. Only a report that cites a message by that alias from the last 24 hours counts toward a mute, so a few throwaway accounts cannot silence someone who has said nothing; a report on a bare head still goes to staff. Nothing is deleted by the machine |
+| Block | A hotspot block (`hotspot_blocks`), both ways: a blocked alias's messages and head disappear for you and yours for them. It applies in hotspots only. A global block would also hide the person in event rooms, waves and DMs, and so link the alias to a handle; and the global blocks are left out of hotspots for the same reason the other way round |
 | Staff, in the admin desk | A Hotspots section next to the spawner: pause a hotspot (instant), set its slow mode, clear the last N minutes, mute an alias for N hours, ban an account from hotspots, see the open reports for hotspot messages |
 | Pause switch | `status = 'paused'` hides the hotspot everywhere and closes its room |
 | Room rules | A fixed line at the top of every room: "Be kind. No numbers or links. Report anything that feels off." It is not a message in the table |
@@ -414,7 +414,7 @@ Gamification beyond this (prompts from Paz, hotspot nights, crew battles) is a s
 
 ## 9. Privacy and safety
 
-1. No position is stored or sent for a hotspot. Entering needs no fix. The distance shown on the tray is computed on the phone. The privacy page needs one line: "Hotspots: your avatar and a room name are visible to others in the room. We do not use your location for hotspots."
+1. No position is stored or sent for a hotspot. Entering needs no fix. The distance shown on the tray is computed on the phone. But a hotspot can only be entered from Play, and `play_tick` keeps running while Play is open (also while a room is), so the privacy page says it plainly: entering a hotspot sends no location of its own; while Play is open it still sends the position described there.
 2. The one new place data about a Hopper is `hotspot_visits` (which hotspot your avatar is in now) and `hotspot_days` (which hotspot, which day, for 30 days). Neither holds a coordinate. A visit row is deleted when you leave or 20 minutes after your last ping.
 3. The server never gives a client another Hopper's id, handle, name or home area. Only keys, aliases and looks, as in Ola's rooms.
 4. Profiles stay as the lockdown in Play mode section 10 plans: the home area is hidden. A "show my area" chip ("YABA" next to your alias) is possible but off by default and needs Jae's yes (open question 7).
@@ -440,7 +440,7 @@ Smallest change: one new table of places, one for who is there, one for the dail
 | `hotspot_list()` | Active hotspots with id, slug, name, zone_label, roads, lat, lng, the zone shape and the count band (never an exact number under 3) |
 | `enter_hotspot(id)` | Needs an account. Creates or refreshes the visit, clears any spot visit, returns the key and alias. Rate limited: 30 entries a day |
 | `leave_hotspot()` | Deletes the visit |
-| `hotspot_pulse(id, cursor)` | Every 10 s while the room is open: heads (key, alias, look, ordered linked and waved first, then by a hash of the key), count band, vibes since the cursor; also refreshes `last_seen`. No times, no arrival order |
+| `hotspot_pulse(id, cursor)` | Every 10 s while the room is open: heads (key, alias, a null look, ordered by a hash of the key), count band, vibes since the cursor; also refreshes `last_seen`. No times, no arrival order |
 | `claim_hotspot_daily()` | Section 8 |
 | Staff: `admin_hotspot_*` | Pause, slow mode, mute, ban, clear. Service role |
 
@@ -473,9 +473,13 @@ Each step ends with the app playable and tests passing (`supabase/tests/hotspots
 | 7 | Roll out: Yaba alone for a week, then Lekki, then the rest of wave 1 (Victoria Island, Ikeja); watch peak avatars, messages, reports per 100 messages. When a room hits the split trigger (60 at its daily peak, 7 days), split it with its hint | | Real people |
 | Later | The zone chip (opt-in, off by default), splitting zones as they fill, hotspot nights, an opt-in alert when a hotspot lights up, Paz prompts | | |
 
+Done 10 Oct: the database half of steps 1, 3, 4 and 6 (section 13). The room screen, the 18+ sheet, the reward moment and the admin section of steps 3, 4 and 6 are built (section 14).
+
 Order matters for safety: do not open step 4's chat to real Hoppers before the filter, limits, report handling, mute and pause switch all exist.
 
 ## 12. Open questions
+
+Settled on 10 Oct 2026: Jae said "let it rip" and Ola agreed, so the defaults in the 10 Oct row of [DECISIONS.md](DECISIONS.md) answer these (as built, they are in section 13). The questions stay below as the record of what was asked.
 
 ### For Jae
 
@@ -502,3 +506,162 @@ Order matters for safety: do not open step 4's chat to real Hoppers before the f
 6. **Retention.** 7 days for hotspot messages (your event rooms are 3 days after the event). OK?
 7. **Moderation.** Where do reports get read today? The plan adds a Hotspots section to the admin desk and a per-alias mute. Do you want to own that, and is a hotspot ban flag in `profile_private` the right place?
 8. **Aliases.** `identity_for` gives one alias per user, channel and anon flag for ever. Is a once-a-day re-roll (delete and recreate the row) safe for your reports and blocks, which store the key?
+
+
+## 13. Database API (built 10 Oct 2026)
+
+`supabase/hotspots.sql` (load last, after `hotspot_zones.sql`; safe to run again; run it again after any run of `chat_accounts.sql` or `schema.sql`). Tests: `supabase/tests/hotspots_test.sql` (ends with `ALL HOTSPOT TESTS PASSED`) and the rerun check in `supabase/tests/sql_rerun_test.sql`.
+
+### Decisions of 10 Oct built in (Jae, with Ola's OK)
+
+Hotspots have group chat (spot rooms stay chat-free). Wave 1 (Yaba, Lekki, Victoria Island, Ikeja) is open; the other nine read "Opening soon" until staff open them. Anyone anywhere can see and enter; entering and chatting need an account (`has_account()`) and a one-time "I'm 18 or older". Rooms are named after the place ("Jibowu"). The same alias every visit. No area tag. Slow mode 00:00 to 05:00 Lagos. Messages kept 7 days. 10 XP a day for a 5 minute stay and "Regular at <place>" after 4 stays. Reports go to the admin desk. Staff can pause a hotspot and mute an alias. The server never learns where a Hopper is: "your hotspot" is worked out on the phone from the public zone shapes (`zone_geojson`), the distances from `lat`/`lng`.
+
+### Conventions
+
+- Every Hopper call is an RPC that returns jsonb: `{ "ok": true, ... }` or `{ "ok": false, "reason": "<code>" }`. Expected refusals never raise.
+- Posting is an insert into `messages`; refusals raise, and the code is the error message (`error.message.includes("no_links")`, as in `chatError`).
+- Words: **status** is `open`, `planned` or `paused` in the app (the table's `active` reads as `open`). The **channel** of a room is `hotspot:<hotspot id>`. The **room name** is the place (the junction without the road in brackets), the **zone name** is the zone.
+- Counts are bands: `quiet` (0), `few` (1 to 2), `some` (3 to 19), `busy` (20 to 59), `packed` (60 or more). The `_n` number is null under 3.
+- Nothing here takes or returns a position. The only coordinates are the fixed `lat`/`lng` and shape of each hotspot.
+
+### Hopper calls
+
+| Call | Who | Returns | `reason` codes |
+|---|---|---|---|
+| `hotspot_list()` | anyone, even signed out | rows, wave then zone name: `id, slug, name, zone_name, zone_label, side, junction, road_a, road_b, lat, lng, wave, status, zone_geojson, here_band, here_n, today_band, today_n`. `name` is the room ("Jibowu"), `zone_geojson` a simplified GeoJSON `Polygon`/`MultiPolygon` (about 40 KB for all 13, lng/lat, 5 decimals) for the phone's point-in-polygon test. Paused rows are returned with `status: 'paused'` (hide the pin, but use it to pick "the nearest open one"); split zones are not returned. Planned and paused rows count 0 | none |
+| `confirm_adult()` | signed in with an account | `{ok:true, already:boolean}`. Stores `profile_private.adult_confirmed_at`. A birthday that says under 18 is refused, and stays refused: the first birthday under 18 ever written sets `under_18_at` (a trigger on `profile_private`), and a later birthday does not clear it. Staff clear it by hand | `no_session`, `need_account`, `under_18` |
+| `enter_hotspot(p_slug text)` | account + 18+ | `{ok:true, already_here, hotspot:{id,slug,name,zone_name}, channel, key, alias, here_band, slow:{on_now,seconds,from,to}, rules:{max_len:240, burst:5, burst_s:30, per_hour:40, dup_s:60, visible_h:24, keep_days:7, stay_s:300, daily_xp:10, regular_days:4, entries_per_day:30, fade_min_s:600, fade_max_s:1200}}`. Slug is not case sensitive. Takes the avatar out of any other hotspot and any spot room. Entering the room you are already in refreshes it and counts as no entry. Call it when the run animation ends | `no_session`, `need_account`, `need_adult`, `not_found`, `not_open` (planned: "Opening soon"), `paused`, `full` (100 avatars; offer the nearest other), `slow_down` (30 entries today) |
+| `leave_hotspot()` | signed in | `{ok:true, left:boolean}` | `no_session` |
+| `hotspot_pulse()` | signed in | `{ok:true, slug, here_band, here_n}`. Keeps the avatar in; call about every 30 s while the room is open. Each ping pushes the fade out to a random 10 to 20 minutes | `no_session`, `not_in_hotspot` (faded or never entered: call `enter_hotspot` again), `paused` (the visit is cleared) |
+| `hotspot_room(p_slug text)` | in that room | `{ok:true, slug, name, channel, you:{key,alias}, heads:[{key,alias,look}], here_band, here_n, today_band, today_n, slow:{...}}`. At most 100 heads, in an order set by a hash of the key (the same for everyone); hotspot-blocked people are left out. A head is exactly those three fields: `look` is always null (the app draws the alias face), and nothing says who you know. No handle, no name, no user id, no crew or wave flag, no times. Poll about every 15 s. The bands count you: alone in a room it says `few` with no heads, and the app reads that as "Just you" | `no_session`, `not_found`, `not_in_hotspot` |
+| `my_hotspot()` | signed in | `{ok:true, has_account, adult, in: null or {slug,name,channel,key,alias,entered_at}}`. For when the app opens | `no_session` |
+| `claim_hotspot_daily()` | in a hotspot 5 minutes | `{ok:true, xp: 10 or 0, already, days_here, badge: null or {key,name}}`. 10 XP once a play-day (06:00 to 06:00 Lagos) wherever you are; every 5 minute stay is counted per hotspot; the 4th stay at one hotspot in 30 days awards `regular-<slug>` ("Regular at Jibowu") once and adds it to `badge_catalog`; only its owner can read the badge row. Writes nothing to `activity_log` (not a streak day, no Outside Score). Call it after 5 minutes in the room, e.g. when the timer ends, and again on leaving | `no_session`, `need_account`, `not_in_hotspot`, `too_early` (+ `wait_s`) |
+| `report_hotspot(p_ref uuid, p_reason text)` | in that room | `{ok:true}`. `p_ref` is a message id or a head's key. Creates a `reports` row of kind `hotspot` with `hotspot_id`, `alias` and a 400 character excerpt ("Jibowu / Danfo Rider 3F: text") that outlives the message. 3 different people against one alias in 24 hours mute it in that hotspot for 1 hour; 6 mute it in every hotspot for 12 hours; staff lift or lengthen (the plan said "until staff look"; a time box stops six accounts silencing someone for good). Only a report whose `p_ref` is a message by that alias from the last 24 hours counts (`reports.counts`); a report on a bare head or an older message is kept for staff and counts for nothing | `no_session`, `bad_reason`, `gone`, `not_in_hotspot`, `self`, `slow_down` (20 a day), `already` (same alias, same hotspot, 24 hours) |
+
+Existing calls that work on a hotspot key or channel: `my_room_keys(p_channel)`, `block_person(p_key, null, label)` (on a hotspot key it makes a hotspot block, not a global one; `my_blocks()` lists both kinds and `unblock(id)` lifts either), and `report('room', message id, reason)` (use `report_hotspot` instead, it feeds the auto mutes). `add_to_crew(p_key)` answers `not_met` for a hotspot key: crew reads profiles, which everyone can read, so adding a head would put the real profile behind the alias in your crew list. `my_alias(p_channel)` makes an anonymous alias that a hotspot never uses: do not call it for hotspots (the alias comes from `enter_hotspot` and `hotspot_room.you`). `send_wave` answers `not_met` for a hotspot key until Play mode Phase 5 (a first wave would show the sender's handle).
+
+### Chat (the `messages` table)
+
+- Read: `select` with `channel=eq.hotspot:<id>`; the read policy shows a message only to someone whose avatar is in the room, and only for 24 hours. Leaving or fading stops both reads and live events.
+- Post: `insert {channel, body}`. Send nothing else: `anon` is ignored (always the room alias), `image_path` is refused. The server sets `author_key` (the alias key), `author_name` (the alias), `author_look` (always null), `author_handle` (always null) and `created_at`. It stores the text with zero-width and hiding characters taken out. A post also keeps the avatar in the room. Posts are counted under a per-Hopper lock (`pg_advisory_xact_lock`), so parallel posts cannot get past the 5 in 30 s limit, the duplicate rule or slow mode.
+- Refusals (the error message is exactly one of these, in this order): `need_account`, `need_adult`, `room_closed` (planned, paused or a bad id), `not_in_hotspot`, `muted`, `no_images`, `empty`, `too_long` (over 240), `no_links` (a link, email, @name or phone number: "No numbers or links in hotspots"), `blocked_word` (staff list, or a label like "ig: name"), `duplicate` (same text inside 60 s), `slow_mode` (00:00 to 05:00 Lagos, one every 10 s), `slow_down` (5 in 30 s or 40 an hour).
+- Realtime: the same as every room. `supabase.channel('room:hotspot:<id>')` with `postgres_changes` `INSERT` on `public.messages`, `filter: 'channel=eq.hotspot:<id>'` (`useRoom('hotspot:<id>', userId)` already does this). Delivery is per subscriber through the read policy. Heads, counts and the fade are not realtime: poll `hotspot_room` (about 15 s) and `hotspot_pulse` (about 30 s). There is no presence channel and no broadcast.
+- Kept 7 days, then deleted (daily by `purge_expired_rooms`, hourly by pg_cron `hoppaz-purge-hotspots`).
+
+### Staff calls (service role only; for the admin desk)
+
+| Call | Does | `reason` codes |
+|---|---|---|
+| `admin_hotspot_set_status(p_slug, p_status)` | `'open'`, `'planned'` or `'paused'`. Anything but open clears the room at once. Split zones are not touched | `bad_status`, `not_found` |
+| `admin_hotspot_set_slow(p_slug, p_seconds, p_from time default null, p_to time default null)` | Slow mode gap 0 to 120 s (0 is off) and its Lagos clock window (default 00:00 to 05:00; the window may cross midnight) | `bad_seconds`, `not_found` |
+| `admin_hotspot_mute(p_hotspot uuid or null, p_key uuid, p_hours numeric, p_reason text)` | Mute an alias (from a report or a head) in one hotspot, or in all with null. Stops posting only. Returns `{ok:true, mute}` | `bad_hours`, `not_a_hotspot_alias`, `not_found` |
+| `admin_hotspot_unmute(p_mute uuid)` | Lift a mute, staff or automatic | |
+| `admin_hotspot_mutes(p_active_only default true)` | `id, hotspot_slug (null: all), alias, key, until, auto, reason, created_at` | |
+| `admin_hotspot_reports(p_open_only default true, p_limit default 100)` | `id, hotspot_slug, alias, key, excerpt, reason, created_at, reviewed_at, reporters_24h` (how many people reported a message by that alias in that hotspot in the last day: the ones that count toward a mute). The reports also sit in the existing open reports queue (kind `hotspot`, the excerpt names the place and alias); the CLOSE button sets `reviewed_at` as before | |
+| `admin_hotspot_clear(p_slug, p_minutes)` | Delete the last 1 to 1440 minutes of messages. Returns `{ok:true, deleted}` | `bad_minutes`, `not_found` |
+| `admin_hotspot_word_add(p_word)` / `admin_hotspot_word_remove(p_word)` | The word list (whole words, any case, a little leet speak undone). Seeded with contact and scam words only (whatsapp, telegram, snapchat, instagram, insta, dm me, inbox me, cashapp, bitcoin, forex, giveaway, send money); staff add the rest | `bad_word` |
+
+Internal (not callable by the app): `hotspot_leave_for(p_user)` (Play mode's spot trip calls it when it starts, so one avatar is in one place; `enter_hotspot` already clears `spot_visits` if that table exists), `purge_hotspot_data()`, `chat_rate_limit(p_channel)` (5 in 30 s and 40 an hour for hotspots; 8 in 30 s for the rest), `hotspot_rules()`.
+
+### What changed in Ola's functions
+
+Each is his body plus a branch that starts `like 'hotspot:%'`; nothing changes for any other channel (the tests run event rooms, group chats, crew moves, waves and DMs before and after). `in_room` (a live visit in an open hotspot), `room_closes_at` (a hotspot never closes by the clock; closed while not open), `message_visible` (in the room, last 24 hours), `stamp_message` (hands hotspot channels to `stamp_hotspot_message`), `purge_expired_rooms` (hotspot messages over 7 days, and the hotspot housekeeping), `log_chat_activity` (a hotspot message is not an active day), `send_wave` and `add_to_crew` (`not_met` for a hotspot key), `block_person` (a hotspot block for a hotspot key), `my_blocks` and `unblock` (list and lift both kinds). Eleven in all. `message_visible` also leaves the global blocks out of a hotspot (only hotspot blocks apply there). One of his policies changes: `badges_read` hides the `regular-%` badges from everyone but their owner (the badge says which named account hangs out at which junction). One trigger is new: `profile_private_remember_minor`. New tables, all with RLS on and nothing granted: `hotspot_visits`, `hotspot_days`, `hotspot_quota`, `hotspot_mutes`, `hotspot_words`, `hotspot_blocks`. Additive columns: `hotspots.slow_seconds/slow_from/slow_to/max_here/opened_at`, `profile_private.adult_confirmed_at/under_18_at`, `reports.hotspot_id/alias/counts` and `'hotspot'` in the `reports.kind` check. The crew policy `crew_rw_own` is left as it is: the Crew page adds friends one-sided by design, and nothing in a hotspot reads `crew` any more.
+
+### Differences from section 10
+
+`hotspot_pulse` takes no arguments and only keeps the avatar in; the heads come from `hotspot_room(slug)`, which is also why `hotspot_pulse(id, cursor)` has no vibes (they arrive with Phase 5). Calls take the slug, not the id. The hotspot's table status stays `active`/`planned`/`paused`; the app-facing word is `open`. `hotspot_days` also holds the "today" count (a row when someone first enters that day) and the stays. The room name is the place, not the zone.
+
+
+## 14. The room screen and the admin section (built 10 Oct 2026)
+
+The app half of steps 3, 4 and 6 that is not the map: the room Hoppers stand in, the 18+ sheet, the daily reward moment, the staff section and the privacy line. Play's own screens (marker, sheet, tray row, the run) are described by their files in `src/components/play/hotspots/` and `src/lib/hotspots/`.
+
+### Files
+
+| File | What |
+|---|---|
+| `src/components/play/hotspots/HotspotRoom.tsx` | The room, full screen over Play. `<HotspotRoom slug onLeave name? />`: Play renders it when the avatar arrives and removes it on `onLeave`; `name` only fills the title while the server answers. Default export |
+| `.../room/useHotspotRoom.ts` | One visit: the gates, `enter_hotspot`, the pulse and room read, rejoining, the daily reward, leaving |
+| `.../room/useHotspotChat.ts` | The room's messages: load, the Realtime feed, post, hide a blocked alias |
+| `.../room/Crossroads.tsx`, `room.module.css` | The junction from above with the heads standing around it |
+| `.../room/ChatPanel.tsx` | The chat on Ola's pieces, plus the plain state line (rules, slow mode, countdown, refusals) |
+| `.../room/HeadCard.tsx`, `AdultSheet.tsx`, `RewardMoment.tsx` | The card for a head or a message (Report, Block), the 18+ sheet, the "+10 XP" and Regular stamp |
+| `.../room/api.ts`, `copy.ts`, `demo.ts`, `useKeyboardUp.ts` | The typed calls, every line of copy, the no-database room, the keyboard hook |
+| `src/components/play/hotspots/HotspotPointer.tsx` | A chip on the edge of the Play map pointing to your hotspot, with its name and distance, whenever its pin is off the screen (the junction is usually a kilometre or more away at the zoom Play opens on) |
+| `src/components/play/hotspots/HotspotsRow.tsx`, `HotspotsAll.tsx` | The tray row (one line of 44 px chips and an "All 13" chip) and the full list (your side first, nearest first when we know where you are) |
+| `src/components/admin/HotspotsSection.tsx`, `src/app/api/admin/game/hotspots.ts` | The staff section and the handlers behind it; the route (`route.ts`) only dispatches `hotspot_*` actions and adds `hotspots` to its GET |
+| `src/app/privacy/page.tsx` | A "Hotspots" section |
+| `src/components/chat/Composer.tsx` | One new prop, `images` (default true): a hotspot turns the picture button off |
+| `src/app/dev/hotspot-room`, `src/app/dev/hotspot-admin` | Development only (404 in production): the room over a plain ground, and the admin section fed by a script |
+
+### How the room works
+
+1. **Gates.** `enter_hotspot` is the one call: `need_account` shows an in-room card and opens Ola's sign-up sheet (`requireAccount`, and it enters by itself after sign-up or log-in); `need_adult` opens the 18+ sheet ("I'm 18 or older" calls `confirm_adult`, closing it closes the room, an account whose birthday says under 18 is told so); `not_open`, `paused`, `full`, `slow_down` and a failed call each get a plain card (`room/copy.ts`).
+2. **Staying in.** The pulse every 30 s and the room read every 15 s, only while the page is showing; they run once when it shows again. A `not_in_hotspot` answer (the visit faded) rejoins without a flicker, unless `my_hotspot()` says the avatar is in another room (put there from another screen of the same account): then this screen says "You moved on" and gives way, and leaving it does not take the other screen's avatar out. Two screens used to trade the avatar for ever, and every trade was an entry of the 30 a day. `paused` shuts the room screen. Closing the app does not leave on purpose: the pulse stops and the head fades in 10 to 20 minutes. Leaving the screen (the back arrow, Play closing, an unmount) calls `leave_hotspot`, after a 1.5 s wait so a remount (Strict Mode, or the avatar sent to another room) cancels it, and two starts at once share one `enter_hotspot`. A leave also waits for an `enter_hotspot` still on its way, so tapping the arrow while it says "Joining" leaves no visit behind. Play's idle timer (10 minutes without a touch ends Play) does not run while a room is open: reading a chat takes no touches.
+3. **Heads.** Up to 10 stand around the junction (6 on a low-tier phone), each in the slot it first took, with the Hopper in the middle inside the orange ring; with more than that, one fewer stand and the last place reads "+N more". A head is an alias (drawn as a face from the alias, never the avatar) and opens a card with Block and Report. Wave, Link up and Vibe come with Play mode Phase 5. Under each head is its alias; the words are cut to fit and the two-character code at the end never is, because the code tells two heads with the same words apart. The pill reads "Just you" when nobody else is in the room (the server's bands count you). The stage hides while the phone's keyboard is up, whichever kind it is (it shrinks the visual viewport, as on iPhone, or it shrinks the window itself, as on Android and in Instagram and Facebook's browsers: a focused text box in a window under 560 px tall), and the pinned rules line steps aside with it.
+4. **Chat.** Ola's `RoomMessage` and `Composer` and the same Realtime feed, which only brings new messages: the list is read again every 15 s and replaced, so staff's "clear the last N minutes" reaches an open room within about 15 s. Not his `useRoom`: it asks for `my_alias`, which would make an anonymous alias a hotspot never uses, so `useHotspotChat` does the load, the feed and the post itself. The pinned rules line, then one state line: the standing slow mode notice ("Slow mode until 05:00. One message every 10 seconds."), a countdown after a post under slow mode or after a burst ("Easy. Too many messages. Try again in 7s."), or the last refusal in words (`muted`, `no_links`, `blocked_word`, `duplicate`, `too_long`, `room_closed`). The server decides every refusal; the countdown only stops a second tap from making one.
+5. **Report and block.** Tap a message or a head. A message is reported with `report_hotspot(message id)`, a head with `report_hotspot(key)`, and the five reasons of the person card. Block uses `block_person` and hides that alias's messages at once.
+6. **Reward.** After the stay (`rules.stay_s`, 5 minutes; at once when the room is entered again while the avatar is still in, and the server says how long is left) it calls `claim_hotspot_daily`. XP above 0 shows "+10 XP" with the check-in thump and the short motif and refreshes the profile, so the XP bar moves; a `badge` shows the Regular stamp with the stamp and the full motif. A repeat day pays nothing and shows nothing. A visit that faded and came back in is timed again from the new visit (the 5 minutes run from when it began). Leaving after a stay the timer has not paid claims on the way out. Entering plays the hotspot sound and buzz once (`already_here` does not).
+7. **No database (demo).** A made-up room that lives on the phone: seven heads and three messages, chat is local, nothing is sent.
+
+### The admin section
+
+Four cards after the box spawner: **Hotspots** (counts, one OPEN WAVE button per wave that still has planned rooms, each room with OPEN or PAUSE, and a drawer for slow mode and "delete the last 15 min, 1 h, 6 h"), **Hotspot reports** (the room, alias, message, reason and how many people reported that alias in 24 h; CLOSE, and MUTE ALIAS for 1 h to 7 days in this hotspot or all), **Hotspot mutes** (STAFF or AUTO, until when, LIFT) and **Hotspot word list** (add and remove). PAUSE, OPEN WAVE and the deletes ask twice. Reports also sit in the existing Reports card (kind `hotspot`); closing one closes it in both. Actions: `hotspot_status`, `hotspot_open_wave`, `hotspot_slow`, `hotspot_mute`, `hotspot_unmute`, `hotspot_clear`, `hotspot_word_add`, `hotspot_word_remove`; each is the matching `admin_hotspot_*` call, validated and turned into a line for the desk. Opening a wave opens only rooms that are planned: a paused room stays paused. Staff see aliases and alias keys, never a user id.
+
+### Checks
+
+`node --no-warnings scripts/hotspots/check-security.mjs` replays the review's attacks through the local REST API as signed-in test Hoppers, about a minute, no browser (52 checks, 19 of them ways round the filter): the crew leak, the avatar look, the one-sided crew row, the filter, 60 parallel posts, the block that unmasked, the badge, the birthday and the throwaway reporters. `node --no-warnings scripts/hotspots/check-admin.mjs` runs the handlers against the local database (24 checks, puts everything back). `node --no-warnings scripts/hotspots/check-room.mjs` is the headless run: one Chrome at 390x844, two test Hoppers in two contexts, from the guest gate to the leave, then the admin section's buttons checked against the handlers (74 checks). Neither reads `.env.local`, so the admin route's own staff-token door is not exercised by them; the handlers it calls are.
+
+
+## 15. The review of 10 Oct 2026, and what was done
+
+Three reviews (safety and privacy, correctness, phone) read the build on 10 Oct and found 25 different things (the crew leak was found twice). All are fixed, except where the last column says why not. "Proved by" is the check that failed before and passes now: the SQL test file (`hotspots_test.sql`), the REST replay (`check-security.mjs`), the headless phone run at 390x844, 390x780 and 360x640 and the two-Hopper flow (`check-room.mjs`, 74 checks, passing).
+
+### Safety and privacy
+
+| # | Found | What was done | Proved by |
+|---|---|---|---|
+| 1 | `add_to_crew(head key)` put the real profile of any alias in your crew list (`crew` reads `profiles`, which everyone can read) | `add_to_crew` answers `not_met` for a hotspot key | SQL test, REST replay |
+| 2 | The real avatar look went out with every head and message; `profiles` is readable, so the look found the profile | `look` and `author_look` are null; the phone draws the alias face; old messages are scrubbed | SQL test, REST replay |
+| 3 | A one-sided `crew` row (or a wave) made `hotspot_room` flag the alias a known person was using | `in_crew` and `waved` are gone from the payload and the order (heads are in hash order, the same for everyone). `crew_rw_own` is left alone: the Crew page adds friends one-sided by design and nothing in a hotspot reads `crew` now | SQL test, REST replay |
+| 4 | Numbers and contact words got through the filter (spaced dashes, zero-width characters, other scripts' digits, spelled digits, lookalike letters, spaced letters, "dot com", "ig:") | Text is normalised before it is checked; digit runs, the word list and the "label: handle" rule read the normalised text; a body with nothing visible is `empty` | SQL test (every way in the finding), REST replay |
+| 5 | Parallel posts got past the 5 in 30 s limit (9, 13 and 7 of 60 got in), the duplicate rule (4 of 10) and slow mode (2 of 16) | `stamp_hotspot_message` takes the Hopper's advisory lock first | REST replay: 5 of 60, 1 of 10, 1 of 16 |
+| 6 | Blocking a hotspot alias wrote a global block, so the person's handle vanished from the event lists and the alias was linked to it | Blocks made from a hotspot key go to `hotspot_blocks`, both ways, hotspots only; global blocks no longer hide anyone inside a hotspot (the same leak the other way round); `my_blocks` and `unblock` handle both kinds | SQL test, REST replay |
+| 7 | The "Regular at" badge was readable by everyone with the handle and a time | `badges_read` hides `regular-%` badges from everyone but the owner | SQL test, REST replay |
+| 8 | An under 18 refusal could be undone by writing a new birthday | The first birthday under 18 sets `under_18_at` (trigger), which `confirm_adult` and the entry gate honour; staff clear a typo by hand | SQL test, REST replay |
+| 9 | Three throwaway accounts could mute anyone who had never posted | Only a report that cites a message by that alias from the last 24 hours counts toward a mute (`reports.counts`) | SQL test, REST replay |
+| 10 | The privacy page said Hoppaz never learns where you are, and the head card said nobody sees real names | The privacy paragraph says entering sends no location of its own but Play still sends the position described above, and that Regular badges and hotspot blocks are private. The head card line stays: findings 1 to 3 made it true | read |
+
+### Correctness
+
+| # | Found | What was done | Proved by |
+|---|---|---|---|
+| 1 | Same as safety 1 | | |
+| 2 | Play's 10 minute idle timer threw a Hopper out of a room they were only reading | The timer ignores a Play with a room open | headless run (11 simulated idle minutes: the room stays; with no room, Play ends) |
+| 3 | Tapping Leave while it said "Joining" left a visit behind | A leave waits for any `enter_hotspot` on its way | headless run (4.5 s delayed enter: no visit left) |
+| 4 | The daily reward was not timed again after a rejoin | A rejoin starts a new 5 minute timer | headless run (a new 300 s timer after a forced fade) |
+| 5 | Staff "clear the last N minutes" did not reach open rooms | The chat list is read again every 15 s and replaced | headless run (a cleared room empties within 15 s) |
+| 6 | Two screens of one account traded the avatar for ever and spent the 30 entries a day | A screen whose avatar is in another room (`my_hotspot()`, or a pulse for another slug) shows "You moved on", does not rejoin and does not leave | headless run (entries unchanged, the other avatar stays) |
+
+### Phone
+
+| # | Found | What was done | Proved by |
+|---|---|---|---|
+| 1 | On a phone under 800 px tall the camera stayed on one junction after a sheet closed (MapLibre added the sheet's standing padding to the fit's own) | `fitBounds` with `absolutePadding: true` | headless run at 390x780 and 360x640: all four open pins in view, no warning |
+| 2 | The hotspots row made the tray 204 px tall | One line of 44 px chips plus an "All 13" chip: the tray is 160 px (19% of 844, 25% of 640); the camera's padding measures the tray | headless run: the avatar is 109 px clear of the tray at 640 (it was 38) |
+| 3 | No pin was on the screen when Play opened | A pointer chip on the edge of the map: name, distance, an arrow, tap for the sheet | headless run: shown at both sizes, clear of the HUD and tray |
+| 4 | Only a keyboard that shrinks the visual viewport was handled | A focused text box in a window under 560 px tall also counts; the stage can shrink; the rules line steps aside | headless run at 360x360: the list is 181 px (it was 12) and the box is on the screen |
+| 5 | "A few here" over "Quiet right now" when alone | "Just you" | headless run |
+| 6 | Head labels cut to "Puff-puff Ste..." and clipped | The code at the end of an alias always shows; slots moved so tags fit at 360 wide | headless run: no tag clipped |
+| 7 | "More hotspots" was 28 px high | The "All 13" chip is 44 px | headless run |
+| 8 | The list put Island first for a mainland Hopper and said every hotspot was always open | Your side first, nearest first; "Open ones run all day and night." | headless run |
+| 9 | Five pairs of pins overlapped over all of Lagos | Rooms not open yet are left off while the camera is out over the whole city | headless run: no overlaps |
+| 10 | A box could paint over a pin | Pins sit above boxes (z-index 8.5 million). While Play is open the map is its own stacking context, which also puts the HUD, the tray and the pointer above every crate and the avatar (crates used to paint over the tray) | headless run: no crate over the tray, the pointer on top |
+
+### Left, and why
+
+- **A real phone keyboard.** The keyboard cases are simulated (the window shrunk, the visual viewport patched), as in the review. Try it on a phone.
+- **Words that look like text.** A single word of 7 letters or more on the staff list also catches it written with a space ("give away" for "giveaway"); a word in one piece inside a longer one ("instagrammer") is left alone. A time range such as "10:30 - 4:00" reads as a number: seven digits with three characters or fewer between them. Both are the price of closing the holes, and the rule is plainly worded for staff to change. A determined person can still get round any filter; reports, mutes and the pause switch are the answer to those.
+- **A global block no longer hides someone in a hotspot.** To avoid someone there, block their alias (hotspot blocks). The alias is the same every visit, so one block lasts.
+- **A mistyped under 18 birthday** needs staff to clear it (`update profile_private set under_18_at = null`).
+- **`play_tick` still runs while a room is open**, so the position goes on being sent every 20 s; the privacy page now says so. Hotspot calls still take no position.

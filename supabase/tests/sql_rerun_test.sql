@@ -4,6 +4,10 @@
 -- holds 'near', 'special' and 'avatar' rows (the case that used to fail: the
 -- old spawning.sql re-added a kind check without 'near' and 'special').
 --
+-- It also runs hotspots.sql twice over a database that already holds a visit, a
+-- mute, a day row, a paused wave 1 zone and a staff word list, and checks that
+-- nothing is lost, reopened or re-seeded.
+--
 -- Run against a LOCAL database that already has the whole load order applied.
 -- psql reads the SQL files from inside the database container, so copy them in
 -- first, then run this file (the folder is a psql variable, default below):
@@ -80,6 +84,59 @@ end $t$;
 \i :sqldir/spawning.sql
 \echo running play.sql (2)
 \i :sqldir/play.sql
+
+-- ------------------------------------------------- hotspots.sql, twice ---
+-- Rows hotspots.sql must keep: a Hopper in Yaba, a mute, a day row, a word list staff
+-- changed, and a wave 1 zone staff paused (a run again must not open it).
+create table pg_temp.hs_keep (u uuid, vis_key uuid, mute_id uuid);
+
+do $t$
+declare
+  u uuid := gen_random_uuid(); yaba uuid; k uuid; mid uuid;
+begin
+  insert into auth.users (id, instance_id, aud, role, email, raw_app_meta_data, raw_user_meta_data, created_at, updated_at)
+  values (u, '00000000-0000-0000-0000-000000000000', 'authenticated', 'authenticated', 'hsrerun-' || u || '@rerun.invalid', '{}', '{}', now(), now());
+  select id into yaba from public.hotspots where slug = 'yaba';
+  k := (public.identity_for(u, 'hotspot:' || yaba::text, false)).id;
+  insert into public.hotspot_visits (user_id, hotspot_id, key, fades_at) values (u, yaba, k, now() + interval '15 minutes');
+  insert into public.hotspot_mutes (hotspot_id, user_id, key, until, reason) values (yaba, u, k, now() + interval '1 hour', 'rerun') returning id into mid;
+  insert into public.hotspot_days (user_id, play_day, hotspot_id, stayed_at) values (u, public.hotspot_play_day(), yaba, now());
+  delete from public.hotspot_words;
+  insert into public.hotspot_words (word) values ('zzrerunword');
+  update public.hotspots set status = 'paused', slow_seconds = 33, max_here = 77 where slug = 'ikeja';
+  insert into pg_temp.hs_keep values (u, k, mid);
+  raise notice 'ok: hotspot rows to keep are in';
+end $t$;
+
+\echo running hotspots.sql (1)
+\i :sqldir/hotspots.sql
+\echo running hotspots.sql (2)
+\i :sqldir/hotspots.sql
+
+do $t$
+declare r record;
+begin
+  select * into r from pg_temp.hs_keep;
+  perform pg_temp.eq((select count(*) from public.hotspot_visits where user_id = r.u and key = r.vis_key)::text, '1', 'the visit survived hotspots.sql');
+  perform pg_temp.eq((select count(*) from public.hotspot_mutes where id = r.mute_id)::text, '1', 'the mute survived');
+  perform pg_temp.eq((select count(*) from public.hotspot_days where user_id = r.u)::text, '1', 'the day row survived');
+  perform pg_temp.eq((select string_agg(word, ',') from public.hotspot_words), 'zzrerunword', 'the staff word list is not seeded again');
+  perform pg_temp.eq((select status || '/' || slow_seconds || '/' || max_here from public.hotspots where slug = 'ikeja'), 'paused/33/77', 'a paused wave 1 zone stays paused, with the settings staff gave it');
+  perform pg_temp.ok(public.in_room(r.u, 'hotspot:' || (select id from public.hotspots where slug = 'yaba')::text), 'in_room still knows the visit');
+  perform pg_temp.eq((select count(*) from public.hotspot_list())::text, (select count(*) from public.hotspots where status in ('active', 'planned', 'paused'))::text, 'hotspot_list works');
+  perform pg_temp.eq((select count(*) from pg_policy where polrelid = 'public.messages'::regclass and polname = 'messages_read')::text, '1', 'one messages_read policy');
+  perform pg_temp.eq((select count(*) from pg_policy where polrelid = 'public.hotspot_visits'::regclass)::text, '0', 'hotspot_visits still has no policy');
+  perform pg_temp.eq((select count(*) from pg_trigger where tgrelid = 'public.messages'::regclass and not tgisinternal and tgname in ('messages_stamp', 'message_activity'))::text, '2', 'the two message triggers are not doubled');
+  perform pg_temp.eq((select count(*) from pg_constraint where conrelid = 'public.reports'::regclass and conname = 'reports_kind_check')::text, '1', 'one reports kind check');
+  perform pg_temp.ok((select pg_get_constraintdef(oid) from pg_constraint where conname = 'reports_kind_check' and conrelid = 'public.reports'::regclass) ~ 'room.*dm.*person.*hotspot', 'with room, dm, person and hotspot');
+  perform pg_temp.ok((select prosrc like '%hotspot%' from pg_proc where oid = 'public.stamp_message()'::regprocedure), 'stamp_message has its hotspot branch');
+  perform pg_temp.ok((select prosrc like '%hotspot%' from pg_proc where oid = 'public.message_visible(text,uuid,timestamptz)'::regprocedure), 'message_visible has its hotspot branch');
+  perform pg_temp.ok((select prosrc like '%hotspot%' from pg_proc where oid = 'public.purge_expired_rooms()'::regprocedure), 'purge_expired_rooms has its hotspot branch');
+  if exists (select 1 from pg_extension where extname = 'pg_cron') then
+    perform pg_temp.eq((select count(*) from cron.job where jobname = 'hoppaz-purge-hotspots')::text, '1', 'one hotspot housekeeping job');
+  end if;
+  raise notice 'ok: hotspots.sql ran twice over live rows';
+end $t$;
 
 -- ------------------------------------------------------------------ checks ---
 do $t$
