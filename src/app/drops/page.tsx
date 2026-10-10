@@ -145,7 +145,7 @@ export default function DropsPage() {
               {!!got.xp && <p className="mt-3 font-mono text-[10.5px] font-medium tracking-[0.08em] text-dim">+{got.xp} XP</p>}
             </div>
           ) : done ? (
-            <Link href="/collection" className="btn btn-ghost w-full">
+            <Link href="/collection?tab=shelf" className="btn btn-ghost w-full">
               SEE IT ON YOUR SHELF
             </Link>
           ) : (

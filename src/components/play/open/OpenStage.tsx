@@ -3,6 +3,7 @@
 import { useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import Reveal, { type RevealItem, type RevealOutcome } from "@/components/reveal/Reveal";
+import { canStampHere, preloadCard, stampCard } from "@/lib/cards";
 import { sfx } from "@/lib/sound/sfx";
 import { useToast } from "@/lib/store";
 import { useSessionStore } from "@/lib/useSession";
@@ -49,7 +50,9 @@ const FAIL = "That didn't open. Try again in a bit.";
  * middle (the map dims to 40 percent), the player swipes across the tape (a tap
  * works too), the tape rips and the box bursts by tier, the rewards fan out and
  * fly to the XP bar, the Shelf and the streak pips. Rare, Epic and Legendary
- * add the card flip; Legendary adds 600 ms of silence, rays and a shake.
+ * add the card flip; Legendary adds 600 ms of silence, rays and a shake. A box that
+ * pays a deck card (res.card) shows it face up at its own rarity, any box colour, with
+ * NEW on a first copy and "Stamp it" when the player stands inside its circle.
  *
  * The drawing is imperative (see engine.ts): transform and opacity only, no
  * layout reads while it runs, no second WebGL context. The sounds are in
@@ -104,6 +107,8 @@ export default function OpenStage(props: OpenStageProps) {
       firstOfDay: () => latest.current.firstOfDay ?? latest.current.target.pips != null,
       xpBefore: () => xp0.current,
       share: (title) => void shareCard(title),
+      stamp: (card) => stampCard(card.id),
+      canStamp: (card) => canStampHere(card),
       onLand: (k, r) => latest.current.onLand?.(k, r),
       onDone: finishWith,
       onCancel: () => {
@@ -151,7 +156,10 @@ export default function OpenStage(props: OpenStageProps) {
     emitOpenEvent({ type: "open-claimed", tier, result: r });
     if (!r.ok) return { error: r.message || FAIL };
     const items: RevealItem[] = [{ kind: "xp", title: `${r.xp} XP` }];
-    if (r.collectible) items.push({ kind: "collectible", title: r.collectible.name });
+    if (r.card) {
+      preloadCard(r.card);
+      items.push({ kind: "card", title: r.card.name, card: r.card });
+    } else if (r.collectible) items.push({ kind: "collectible", title: r.collectible.name });
     return { items };
   };
 

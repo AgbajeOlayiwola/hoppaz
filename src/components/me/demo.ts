@@ -2,6 +2,7 @@ import { supabaseConfigured } from "@/lib/supabase/client";
 import type { GameDrop, Quest } from "@/lib/game";
 import type { Profile } from "@/lib/types";
 import type { CollectionEntry, DropReceipt } from "@/lib/useCollectibles";
+import { toCard, type CardShelf, type OwnedCard } from "@/lib/cards";
 
 /**
  * DEV-ONLY SAMPLE CONTENT for Me, Drops and the shelf, so `npm run dev` without
@@ -128,4 +129,29 @@ export function demoReceipts(now: number): DropReceipt[] {
     { drop_id: "r1", title: "Free round on the house", partner: "Sky Lounge", reward: "One free round", description: "For two. Show the code at the bar.", code: "HPZ-4F7K-92QD", claimed_at: iso(now - 2 * DAY) },
     { drop_id: "r2", title: "Backstage wristband", partner: "New Afrika Shrine", reward: "Backstage pass", description: "Good for the night you claimed it.", code: null, claimed_at: iso(now - 9 * DAY) },
   ];
+}
+
+/** Three sample cards (real files in /public/cards) for the shelf strip: a Common, a Rare you stamped and a numbered Epic. */
+export function demoCardShelf(now: number): CardShelf {
+  const day = (daysAgo: number) => new Date(now - daysAgo * DAY).toISOString().slice(0, 10);
+  const card = (key: string, name: string, rarity: string, set: string, division: string, copies: number | null, lat: number, lng: number) =>
+    toCard({
+      id: `demo-${key}`, key, name, set: { key: set.toLowerCase(), name: set }, division, category: "institution", rarity, numbered: rarity === "epic", copies_total: copies,
+      known_for: "A sample card.", geo: { kind: "place", lat, lng, radius_m: 150 },
+      art: { front: `/cards/s1/front/${key}.webp`, back: `/cards/s1/back/${key}.webp`, thumb: `/cards/s1/thumb/${key}.webp`, version: 1, credit: null },
+    })!;
+  const own = (c: ReturnType<typeof card>, daysAgo: number, copyNo: number | null, visited: boolean): OwnedCard => ({
+    card: c, count: 1, copies: [{ copyNo, gotOn: day(daysAgo) }], lastOn: day(daysAgo), visited, visitedOn: visited ? day(daysAgo) : null,
+  });
+  const owned = [
+    own(card("YAB-01", "Yaba Higher College", "epic", "Yaba", "Lagos Mainland", 100, 6.5187, 3.3741), 0, 7, false),
+    own(card("YAB-04", "FSTC Yaba", "rare", "Yaba", "Lagos Mainland", 1000, 6.5167, 3.3711), 1, 212, true),
+    own(card("UNI-01", "Born in 1962", "common", "UNILAG series", "Campus series", null, 6.512, 3.3935), 3, null, false),
+  ];
+  return {
+    owned,
+    totals: { cards: 3, copies: 3, visited: 1, of: 125 },
+    stamps: { paidToday: 0, paidMax: 3, xp: 30 },
+    sets: [{ key: "yaba", name: "Yaba", owned: 2, visited: 1, total: 12 }, { key: "unilag series", name: "UNILAG series", owned: 1, visited: 0, total: 9 }],
+  };
 }

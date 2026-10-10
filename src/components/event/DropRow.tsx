@@ -185,7 +185,7 @@ export default function DropRow({
           {g.code && <p className="mt-2 inline-block rounded-[4px] border border-dashed border-line px-2 py-1 font-mono text-[13px] tracking-[0.12em]">{g.code}</p>}
           {g.toCollection && (
             <p className="mt-2">
-              <Link href="/collection" className="font-mono text-[11px] font-medium uppercase tracking-[0.08em] text-cream underline decoration-orange decoration-2 underline-offset-4">
+              <Link href="/collection?tab=shelf" className="font-mono text-[11px] font-medium uppercase tracking-[0.08em] text-cream underline decoration-orange decoration-2 underline-offset-4">
                 SEE YOUR COLLECTION
               </Link>
             </p>

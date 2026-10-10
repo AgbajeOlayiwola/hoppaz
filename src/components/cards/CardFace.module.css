@@ -1,0 +1,294 @@
+/*
+ * A card is 5:8. Everything inside is sized in container units (cqw: 1 = 1% of the card's width), so the same
+ * markup is a 112 px tile in the album and a 280 px card in the sheet. The 3D flip, the rarity edge and the
+ * silhouette live here; the colours come in as --rim (the rarity colour) and --glow (its lighter tint).
+ */
+.scene {
+  position: relative;
+  display: block;
+  width: 100%;
+  aspect-ratio: 5 / 8;
+  container-type: inline-size;
+  --r: 4.4cqw;
+}
+
+/* ------------------------------------------------------------ the flip -- */
+.persp {
+  position: absolute;
+  inset: 0;
+  perspective: 1400px;
+}
+.card {
+  position: absolute;
+  inset: 0;
+  display: block;
+  padding: 0;
+  border: 0;
+  background: none;
+  color: inherit;
+  cursor: pointer;
+  transform-style: preserve-3d;
+  transition: transform 0.55s cubic-bezier(0.2, 0.8, 0.2, 1);
+  -webkit-tap-highlight-color: transparent;
+}
+.card[data-flipped="true"] {
+  transform: rotateY(180deg);
+}
+.face {
+  position: absolute;
+  inset: 0;
+  overflow: hidden;
+  border-radius: var(--r);
+  background: #110d0c;
+  -webkit-backface-visibility: hidden;
+  backface-visibility: hidden;
+}
+.back {
+  transform: rotateY(180deg);
+}
+.img {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  user-select: none;
+  -webkit-user-drag: none;
+}
+
+/* ------------------------------------------------------- the rarity edge -- */
+/* Common has a hairline only. Rare and Epic glow in their colour; Epic breathes slowly. */
+.edge {
+  pointer-events: none;
+  position: absolute;
+  inset: 0;
+  border-radius: var(--r);
+  box-shadow: inset 0 0 0 1px rgb(245 235 221 / 0.1);
+}
+.rare .edge {
+  box-shadow:
+    inset 0 0 0 1.5px var(--rim),
+    inset 0 0 3cqw 0 var(--glow);
+}
+.epic .edge {
+  box-shadow:
+    inset 0 0 0 2px var(--glow),
+    inset 0 0 5cqw 0.5cqw var(--rim);
+}
+/* The glow outside the card sits on its own layer so only its opacity animates. */
+.halo {
+  pointer-events: none;
+  position: absolute;
+  inset: 0;
+  border-radius: var(--r);
+  opacity: 0;
+}
+.rare .halo {
+  opacity: 1;
+  box-shadow:
+    0 0 0 1px var(--rim),
+    0 0 4cqw 0 var(--rim);
+}
+.epic .halo {
+  opacity: 1;
+  box-shadow:
+    0 0 0 1px var(--glow),
+    0 0 5cqw 0.5cqw var(--rim),
+    0 0 12cqw 1cqw var(--rim);
+  animation: breathe 3.4s ease-in-out infinite;
+}
+@keyframes breathe {
+  0%,
+  100% {
+    opacity: 0.55;
+  }
+  50% {
+    opacity: 1;
+  }
+}
+
+/* -------------------------------------------------------- the silhouette -- */
+.locked {
+  position: absolute;
+  inset: 0;
+  overflow: hidden;
+  border-radius: var(--r);
+  background:
+    radial-gradient(rgb(245 235 221 / 0.07) 0.7cqw, transparent 0.9cqw) 0 0 / 6.4cqw 6.4cqw,
+    linear-gradient(180deg, #211a17, #130f0d);
+  box-shadow: inset 0 0 0 1px rgb(245 235 221 / 0.1);
+  color: #9c9087;
+}
+.rare .locked {
+  box-shadow: inset 0 0 0 1px rgb(138 102 255 / 0.4);
+}
+.epic .locked {
+  box-shadow: inset 0 0 0 1px rgb(242 115 154 / 0.45);
+}
+.lockedMark {
+  position: absolute;
+  left: 0;
+  right: 0;
+  top: 30%;
+  text-align: center;
+  font-family: var(--font-poppins), system-ui, sans-serif;
+  font-weight: 900;
+  font-size: 34cqw;
+  line-height: 1;
+  color: rgb(245 235 221 / 0.1);
+}
+.lockedName {
+  position: absolute;
+  left: 8cqw;
+  right: 8cqw;
+  top: 34%;
+  text-align: center;
+  font-family: var(--font-poppins), system-ui, sans-serif;
+  font-weight: 900;
+  font-size: 9.5cqw;
+  line-height: 1.1;
+  color: rgb(245 235 221 / 0.55);
+}
+.pips {
+  position: absolute;
+  top: 5cqw;
+  right: 5cqw;
+  display: flex;
+  gap: 1.8cqw;
+}
+.pip {
+  width: 3.6cqw;
+  height: 3.6cqw;
+  border-radius: 50%;
+  border: 0.5cqw solid rgb(245 235 221 / 0.28);
+}
+.pipOn {
+  background: var(--rim);
+  border-color: var(--rim);
+}
+.lockedFoot {
+  position: absolute;
+  left: 6cqw;
+  right: 6cqw;
+  bottom: 5.5cqw;
+  display: flex;
+  justify-content: space-between;
+  font-family: var(--font-mono), ui-monospace, monospace;
+  font-size: 5.2cqw;
+  font-weight: 500;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+}
+
+/* ------------------------------------------------ drawn over the art -- */
+.number {
+  position: absolute;
+  left: 11cqw;
+  right: 27cqw;
+  bottom: 3.1cqw;
+  text-align: center;
+  font-family: var(--font-mono), ui-monospace, monospace;
+  font-size: 3.6cqw; /* 7.5 px on a sheet card at 390: 2.9cqw was under 6 px */
+  font-weight: 500;
+  letter-spacing: 0.06em;
+  color: #ff4d00;
+  white-space: nowrap;
+}
+.serial {
+  position: absolute;
+  left: 0;
+  right: 0;
+  top: 10cqw;
+  text-align: center;
+  font-family: var(--font-mono), ui-monospace, monospace;
+  text-transform: uppercase;
+  color: #f5ebdd;
+}
+.serial b {
+  display: block;
+  font-family: var(--font-poppins), system-ui, sans-serif;
+  font-weight: 900;
+  font-size: 30cqw;
+  line-height: 1;
+  letter-spacing: -0.02em;
+}
+.serial i {
+  display: block;
+  margin-top: 2cqw;
+  font-style: normal;
+  font-size: 3.4cqw;
+  letter-spacing: 0.16em;
+  color: #ff4d00;
+}
+.stamp {
+  position: absolute;
+  right: 3cqw;
+  top: 55cqw;
+  width: 42cqw;
+  transform: rotate(-11deg);
+  pointer-events: none;
+}
+.stampIn {
+  display: block;
+  animation: stampIn 0.18s cubic-bezier(0.2, 0.9, 0.3, 1) both;
+}
+@keyframes stampIn {
+  from {
+    opacity: 0;
+    transform: scale(1.5) rotate(4deg);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+/* "x2": hangs off the bottom edge, where the front has nothing printed. */
+.count {
+  position: absolute;
+  left: 50%;
+  bottom: 1.6cqw;
+  transform: translateX(-50%);
+  padding: 0.8cqw 3cqw;
+  border-radius: 1.6cqw;
+  background: #ff4d00;
+  color: #0e0b0a;
+  font-family: var(--font-mono), ui-monospace, monospace;
+  font-size: 6.4cqw;
+  font-weight: 500;
+  letter-spacing: 0.06em;
+  line-height: 1.2;
+}
+
+/* On a tile the date on a stamp and the copies line on a silhouette are too small to read, so they go. */
+@container (max-width: 170px) {
+  .stampDate,
+  .lockedCopies {
+    display: none;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  /* A flip becomes a quick fade between the two sides. */
+  .card {
+    transform: none !important;
+    transition: none;
+  }
+  .face {
+    -webkit-backface-visibility: visible;
+    backface-visibility: visible;
+    transition: opacity 0.15s linear;
+  }
+  .back {
+    transform: none;
+    opacity: 0;
+  }
+  .card[data-flipped="true"] .back {
+    opacity: 1;
+  }
+  .card[data-flipped="true"] .front {
+    opacity: 0;
+  }
+  .epic .halo,
+  .stampIn {
+    animation: none;
+  }
+}

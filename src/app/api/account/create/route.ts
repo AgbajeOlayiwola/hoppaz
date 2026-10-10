@@ -33,7 +33,7 @@ export async function POST(req:Request){
   const admin=createClient(url,service,{auth:{persistSession:false,autoRefreshToken:false}});
   const {error}=await admin.auth.admin.updateUserById(user.id,{email,password,email_confirm:true,user_metadata:{name}});
   if(error){
-    const taken=/already|exists|registered/i.test(error.message);
+    const taken=/already|exists|registered|duplicate|unique/i.test(error.message);
     return NextResponse.json({error:taken?"That email already has an account. Log in instead.":"Could not create the account"},{status:taken?409:500});
   }
   const [profile,details]=await Promise.all([
